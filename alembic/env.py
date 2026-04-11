@@ -20,17 +20,10 @@ config = context.config
 settings = get_settings()
 
 
-def _ensure_asyncpg_url(url: str) -> str:
-    if url.startswith("postgresql+asyncpg://"):
-        return url
-    if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    if url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+asyncpg://", 1)
-    return url
+# Reuse the URL preparation logic from the app
+from app.core.database import _prepare_db_url
 
-
-_db_url = _ensure_asyncpg_url(settings.DATABASE_URL)
+_db_url, _connect_args = _prepare_db_url(settings.DATABASE_URL)
 
 # Override sqlalchemy.url from environment
 config.set_main_option("sqlalchemy.url", _db_url)
@@ -71,7 +64,7 @@ def do_run_migrations(connection):
 
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine."""
-    connectable = create_async_engine(_db_url)
+    connectable = create_async_engine(_db_url, connect_args=_connect_args)
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

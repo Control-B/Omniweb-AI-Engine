@@ -27,7 +27,15 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     INTERNAL_API_KEY: str = "change-me-in-production"  # platform → engine auth
     # Allowed CORS origins for the dashboard frontend
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://omniweb.ai",
+        "https://www.omniweb.ai",
+        "https://roadcall.ai",
+        "https://www.roadcall.ai",
+        "https://omniweb-engine-rs6fr.ondigitalocean.app",
+    ]
 
     # ── Database ─────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://omniweb:password@localhost:5432/omniweb"

@@ -71,6 +71,9 @@ services:
       - key: REDIS_URL
         scope: RUN_AND_BUILD_TIME
         value: ""
+      - key: CORS_ORIGINS
+        scope: RUN_AND_BUILD_TIME
+        value: '["https://omniweb.ai","https://www.omniweb.ai","https://roadcall.ai","https://www.roadcall.ai","https://omniweb-engine-rs6fr.ondigitalocean.app"]'
 
   - name: dashboard
     github:

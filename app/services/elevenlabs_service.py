@@ -85,6 +85,9 @@ async def create_agent(
         "agent": {
             "first_message": first_message,
             "language": language,
+            "prompt": {
+                "prompt": system_prompt,
+            },
         },
         "tts": {
             "voice_id": voice_id,

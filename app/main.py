@@ -15,7 +15,7 @@ No agent worker process needed.
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
@@ -107,3 +107,21 @@ async def health() -> dict:
         "twilio_configured": settings.twilio_configured,
         "openai_configured": settings.openai_configured,
     }
+
+
+@app.post("/api/seed")
+async def run_seed(x_api_key: str = Header(...)):
+    """One-shot seed endpoint — protected by INTERNAL_API_KEY.
+
+    Call with: curl -X POST https://<domain>/api/seed -H "X-Api-Key: <key>"
+    """
+    if x_api_key != settings.INTERNAL_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+    import asyncio
+    import importlib
+
+    # Import and run the seed function
+    seed_module = importlib.import_module("seed")
+    await seed_module.seed()
+    return {"ok": True, "message": "Seed complete"}

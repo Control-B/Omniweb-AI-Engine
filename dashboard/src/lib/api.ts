@@ -129,6 +129,14 @@ export async function updateAgentConfig(clientId: string, body: Record<string, a
   });
 }
 
+export async function getWidgetEmbed(clientId: string) {
+  return apiFetch<{
+    agent_id: string;
+    embed_code: string;
+    talk_url: string;
+  }>(`/agent-config/${clientId}/widget`);
+}
+
 export async function getNumbers(clientId?: string) {
   const params = clientId ? `?client_id=${clientId}` : "";
   return apiFetch(`/numbers${params}`);

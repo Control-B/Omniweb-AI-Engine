@@ -21,6 +21,7 @@ router = APIRouter(prefix="/agent-config", tags=["agent-config"])
 
 
 class AgentConfigUpdate(BaseModel):
+    elevenlabs_agent_id: Optional[str] = None
     agent_name: Optional[str] = None
     agent_greeting: Optional[str] = None
     voice_id: Optional[str] = None
@@ -88,13 +89,17 @@ async def upsert_config(
 
     await db.flush()
 
-    # Sync to ElevenLabs
+    # Sync to ElevenLabs (skip if only elevenlabs_agent_id was changed)
+    fields_that_sync = {"agent_name", "agent_greeting", "voice_id", "voice_stability",
+                        "voice_similarity_boost", "system_prompt", "business_name",
+                        "max_call_duration"}
+    has_sync_fields = bool(fields_that_sync & set(body.model_dump(exclude_none=True).keys()))
     try:
-        if config.elevenlabs_agent_id:
+        if config.elevenlabs_agent_id and has_sync_fields:
             # Update existing agent
             await elevenlabs_service.update_agent(
                 config.elevenlabs_agent_id,
-                name=f"{config.business_name} - {config.agent_name}",
+                name=f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -"),
                 first_message=config.agent_greeting,
                 system_prompt=config.system_prompt,
                 voice_id=config.voice_id,
@@ -103,10 +108,10 @@ async def upsert_config(
                 max_duration_seconds=config.max_call_duration,
             )
             logger.info(f"Synced config to ElevenLabs agent {config.elevenlabs_agent_id}")
-        else:
+        elif not config.elevenlabs_agent_id and has_sync_fields:
             # Create new ElevenLabs agent
             result_el = await elevenlabs_service.create_agent(
-                name=f"{config.business_name} - {config.agent_name}",
+                name=f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -"),
                 first_message=config.agent_greeting,
                 system_prompt=config.system_prompt,
                 voice_id=config.voice_id,

@@ -4,6 +4,8 @@ Revision ID: 0003
 Revises: 0002
 Create Date: 2026-04-11
 """
+import json
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
@@ -14,11 +16,11 @@ down_revision = "0002"
 branch_labels = None
 depends_on = None
 
-DEFAULT_LANGUAGES = ["en"]
-ALL_LANGUAGES = [
+DEFAULT_LANGUAGES_JSON = json.dumps(["en"])
+ALL_LANGUAGES_JSON = json.dumps([
     "en", "es", "fr", "de", "ar", "hi", "pt", "it",
     "ja", "ko", "zh", "nl", "pl", "ru", "tr", "uk",
-]
+])
 
 
 def upgrade() -> None:
@@ -29,7 +31,7 @@ def upgrade() -> None:
             "supported_languages",
             JSONB,
             nullable=False,
-            server_default=sa.text(f"'{DEFAULT_LANGUAGES}'::jsonb"),
+            server_default=sa.text(f"'{DEFAULT_LANGUAGES_JSON}'::jsonb"),
         ),
     )
     op.add_column(
@@ -49,7 +51,7 @@ def upgrade() -> None:
             "supported_languages",
             JSONB,
             nullable=False,
-            server_default=sa.text(f"'{ALL_LANGUAGES}'::jsonb"),
+            server_default=sa.text(f"'{ALL_LANGUAGES_JSON}'::jsonb"),
         ),
     )
     op.add_column(

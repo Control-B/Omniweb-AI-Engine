@@ -58,7 +58,7 @@ app = FastAPI(
     description="Multi-tenant AI telephony + text chat platform",
     version="2.0.0",
     lifespan=lifespan,
-    docs_url="/docs" if not settings.is_production else None,
+    docs_url="/api/docs" if not settings.is_production else None,
     redoc_url=None,
 )
 
@@ -72,25 +72,29 @@ app.add_middleware(
 )
 
 # ── Register routers ──────────────────────────────────────────────────────────
+# All API routes live under /api/* so the ingress can cleanly separate
+# backend requests from frontend routes (which share the same domain).
+
+API_PREFIX = "/api"
 
 # Auth
-app.include_router(auth.router)
+app.include_router(auth.router, prefix=API_PREFIX)
 
 # Webhooks (no auth — URLs configured in ElevenLabs/Stripe dashboards)
-app.include_router(webhooks_elevenlabs.router)
-app.include_router(webhooks_stripe.router)
+app.include_router(webhooks_elevenlabs.router, prefix=API_PREFIX)
+app.include_router(webhooks_stripe.router, prefix=API_PREFIX)
 
 # Data API
-app.include_router(calls.router)
-app.include_router(leads.router)
-app.include_router(numbers.router)
-app.include_router(agent_config.router)
-app.include_router(analytics.router)
-app.include_router(chat.router)
-app.include_router(templates.router)
+app.include_router(calls.router, prefix=API_PREFIX)
+app.include_router(leads.router, prefix=API_PREFIX)
+app.include_router(numbers.router, prefix=API_PREFIX)
+app.include_router(agent_config.router, prefix=API_PREFIX)
+app.include_router(analytics.router, prefix=API_PREFIX)
+app.include_router(chat.router, prefix=API_PREFIX)
+app.include_router(templates.router, prefix=API_PREFIX)
 
 # Admin API
-app.include_router(admin.router)
+app.include_router(admin.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

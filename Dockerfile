@@ -26,6 +26,7 @@ ENV PYTHONPATH=/app
 COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
+COPY seed.py ./
 
 EXPOSE 8000
 

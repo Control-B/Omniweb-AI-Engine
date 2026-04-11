@@ -8,8 +8,24 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+
+def _ensure_asyncpg_url(url: str) -> str:
+    """Convert postgres:// or postgresql:// to postgresql+asyncpg://.
+
+    DigitalOcean managed databases provide postgresql:// URLs,
+    but SQLAlchemy async needs the +asyncpg driver suffix.
+    """
+    if url.startswith("postgresql+asyncpg://"):
+        return url
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    _ensure_asyncpg_url(settings.DATABASE_URL),
     echo=settings.DEBUG,
     pool_pre_ping=True,
     pool_size=10,

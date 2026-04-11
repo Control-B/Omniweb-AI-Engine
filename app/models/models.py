@@ -131,6 +131,20 @@ class AgentConfig(Base):
     allow_interruptions: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     max_call_duration: Mapped[int] = mapped_column(Integer, default=1800, nullable=False)
 
+    # Language & multilingual presets
+    supported_languages: Mapped[list] = mapped_column(
+        JSONB,
+        default=lambda: ["en"],
+        nullable=False,
+        doc="Enabled language codes, e.g. ['en','es','fr']",
+    )
+    language_presets: Mapped[dict] = mapped_column(
+        JSONB,
+        default=dict,
+        nullable=False,
+        doc="ElevenLabs language_presets config (keyed by language code)",
+    )
+
     # Widget configuration
     widget_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
@@ -401,6 +415,12 @@ class AgentTemplate(Base):
     allow_interruptions: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     services: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     business_hours: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    supported_languages: Mapped[list] = mapped_column(
+        JSONB,
+        default=lambda: ["en", "es", "fr", "de", "ar", "hi", "pt", "it", "ja", "ko", "zh", "nl", "pl", "ru", "tr", "uk"],
+        nullable=False,
+    )
+    language_presets: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     widget_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

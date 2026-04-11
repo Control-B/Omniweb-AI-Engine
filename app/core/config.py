@@ -4,7 +4,6 @@ All configuration comes from environment variables (12-factor).
 Use .env for local dev; DigitalOcean App Platform env vars for production.
 """
 from functools import lru_cache
-from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -46,6 +45,23 @@ class Settings(BaseSettings):
     # ── ElevenLabs (Voice + Text + KB engine) ────────────────
     ELEVENLABS_API_KEY: str = ""
     ELEVENLABS_DEFAULT_VOICE_ID: str = "EXAVITQu4vr4xnSDxMaL"  # Rachel
+    ELEVENLABS_DEFAULT_LANGUAGE: str = "en"
+    ELEVENLABS_VOICE_ID_AR: str | None = None
+    ELEVENLABS_VOICE_ID_DE: str | None = None
+    ELEVENLABS_VOICE_ID_EN: str | None = None
+    ELEVENLABS_VOICE_ID_ES: str | None = None
+    ELEVENLABS_VOICE_ID_FR: str | None = None
+    ELEVENLABS_VOICE_ID_HI: str | None = None
+    ELEVENLABS_VOICE_ID_IT: str | None = None
+    ELEVENLABS_VOICE_ID_JA: str | None = None
+    ELEVENLABS_VOICE_ID_KO: str | None = None
+    ELEVENLABS_VOICE_ID_NL: str | None = None
+    ELEVENLABS_VOICE_ID_PL: str | None = None
+    ELEVENLABS_VOICE_ID_PT: str | None = None
+    ELEVENLABS_VOICE_ID_RU: str | None = None
+    ELEVENLABS_VOICE_ID_TR: str | None = None
+    ELEVENLABS_VOICE_ID_UK: str | None = None
+    ELEVENLABS_VOICE_ID_ZH: str | None = None
     ELEVENLABS_WEBHOOK_SECRET: str = ""  # For verifying webhook signatures
 
     # ── Twilio (Phone Numbers + SMS) ─────────────────────────

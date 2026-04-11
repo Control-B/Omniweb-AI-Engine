@@ -46,6 +46,135 @@ BASE_URL = "https://api.elevenlabs.io/v1"
 CONVAI_URL = f"{BASE_URL}/convai"
 TTS_URL = f"{BASE_URL}/text-to-speech"
 
+SUPPORTED_LANGUAGE_OPTIONS: list[dict[str, Any]] = [
+    {"code": "ar", "label": "Arabic", "rtl": True},
+    {"code": "de", "label": "German"},
+    {"code": "en", "label": "English"},
+    {"code": "es", "label": "Spanish"},
+    {"code": "fr", "label": "French"},
+    {"code": "hi", "label": "Hindi"},
+    {"code": "it", "label": "Italian"},
+    {"code": "ja", "label": "Japanese"},
+    {"code": "ko", "label": "Korean"},
+    {"code": "nl", "label": "Dutch"},
+    {"code": "pl", "label": "Polish"},
+    {"code": "pt", "label": "Portuguese"},
+    {"code": "ru", "label": "Russian"},
+    {"code": "tr", "label": "Turkish"},
+    {"code": "uk", "label": "Ukrainian"},
+    {"code": "zh", "label": "Chinese"},
+]
+
+
+def _normalize_language_code(language: str | None) -> str:
+    if not language:
+        return settings.ELEVENLABS_DEFAULT_LANGUAGE
+    return language.strip().lower().replace("_", "-").split("-", 1)[0]
+
+
+def _voice_id_for_language(language: str | None) -> str | None:
+    normalized = _normalize_language_code(language)
+    env_key = f"ELEVENLABS_VOICE_ID_{normalized.upper()}"
+    configured_voice = getattr(settings, env_key, None)
+    return configured_voice or None
+
+
+def resolve_voice_id(*, language: str | None = None, voice_id: str | None = None) -> str:
+    return (
+        voice_id
+        or _voice_id_for_language(language)
+        or settings.ELEVENLABS_DEFAULT_VOICE_ID
+    )
+
+
+def get_language_options() -> list[dict[str, Any]]:
+    options: list[dict[str, Any]] = []
+    default_language = _normalize_language_code(settings.ELEVENLABS_DEFAULT_LANGUAGE)
+
+    for item in SUPPORTED_LANGUAGE_OPTIONS:
+        code = item["code"]
+        resolved_voice_id = resolve_voice_id(language=code)
+        explicitly_configured = bool(_voice_id_for_language(code))
+        options.append(
+            {
+                **item,
+                "voice_id": resolved_voice_id,
+                "configured": explicitly_configured or code == default_language,
+                "default": code == default_language,
+            }
+        )
+
+    return options
+
+
+# ── Default first messages per language (used when creating agents) ─────────
+DEFAULT_FIRST_MESSAGES: dict[str, str] = {
+    "ar": "مرحبًا! كيف يمكنني مساعدتك اليوم؟",
+    "de": "Hallo! Wie kann ich Ihnen heute helfen?",
+    "en": "Hi there! How can I help you today?",
+    "es": "¡Hola! ¿En qué puedo ayudarte hoy?",
+    "fr": "Bonjour ! Comment puis-je vous aider aujourd'hui ?",
+    "hi": "नमस्ते! आज मैं आपकी कैसे मदद कर सकता हूँ?",
+    "it": "Ciao! Come posso aiutarti oggi?",
+    "ja": "こんにちは！本日はどのようなご用件でしょうか？",
+    "ko": "안녕하세요! 오늘 어떻게 도와드릴까요?",
+    "nl": "Hallo! Hoe kan ik u vandaag helpen?",
+    "pl": "Cześć! W czym mogę Ci dziś pomóc?",
+    "pt": "Olá! Como posso ajudá-lo hoje?",
+    "ru": "Здравствуйте! Чем могу помочь сегодня?",
+    "tr": "Merhaba! Bugün size nasıl yardımcı olabilirim?",
+    "uk": "Привіт! Чим можу допомогти сьогодні?",
+    "zh": "您好！今天有什么可以帮您的吗？",
+}
+
+
+def build_language_presets(
+    *,
+    languages: list[str],
+    business_name: str = "",
+    greeting_template: str | None = None,
+    voice_id: str | None = None,
+) -> dict[str, Any]:
+    """Build the ElevenLabs `language_presets` dict for a set of languages.
+
+    Each preset overrides the agent's first_message and language code.
+    Optionally sets a per-language voice.
+
+    Args:
+        languages: List of ISO-639-1 codes to enable (e.g. ['en','es','fr']).
+        business_name: Substituted into greetings if {business} placeholder exists.
+        greeting_template: Optional template per language. If None, uses defaults.
+        voice_id: Optional voice to set for all presets (None = use agent default).
+    """
+    presets: dict[str, Any] = {}
+    for lang in languages:
+        code = lang.strip().lower()
+        if code == "en":  # English is the base, not a preset
+            continue
+
+        first_message = DEFAULT_FIRST_MESSAGES.get(code, DEFAULT_FIRST_MESSAGES["en"])
+        if business_name:
+            # Allow templates like "Thanks for calling {business}!"
+            first_message = first_message.replace("{business}", business_name)
+
+        agent_overrides: dict[str, Any] = {
+            "first_message": first_message,
+            "language": code,
+        }
+
+        tts_overrides: dict[str, Any] = {}
+        lang_voice = _voice_id_for_language(code) or voice_id
+        if lang_voice:
+            tts_overrides["voice_id"] = lang_voice
+
+        overrides: dict[str, Any] = {"agent": agent_overrides}
+        if tts_overrides:
+            overrides["tts"] = tts_overrides
+
+        presets[code] = {"overrides": overrides}
+
+    return presets
+
 
 def _headers() -> dict[str, str]:
     """Default headers for ElevenLabs API."""
@@ -62,6 +191,7 @@ def _client() -> httpx.AsyncClient:
 async def synthesize_speech(
     *,
     text: str,
+    language: str | None = None,
     voice_id: str | None = None,
     model_id: str = "eleven_turbo_v2_5",
 ) -> bytes:
@@ -69,7 +199,7 @@ async def synthesize_speech(
     if not settings.ELEVENLABS_API_KEY:
         raise RuntimeError("ElevenLabs is not configured")
 
-    selected_voice_id = voice_id or settings.ELEVENLABS_DEFAULT_VOICE_ID
+    selected_voice_id = resolve_voice_id(language=language, voice_id=voice_id)
     payload = {
         "text": text,
         "model_id": model_id,
@@ -110,11 +240,31 @@ async def create_agent(
     voice_stability: float = 0.5,
     voice_similarity_boost: float = 0.8,
     knowledge_base_ids: list[str] | None = None,
+    supported_languages: list[str] | None = None,
+    language_presets_override: dict[str, Any] | None = None,
+    business_name: str = "",
 ) -> dict:
     """Create an ElevenLabs Conversational AI agent.
 
     Returns {"agent_id": "..."}.
     """
+    # Build language presets for multilingual support
+    if language_presets_override is not None:
+        lang_presets = language_presets_override
+    elif supported_languages:
+        lang_presets = build_language_presets(
+            languages=supported_languages,
+            business_name=business_name,
+            voice_id=voice_id,
+        )
+    else:
+        # Default: enable all supported languages
+        lang_presets = build_language_presets(
+            languages=[item["code"] for item in SUPPORTED_LANGUAGE_OPTIONS],
+            business_name=business_name,
+            voice_id=voice_id,
+        )
+
     agent_config: dict[str, Any] = {
         "agent": {
             "first_message": first_message,
@@ -133,6 +283,10 @@ async def create_agent(
         },
     }
 
+    # Add language presets if any non-English languages are configured
+    if lang_presets:
+        agent_config["language_presets"] = lang_presets
+
     # Add knowledge base if provided
     platform_settings: dict[str, Any] = {
         "widget": {
@@ -142,6 +296,7 @@ async def create_agent(
             "supports_text_only": True,
             "transcript_enabled": True,
             "feedback_mode": "during",
+            "language_selector": bool(lang_presets),
         },
     }
     if knowledge_base_ids:
@@ -179,6 +334,9 @@ async def update_agent(
     language: str | None = None,
     max_duration_seconds: int | None = None,
     knowledge_base_ids: list[str] | None = None,
+    supported_languages: list[str] | None = None,
+    language_presets_override: dict[str, Any] | None = None,
+    business_name: str = "",
 ) -> dict:
     """Update an ElevenLabs agent's configuration (PATCH)."""
     payload: dict[str, Any] = {}
@@ -218,6 +376,23 @@ async def update_agent(
     if max_duration_seconds is not None:
         conversation_config["conversation"] = {
             "max_duration_seconds": max_duration_seconds
+        }
+
+    # Language presets
+    if language_presets_override is not None:
+        conversation_config["language_presets"] = language_presets_override
+        payload.setdefault("platform_settings", {})["widget"] = {
+            "language_selector": bool(language_presets_override)
+        }
+    elif supported_languages is not None:
+        lang_presets = build_language_presets(
+            languages=supported_languages,
+            business_name=business_name,
+            voice_id=voice_id,
+        )
+        conversation_config["language_presets"] = lang_presets
+        payload.setdefault("platform_settings", {})["widget"] = {
+            "language_selector": bool(lang_presets)
         }
 
     if conversation_config:

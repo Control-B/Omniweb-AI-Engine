@@ -40,6 +40,8 @@ class AgentConfigUpdate(BaseModel):
     after_hours_sms_enabled: Optional[bool] = None
     allow_interruptions: Optional[bool] = None
     max_call_duration: Optional[int] = None
+    supported_languages: Optional[list[str]] = None
+    language_presets: Optional[dict] = None
     widget_config: Optional[dict] = None
 
 
@@ -92,7 +94,7 @@ async def upsert_config(
     # Sync to ElevenLabs (skip if only elevenlabs_agent_id was changed)
     fields_that_sync = {"agent_name", "agent_greeting", "voice_id", "voice_stability",
                         "voice_similarity_boost", "system_prompt", "business_name",
-                        "max_call_duration"}
+                        "max_call_duration", "supported_languages", "language_presets"}
     has_sync_fields = bool(fields_that_sync & set(body.model_dump(exclude_none=True).keys()))
     try:
         if config.elevenlabs_agent_id and has_sync_fields:
@@ -106,6 +108,9 @@ async def upsert_config(
                 voice_stability=config.voice_stability,
                 voice_similarity_boost=config.voice_similarity_boost,
                 max_duration_seconds=config.max_call_duration,
+                supported_languages=config.supported_languages if body.supported_languages is not None else None,
+                language_presets_override=config.language_presets if body.language_presets is not None else None,
+                business_name=config.business_name or "",
             )
             logger.info(f"Synced config to ElevenLabs agent {config.elevenlabs_agent_id}")
         elif not config.elevenlabs_agent_id and has_sync_fields:
@@ -118,6 +123,8 @@ async def upsert_config(
                 voice_stability=config.voice_stability,
                 voice_similarity_boost=config.voice_similarity_boost,
                 max_duration_seconds=config.max_call_duration,
+                supported_languages=config.supported_languages,
+                business_name=config.business_name or "",
             )
             config.elevenlabs_agent_id = result_el["agent_id"]
             logger.info(f"Created ElevenLabs agent: {config.elevenlabs_agent_id}")

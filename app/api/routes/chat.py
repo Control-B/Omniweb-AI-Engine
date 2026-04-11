@@ -24,6 +24,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 class WelcomeAudioRequest(BaseModel):
     text: str
+    language: str | None = None
     voice_id: str | None = None
 
 
@@ -39,6 +40,7 @@ async def get_welcome_audio(body: WelcomeAudioRequest) -> Response:
     try:
         audio_bytes = await elevenlabs_service.synthesize_speech(
             text=text,
+            language=body.language,
             voice_id=body.voice_id,
         )
     except Exception as exc:
@@ -46,6 +48,17 @@ async def get_welcome_audio(body: WelcomeAudioRequest) -> Response:
         raise HTTPException(502, "Failed to synthesize welcome audio") from exc
 
     return Response(content=audio_bytes, media_type="audio/mpeg")
+
+
+@router.get("/languages")
+async def get_chat_languages() -> dict:
+    """Return the public language and voice options for the landing widget."""
+    return {
+        "default_language": elevenlabs_service._normalize_language_code(
+            elevenlabs_service.settings.ELEVENLABS_DEFAULT_LANGUAGE
+        ),
+        "languages": elevenlabs_service.get_language_options(),
+    }
 
 
 @router.get("/widget/{client_id}")

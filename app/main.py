@@ -24,6 +24,7 @@ from app.core.logging import configure_logging, get_logger
 
 # Import all route modules
 from app.api.routes import (
+    admin,
     agent_config,
     analytics,
     auth,
@@ -31,6 +32,7 @@ from app.api.routes import (
     chat,
     leads,
     numbers,
+    templates,
     webhooks_elevenlabs,
     webhooks_stripe,
 )
@@ -85,6 +87,10 @@ app.include_router(numbers.router)
 app.include_router(agent_config.router)
 app.include_router(analytics.router)
 app.include_router(chat.router)
+app.include_router(templates.router)
+
+# Admin API
+app.include_router(admin.router)
 
 
 @app.get("/health")

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
+from app.core.auth import get_current_client
 from app.core.logging import get_logger
 from app.models.models import AgentConfig
 from app.services import elevenlabs_service
@@ -42,7 +43,14 @@ class AgentConfigUpdate(BaseModel):
 
 
 @router.get("/{client_id}")
-async def get_config(client_id: str, db: AsyncSession = Depends(get_session)) -> dict:
+async def get_config(
+    client_id: str,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    # Tenant isolation: non-admin can only see own config
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
+        raise HTTPException(403, "Access denied")
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client_id)
     )
@@ -56,6 +64,7 @@ async def get_config(client_id: str, db: AsyncSession = Depends(get_session)) ->
 async def upsert_config(
     client_id: str,
     body: AgentConfigUpdate,
+    current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Create or update the agent config for a client.
@@ -63,6 +72,9 @@ async def upsert_config(
     If the client has an ElevenLabs agent, sync the changes to it.
     If no ElevenLabs agent exists yet, create one.
     """
+    # Tenant isolation
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
+        raise HTTPException(403, "Access denied")
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client_id)
     )
@@ -122,7 +134,10 @@ async def get_widget_embed(
     client_id: str,
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Get the embeddable chat widget code for the client's agent."""
+    """Get the embeddable chat widget code for the client's agent.
+
+    Public endpoint — no auth required (used by client websites).
+    """
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client_id)
     )

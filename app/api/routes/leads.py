@@ -8,11 +8,18 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
+from app.core.auth import get_current_client
 from app.core.logging import get_logger
 from app.models.models import Lead
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/leads", tags=["leads"])
+
+
+def _resolve_client_id(current_client: dict, client_id: str | None) -> str:
+    if client_id and current_client.get("role") == "admin":
+        return client_id
+    return current_client["client_id"]
 
 
 class LeadStatusUpdate(BaseModel):
@@ -21,13 +28,15 @@ class LeadStatusUpdate(BaseModel):
 
 @router.get("")
 async def list_leads(
-    client_id: str = Query(...),
+    current_client: dict = Depends(get_current_client),
+    client_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    q = select(Lead).where(Lead.client_id == client_id)
+    cid = _resolve_client_id(current_client, client_id)
+    q = select(Lead).where(Lead.client_id == cid)
     if status:
         q = q.where(Lead.status == status)
     q = q.order_by(desc(Lead.created_at)).limit(limit).offset(offset)
@@ -55,9 +64,15 @@ async def list_leads(
 
 
 @router.get("/{lead_id}")
-async def get_lead(lead_id: UUID, db: AsyncSession = Depends(get_session)) -> dict:
+async def get_lead(
+    lead_id: UUID,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
     lead = await db.get(Lead, lead_id)
     if not lead:
+        raise HTTPException(404, "Lead not found")
+    if current_client.get("role") != "admin" and str(lead.client_id) != current_client["client_id"]:
         raise HTTPException(404, "Lead not found")
     return {
         "id": str(lead.id),
@@ -81,10 +96,13 @@ async def get_lead(lead_id: UUID, db: AsyncSession = Depends(get_session)) -> di
 async def update_lead_status(
     lead_id: UUID,
     body: LeadStatusUpdate,
+    current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     lead = await db.get(Lead, lead_id)
     if not lead:
+        raise HTTPException(404, "Lead not found")
+    if current_client.get("role") != "admin" and str(lead.client_id) != current_client["client_id"]:
         raise HTTPException(404, "Lead not found")
     lead.status = body.status
     await db.commit()

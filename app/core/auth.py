@@ -78,6 +78,7 @@ def create_access_token(
     client_id: str,
     email: str,
     plan: str = "starter",
+    role: str = "client",
     extra: Optional[dict] = None,
 ) -> str:
     """Create a JWT access token for dashboard login."""
@@ -86,6 +87,7 @@ def create_access_token(
         "sub": client_id,
         "email": email,
         "plan": plan,
+        "role": role,
         "iat": now,
         "exp": now + timedelta(hours=JWT_EXPIRY_HOURS),
     }
@@ -123,6 +125,7 @@ async def get_current_client(
                 "client_id": payload["sub"],
                 "email": payload.get("email", ""),
                 "plan": payload.get("plan", "starter"),
+                "role": payload.get("role", "client"),
                 "auth_method": "jwt",
             }
         except pyjwt.ExpiredSignatureError:
@@ -154,6 +157,7 @@ async def _resolve_api_key(key: str) -> dict:
             "client_id": str(client.id),
             "email": client.email,
             "plan": client.plan,
+            "role": client.role,
             "auth_method": "api_key",
         }
 
@@ -173,5 +177,25 @@ def require_plan(*allowed_plans: str):
                 f"This feature requires one of: {', '.join(allowed_plans)}. "
                 f"Your plan: {client['plan']}",
             )
+        return client
+    return _check
+
+
+async def require_admin(
+    client: dict = Depends(get_current_client),
+) -> dict:
+    """Dependency that restricts access to admin users only."""
+    if client.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+    return client
+
+
+def require_owner_or_admin(client_id_param: str = "client_id"):
+    """Dependency factory: allows access only if the authenticated user
+    owns the resource (client_id matches) OR is an admin."""
+    async def _check(
+        client: dict = Depends(get_current_client),
+        **kwargs,
+    ):
         return client
     return _check

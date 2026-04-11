@@ -24,7 +24,7 @@ from app.core.auth import (
     get_current_client,
 )
 from app.core.logging import get_logger
-from app.models.models import AgentConfig, Client
+from app.models.models import AgentConfig, AgentTemplate, Client
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -36,6 +36,7 @@ class SignupRequest(BaseModel):
     password: str
     business_name: Optional[str] = None
     business_type: Optional[str] = None
+    template_id: Optional[str] = None  # UUID of template to apply
 
 
 class LoginRequest(BaseModel):
@@ -49,6 +50,7 @@ class TokenResponse(BaseModel):
     client_id: str
     email: str
     plan: str
+    role: str = "client"
 
 
 class ApiKeyResponse(BaseModel):
@@ -75,19 +77,45 @@ async def signup(
         email=body.email,
         hashed_password=hash_password(body.password),
         plan="starter",
+        role="client",
         is_active=True,
     )
     db.add(client)
     await db.flush()
 
-    # Create default agent config
+    # Resolve template: explicit template_id → default template → built-in defaults
+    template = None
+    if body.template_id:
+        template = await db.get(AgentTemplate, body.template_id)
+    if not template:
+        result_tpl = await db.execute(
+            select(AgentTemplate).where(
+                AgentTemplate.is_default == True,
+                AgentTemplate.is_active == True,
+            ).limit(1)
+        )
+        template = result_tpl.scalar_one_or_none()
+
+    # Create agent config from template (or defaults)
     agent_config = AgentConfig(
         client_id=client.id,
-        agent_name="AI Assistant",
-        agent_greeting="Hello! How can I help you today?",
-        system_prompt="You are a helpful AI assistant.",
+        agent_name=template.agent_name if template else "AI Assistant",
+        agent_greeting=template.agent_greeting if template else "Hello! How can I help you today?",
+        system_prompt=template.system_prompt if template else "You are a helpful AI assistant.",
+        voice_id=template.voice_id if template else "EXAVITQu4vr4xnSDxMaL",
+        voice_stability=template.voice_stability if template else 0.5,
+        voice_similarity_boost=template.voice_similarity_boost if template else 0.75,
+        llm_model=template.llm_model if template else "gpt-4o",
+        temperature=template.temperature if template else 0.7,
+        max_call_duration=template.max_call_duration if template else 1800,
+        after_hours_message=template.after_hours_message if template else "We're currently closed but will call you back first thing in the morning.",
+        after_hours_sms_enabled=template.after_hours_sms_enabled if template else True,
+        allow_interruptions=template.allow_interruptions if template else True,
+        services=template.services if template else [],
+        business_hours=template.business_hours if template else {},
+        widget_config=template.widget_config if template else {},
         business_name=body.business_name or body.name,
-        business_type=body.business_type,
+        business_type=body.business_type or (template.industry if template else None),
     )
     db.add(agent_config)
     await db.commit()
@@ -98,6 +126,7 @@ async def signup(
         client_id=str(client.id),
         email=client.email,
         plan=client.plan,
+        role=client.role,
     )
 
     logger.info(f"New client signup: {client.email} ({client.id})")
@@ -108,6 +137,7 @@ async def signup(
         "client_id": str(client.id),
         "email": client.email,
         "plan": client.plan,
+        "role": client.role,
     }
 
 
@@ -132,6 +162,7 @@ async def login(
         client_id=str(client.id),
         email=client.email,
         plan=client.plan,
+        role=client.role,
     )
 
     logger.info(f"Client login: {client.email}")
@@ -142,6 +173,7 @@ async def login(
         "client_id": str(client.id),
         "email": client.email,
         "plan": client.plan,
+        "role": client.role,
     }
 
 
@@ -159,6 +191,7 @@ async def refresh_token(
         client_id=str(client.id),
         email=client.email,
         plan=client.plan,
+        role=client.role,
     )
 
     return {
@@ -167,6 +200,7 @@ async def refresh_token(
         "client_id": str(client.id),
         "email": client.email,
         "plan": client.plan,
+        "role": client.role,
     }
 
 

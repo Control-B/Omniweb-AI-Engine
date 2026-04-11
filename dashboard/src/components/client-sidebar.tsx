@@ -1,7 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { PageId } from "@/app/page";
+import { useAuth } from "@/lib/auth-context";
+import type { ClientPageId } from "@/app/dashboard/page";
 import {
   LayoutDashboard,
   Phone,
@@ -12,10 +13,11 @@ import {
   Zap,
   ChevronLeft,
   Workflow,
+  LogOut,
 } from "lucide-react";
 import { useState } from "react";
 
-const NAV_ITEMS: { id: PageId; label: string; icon: React.ElementType }[] = [
+const NAV_ITEMS: { id: ClientPageId; label: string; icon: React.ElementType }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "calls", label: "Calls", icon: Phone },
   { id: "leads", label: "Leads", icon: Users },
@@ -25,13 +27,15 @@ const NAV_ITEMS: { id: PageId; label: string; icon: React.ElementType }[] = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-interface SidebarProps {
-  activePage: PageId;
-  onNavigate: (page: PageId) => void;
+interface ClientSidebarProps {
+  activePage: ClientPageId;
+  onNavigate: (page: ClientPageId) => void;
 }
 
-export function Sidebar({ activePage, onNavigate }: SidebarProps) {
+export function ClientSidebar({ activePage, onNavigate }: ClientSidebarProps) {
+  const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const initials = user?.email?.slice(0, 2).toUpperCase() || "??";
 
   return (
     <aside
@@ -47,29 +51,25 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
         </div>
         {!collapsed && (
           <div className="flex flex-col min-w-0">
-            <span className="font-semibold text-sm text-foreground truncate">
-              Omniweb AI
-            </span>
-            <span className="text-[11px] text-muted-foreground truncate">
-              Agent Engine
-            </span>
+            <span className="font-semibold text-sm text-foreground truncate">Omniweb AI</span>
+            <span className="text-[11px] text-muted-foreground truncate">Agent Engine</span>
           </div>
         )}
       </div>
 
-      {/* Client selector */}
+      {/* User info */}
       {!collapsed && (
         <div className="px-3 py-3">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-sidebar-accent">
             <div className="w-7 h-7 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 text-xs font-bold shrink-0">
-              BP
+              {initials}
             </div>
             <div className="min-w-0">
               <div className="text-xs font-medium text-foreground truncate">
-                Bob&apos;s Plumbing
+                {user?.email}
               </div>
-              <div className="text-[10px] text-muted-foreground">
-                Starter Plan
+              <div className="text-[10px] text-muted-foreground capitalize">
+                {user?.plan} Plan
               </div>
             </div>
           </div>
@@ -93,28 +93,25 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
             >
               <item.icon className={cn("w-[18px] h-[18px] shrink-0", isActive && "text-primary")} />
               {!collapsed && <span>{item.label}</span>}
-              {!collapsed && item.id === "leads" && (
-                <span className="ml-auto text-[10px] font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
-                  47
-                </span>
-              )}
             </button>
           );
         })}
       </nav>
 
-      {/* Collapse toggle */}
-      <div className="px-2 py-3 border-t border-border">
+      {/* Bottom */}
+      <div className="px-2 py-3 border-t border-border space-y-0.5">
+        <button
+          onClick={logout}
+          className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+        >
+          <LogOut className="w-[18px] h-[18px]" />
+          {!collapsed && <span>Sign Out</span>}
+        </button>
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
         >
-          <ChevronLeft
-            className={cn(
-              "w-[18px] h-[18px] transition-transform",
-              collapsed && "rotate-180"
-            )}
-          />
+          <ChevronLeft className={cn("w-[18px] h-[18px] transition-transform", collapsed && "rotate-180")} />
           {!collapsed && <span>Collapse</span>}
         </button>
       </div>

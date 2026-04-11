@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import SmsMessage, PhoneNumber, Client, Lead
-from app.services.twilio_service import TwilioService
+from app.services import twilio_service
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -39,7 +39,7 @@ class SMSService:
             from_number = await SMSService._get_client_from_number(db, client_id)
 
         # Send via Twilio
-        result = await TwilioService.send_sms(
+        result = await twilio_service.send_sms(
             to_number=to_number,
             from_number=from_number,
             body=body,

@@ -1,0 +1,198 @@
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// ── Token management ─────────────────────────────────────────────────────────
+
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("omniweb_token");
+}
+
+export function setToken(token: string) {
+  localStorage.setItem("omniweb_token", token);
+}
+
+export function clearToken() {
+  localStorage.removeItem("omniweb_token");
+}
+
+export function parseJwt(token: string): Record<string, any> | null {
+  try {
+    const payload = token.split(".")[1];
+    return JSON.parse(atob(payload));
+  } catch {
+    return null;
+  }
+}
+
+// ── Fetch wrapper ────────────────────────────────────────────────────────────
+
+async function apiFetch<T = any>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const message = body.detail || `API error ${res.status}`;
+
+    // For 401 on non-auth endpoints, clear token and redirect to login
+    if (res.status === 401 && !path.startsWith("/auth/")) {
+      clearToken();
+      if (typeof window !== "undefined") window.location.href = "/login";
+    }
+
+    throw new Error(message);
+  }
+
+  return res.json();
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  client_id: string;
+  email: string;
+  plan: string;
+  role: string;
+}
+
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  const data = await apiFetch<AuthResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  setToken(data.access_token);
+  return data;
+}
+
+export async function signup(body: {
+  name: string;
+  email: string;
+  password: string;
+  business_name?: string;
+  business_type?: string;
+  template_id?: string;
+}): Promise<AuthResponse> {
+  const data = await apiFetch<AuthResponse>("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  setToken(data.access_token);
+  return data;
+}
+
+export function logout() {
+  clearToken();
+  if (typeof window !== "undefined") window.location.href = "/login";
+}
+
+// ── Client data endpoints ────────────────────────────────────────────────────
+
+export async function getAnalytics(clientId?: string) {
+  const params = clientId ? `?client_id=${clientId}` : "";
+  return apiFetch(`/analytics/summary${params}`);
+}
+
+export async function getCalls(clientId?: string, limit = 50, offset = 0) {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (clientId) params.set("client_id", clientId);
+  return apiFetch(`/calls?${params}`);
+}
+
+export async function getLeads(clientId?: string, limit = 50) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (clientId) params.set("client_id", clientId);
+  return apiFetch(`/leads?${params}`);
+}
+
+export async function getAgentConfig(clientId: string) {
+  return apiFetch(`/agent-config/${clientId}`);
+}
+
+export async function updateAgentConfig(clientId: string, body: Record<string, any>) {
+  return apiFetch(`/agent-config/${clientId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getNumbers(clientId?: string) {
+  const params = clientId ? `?client_id=${clientId}` : "";
+  return apiFetch(`/numbers${params}`);
+}
+
+// ── Admin endpoints ──────────────────────────────────────────────────────────
+
+export async function adminGetClients(params?: {
+  search?: string;
+  plan?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.search) q.set("search", params.search);
+  if (params?.plan) q.set("plan", params.plan);
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  return apiFetch(`/admin/clients?${q}`);
+}
+
+export async function adminGetClient(clientId: string) {
+  return apiFetch(`/admin/clients/${clientId}`);
+}
+
+export async function adminPatchClient(clientId: string, body: Record<string, any>) {
+  return apiFetch(`/admin/clients/${clientId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function adminGetStats() {
+  return apiFetch("/admin/stats");
+}
+
+export async function adminGetTemplates() {
+  return apiFetch("/admin/templates");
+}
+
+export async function adminCreateTemplate(body: Record<string, any>) {
+  return apiFetch("/admin/templates", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function adminUpdateTemplate(id: string, body: Record<string, any>) {
+  return apiFetch(`/admin/templates/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function adminDeleteTemplate(id: string) {
+  return apiFetch(`/admin/templates/${id}`, { method: "DELETE" });
+}
+
+export async function adminImpersonate(clientId: string) {
+  return apiFetch<AuthResponse>(`/admin/impersonate/${clientId}`, {
+    method: "POST",
+  });
+}
+
+// ── Public endpoints ─────────────────────────────────────────────────────────
+
+export async function getPublicTemplates(industry?: string) {
+  const params = industry ? `?industry=${industry}` : "";
+  return apiFetch(`/templates${params}`);
+}

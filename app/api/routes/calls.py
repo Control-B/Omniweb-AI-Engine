@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.api.deps import get_session
+from app.core.auth import get_current_client
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, Call, PhoneNumber, Transcript
@@ -27,18 +28,27 @@ settings = get_settings()
 router = APIRouter(tags=["calls"])
 
 
+def _resolve_client_id(current_client: dict, client_id: str | None) -> str:
+    """If admin and client_id given, use it. Otherwise use the caller's own."""
+    if client_id and current_client.get("role") == "admin":
+        return client_id
+    return current_client["client_id"]
+
+
 # ── Dashboard endpoints ───────────────────────────────────────────────────────
 
 @router.get("/calls")
 async def list_calls(
-    client_id: str = Query(...),
+    current_client: dict = Depends(get_current_client),
+    client_id: Optional[str] = Query(None),
     channel: Optional[str] = Query(None),  # voice | text | whatsapp
     limit: int = Query(50, le=200),
     offset: int = Query(0),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """List calls/conversations for a client, newest first."""
-    query = select(Call).where(Call.client_id == client_id)
+    cid = _resolve_client_id(current_client, client_id)
+    query = select(Call).where(Call.client_id == cid)
     if channel:
         query = query.where(Call.channel == channel)
     query = query.order_by(desc(Call.started_at)).limit(limit).offset(offset)
@@ -47,7 +57,7 @@ async def list_calls(
     calls = result.scalars().all()
 
     # Get total count
-    count_query = select(func.count(Call.id)).where(Call.client_id == client_id)
+    count_query = select(func.count(Call.id)).where(Call.client_id == cid)
     if channel:
         count_query = count_query.where(Call.channel == channel)
     total = (await db.execute(count_query)).scalar() or 0
@@ -77,11 +87,16 @@ async def list_calls(
 @router.get("/calls/{call_id}")
 async def get_call(
     call_id: UUID,
+    current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Get call detail including transcript."""
     call = await db.get(Call, call_id)
     if not call:
+        raise HTTPException(404, "Call not found")
+
+    # Tenant isolation: non-admin can only see own calls
+    if current_client.get("role") != "admin" and str(call.client_id) != current_client["client_id"]:
         raise HTTPException(404, "Call not found")
 
     # Load transcript
@@ -113,16 +128,18 @@ async def get_call(
 
 @router.post("/calls/sync")
 async def sync_conversations(
-    client_id: str = Query(...),
+    current_client: dict = Depends(get_current_client),
+    client_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Sync recent conversations from ElevenLabs into the local DB.
 
     Useful as a fallback if webhooks were missed, or for initial data import.
     """
+    cid = _resolve_client_id(current_client, client_id)
     # Get client's agent
     result = await db.execute(
-        select(AgentConfig).where(AgentConfig.client_id == client_id)
+        select(AgentConfig).where(AgentConfig.client_id == cid)
     )
     config = result.scalar_one_or_none()
     if not config or not config.elevenlabs_agent_id:
@@ -151,7 +168,7 @@ async def sync_conversations(
         # Create call record
         start_time = conv.get("start_time_unix_secs")
         call = Call(
-            client_id=client_id,
+            client_id=cid,
             caller_number="",
             direction=conv.get("direction", "inbound"),
             channel="voice" if conv.get("conversation_initiation_source") in ("phone_call", "twilio") else "text",

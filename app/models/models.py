@@ -42,6 +42,9 @@ class Client(Base):
     hashed_password: Mapped[str | None] = mapped_column(String(500), nullable=True)
     api_key_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
 
+    # Role: "client" (default tenant) or "admin" (platform owner)
+    role: Mapped[str] = mapped_column(String(20), default="client", nullable=False)
+
     # Billing
     stripe_customer_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -364,3 +367,41 @@ class OutreachSequence(Base):
         Index("ix_outreach_sequences_client_id", "client_id"),
         UniqueConstraint("client_id", "name", name="uq_outreach_sequence_name"),
     )
+
+
+# ── Agent Templates ───────────────────────────────────────────────────────────
+
+class AgentTemplate(Base):
+    """Reusable agent template created by admin.
+
+    When a new client signs up, they get an agent pre-configured from the
+    default template. Clients can also pick from available templates.
+    """
+    __tablename__ = "agent_templates"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    industry: Mapped[str] = mapped_column(String(100), nullable=False, default="general")  # plumbing, dental, legal, etc.
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # auto-applied on signup
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Template config (same fields as AgentConfig)
+    agent_name: Mapped[str] = mapped_column(String(100), default="AI Assistant", nullable=False)
+    agent_greeting: Mapped[str] = mapped_column(Text, default="Thank you for calling! How can I help you today?", nullable=False)
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    voice_id: Mapped[str] = mapped_column(String(100), default="EXAVITQu4vr4xnSDxMaL", nullable=False)
+    voice_stability: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    voice_similarity_boost: Mapped[float] = mapped_column(Float, default=0.75, nullable=False)
+    llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o", nullable=False)
+    temperature: Mapped[float] = mapped_column(Float, default=0.7, nullable=False)
+    max_call_duration: Mapped[int] = mapped_column(Integer, default=1800, nullable=False)
+    after_hours_message: Mapped[str] = mapped_column(Text, default="We're currently closed but will call you back first thing in the morning.", nullable=False)
+    after_hours_sms_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    allow_interruptions: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    services: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    business_hours: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    widget_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

@@ -51,9 +51,11 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("email", sa.String(255), nullable=False),
+        sa.Column("hashed_password", sa.String(500), nullable=True),
+        sa.Column("api_key_hash", sa.String(128), nullable=True),
         sa.Column("stripe_customer_id", sa.String(100), nullable=True),
         sa.Column("stripe_subscription_id", sa.String(100), nullable=True),
-        sa.Column("plan", sa.Enum("starter", "growth", "pro", "agency", name="plan_enum"), nullable=False, server_default="starter"),
+        sa.Column("plan", plan_enum, nullable=False, server_default="starter"),
         sa.Column("plan_minutes_used", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column("supabase_user_id", sa.String(100), nullable=True),
@@ -66,6 +68,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("supabase_user_id"),
     )
     op.create_index("ix_clients_email", "clients", ["email"])
+    op.create_index("ix_clients_api_key_hash", "clients", ["api_key_hash"])
     op.create_index("ix_clients_stripe_customer_id", "clients", ["stripe_customer_id"])
 
     # ── agent_configs ─────────────────────────────────────────
@@ -73,6 +76,8 @@ def upgrade() -> None:
         "agent_configs",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("client_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("elevenlabs_agent_id", sa.String(100), nullable=True),
+        sa.Column("elevenlabs_kb_id", sa.String(100), nullable=True),
         sa.Column("agent_name", sa.String(100), nullable=False, server_default="Alex"),
         sa.Column("agent_greeting", sa.Text(), nullable=False, server_default="Thank you for calling! How can I help you today?"),
         sa.Column("voice_id", sa.String(100), nullable=False, server_default="EXAVITQu4vr4xnSDxMaL"),
@@ -90,8 +95,8 @@ def upgrade() -> None:
         sa.Column("after_hours_message", sa.Text(), nullable=False, server_default="We are currently closed but will call you back first thing in the morning."),
         sa.Column("after_hours_sms_enabled", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column("allow_interruptions", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column("min_endpointing_delay", sa.Float(), nullable=False, server_default="0.5"),
-        sa.Column("max_endpointing_delay", sa.Float(), nullable=False, server_default="5.0"),
+        sa.Column("max_call_duration", sa.Integer(), nullable=False, server_default="1800"),
+        sa.Column("widget_config", postgresql.JSONB(), nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.ForeignKeyConstraint(["client_id"], ["clients.id"], ondelete="CASCADE"),
@@ -99,6 +104,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("client_id"),
     )
     op.create_index("ix_agent_configs_client_id", "agent_configs", ["client_id"])
+    op.create_index("ix_agent_configs_elevenlabs_agent_id", "agent_configs", ["elevenlabs_agent_id"])
 
     # ── phone_numbers ─────────────────────────────────────────
     op.create_table(
@@ -107,8 +113,7 @@ def upgrade() -> None:
         sa.Column("client_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("twilio_sid", sa.String(100), nullable=False),
         sa.Column("phone_number", sa.String(30), nullable=False),
-        sa.Column("livekit_sip_trunk_id", sa.String(100), nullable=True),
-        sa.Column("livekit_dispatch_rule_id", sa.String(100), nullable=True),
+        sa.Column("elevenlabs_phone_number_id", sa.String(100), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column("friendly_name", sa.String(255), nullable=True),
         sa.Column("area_code", sa.String(10), nullable=True),
@@ -130,16 +135,15 @@ def upgrade() -> None:
         sa.Column("client_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("phone_number_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("caller_number", sa.String(30), nullable=False),
-        sa.Column("direction", sa.Enum("inbound", "outbound", name="call_direction_enum"), nullable=False),
-        sa.Column("status", sa.Enum("queued", "ringing", "in_progress", "completed", "failed", "no_answer", "busy", name="call_status_enum"), nullable=False, server_default="queued"),
-        sa.Column("livekit_room_name", sa.String(255), nullable=True),
-        sa.Column("livekit_room_id", sa.String(255), nullable=True),
+        sa.Column("direction", sa.String(20), nullable=False, server_default="inbound"),
+        sa.Column("channel", sa.String(20), nullable=False, server_default="voice"),
+        sa.Column("status", sa.String(30), nullable=False, server_default="queued"),
+        sa.Column("elevenlabs_conversation_id", sa.String(100), nullable=True),
         sa.Column("twilio_call_sid", sa.String(100), nullable=True),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("duration_seconds", sa.Integer(), nullable=True),
         sa.Column("recording_url", sa.String(500), nullable=True),
-        sa.Column("recording_sid", sa.String(100), nullable=True),
         sa.Column("post_call_processed", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column("crm_webhook_fired", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
@@ -151,7 +155,8 @@ def upgrade() -> None:
     op.create_index("ix_calls_caller_number", "calls", ["caller_number"])
     op.create_index("ix_calls_status", "calls", ["status"])
     op.create_index("ix_calls_started_at", "calls", ["started_at"])
-    op.create_index("ix_calls_livekit_room_name", "calls", ["livekit_room_name"])
+    op.create_index("ix_calls_channel", "calls", ["channel"])
+    op.create_index("ix_calls_elevenlabs_conversation_id", "calls", ["elevenlabs_conversation_id"])
 
     # ── transcripts ───────────────────────────────────────────
     op.create_table(
@@ -181,10 +186,10 @@ def upgrade() -> None:
         sa.Column("caller_phone", sa.String(30), nullable=False),
         sa.Column("caller_email", sa.String(255), nullable=True),
         sa.Column("intent", sa.String(100), nullable=True),
-        sa.Column("urgency", sa.Enum("low", "medium", "high", "emergency", name="urgency_enum"), nullable=False, server_default="medium"),
+        sa.Column("urgency", sa.String(20), nullable=False, server_default="medium"),
         sa.Column("summary", sa.Text(), nullable=True),
         sa.Column("services_requested", postgresql.JSONB(), nullable=False, server_default="[]"),
-        sa.Column("status", sa.Enum("new", "contacted", "booked", "closed", "lost", name="lead_status_enum"), nullable=False, server_default="new"),
+        sa.Column("status", sa.String(20), nullable=False, server_default="new"),
         sa.Column("status_notes", sa.Text(), nullable=True),
         sa.Column("lead_score", sa.Float(), nullable=False, server_default="0.0"),
         sa.Column("follow_up_sent", sa.Boolean(), nullable=False, server_default="false"),
@@ -207,7 +212,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("client_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("call_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("direction", sa.Enum("inbound", "outbound", name="sms_direction_enum"), nullable=False),
+        sa.Column("direction", sa.String(20), nullable=False),
         sa.Column("to_number", sa.String(30), nullable=False),
         sa.Column("from_number", sa.String(30), nullable=False),
         sa.Column("body", sa.Text(), nullable=False),
@@ -229,7 +234,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("client_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("trigger", sa.Enum("after_call", "missed_call", "new_lead", "manual", name="sequence_trigger_enum"), nullable=False),
+        sa.Column("trigger", sa.String(30), nullable=False, server_default="after_call"),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column("steps", postgresql.JSONB(), nullable=False, server_default="[]"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),

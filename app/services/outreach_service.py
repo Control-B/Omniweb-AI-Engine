@@ -111,8 +111,8 @@ class OutreachService:
         except (KeyError, ValueError):
             body = template  # Send raw if template rendering fails
 
-        from app.services.twilio_service import TwilioService
-        result = await TwilioService.send_sms(
+        from app.services import twilio_service
+        result = await twilio_service.send_sms(
             to_number=to_number,
             from_number=from_number,
             body=body,

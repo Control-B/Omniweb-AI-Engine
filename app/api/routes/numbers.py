@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
+from app.core.auth import get_current_client
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, PhoneNumber
@@ -21,10 +22,16 @@ settings = get_settings()
 router = APIRouter(prefix="/numbers", tags=["numbers"])
 
 
+def _resolve_client_id(current_client: dict, client_id: str | None) -> str:
+    if client_id and current_client.get("role") == "admin":
+        return client_id
+    return current_client["client_id"]
+
+
 class ProvisionRequest(BaseModel):
-    client_id: str
     phone_number: str
     friendly_name: str
+    client_id: Optional[str] = None  # admin can specify; otherwise uses caller's
 
 
 @router.get("/available")
@@ -43,19 +50,21 @@ async def list_available(
 @router.post("", status_code=201)
 async def provision_number(
     body: ProvisionRequest,
+    current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Buy a Twilio number and import it into ElevenLabs for the client's agent."""
+    cid = _resolve_client_id(current_client, body.client_id)
     # Look up the client's ElevenLabs agent ID
     result = await db.execute(
-        select(AgentConfig).where(AgentConfig.client_id == body.client_id)
+        select(AgentConfig).where(AgentConfig.client_id == cid)
     )
     config = result.scalar_one_or_none()
     elevenlabs_agent_id = config.elevenlabs_agent_id if config else None
 
     number = await sip_provisioning_service.provision_new_number(
         db=db,
-        client_id=body.client_id,
+        client_id=cid,
         phone_number=body.phone_number,
         friendly_name=body.friendly_name,
         elevenlabs_agent_id=elevenlabs_agent_id,
@@ -71,11 +80,13 @@ async def provision_number(
 
 @router.get("")
 async def list_numbers(
-    client_id: str = Query(...),
+    current_client: dict = Depends(get_current_client),
+    client_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
+    cid = _resolve_client_id(current_client, client_id)
     result = await db.execute(
-        select(PhoneNumber).where(PhoneNumber.client_id == client_id)
+        select(PhoneNumber).where(PhoneNumber.client_id == cid)
     )
     numbers = result.scalars().all()
     return {
@@ -97,11 +108,14 @@ async def list_numbers(
 async def deprovision_number(
     number_id: UUID,
     release_twilio: bool = Query(False),
+    current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Remove a phone number from ElevenLabs and optionally release from Twilio."""
     number = await db.get(PhoneNumber, number_id)
     if not number:
+        raise HTTPException(404, "Phone number not found")
+    if current_client.get("role") != "admin" and str(number.client_id) != current_client["client_id"]:
         raise HTTPException(404, "Phone number not found")
     await sip_provisioning_service.deprovision_number(
         db, number, release_twilio_number=release_twilio
@@ -112,11 +126,14 @@ async def deprovision_number(
 @router.post("/{number_id}/assign-agent")
 async def assign_number_to_agent(
     number_id: UUID,
+    current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Assign (or reassign) a phone number to the client's ElevenLabs agent."""
     number = await db.get(PhoneNumber, number_id)
     if not number:
+        raise HTTPException(404, "Phone number not found")
+    if current_client.get("role") != "admin" and str(number.client_id) != current_client["client_id"]:
         raise HTTPException(404, "Phone number not found")
 
     # Get client's agent

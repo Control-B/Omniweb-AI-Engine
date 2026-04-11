@@ -1,6 +1,7 @@
-"""Chat API — text chat proxy and widget configuration.
+"""Chat API — text chat proxy, welcome audio, and widget configuration.
 
 Endpoints:
+    POST /chat/welcome-audio         — synthesize welcome audio for frontend
     GET  /chat/widget/{client_id}     — get widget embed code
     GET  /chat/config/{client_id}     — get chat config (agent_id for frontend)
     POST /chat/conversations          — list text conversations for a client
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import Response
 
 from app.api.deps import get_session
 from app.core.auth import get_current_client
@@ -18,6 +20,32 @@ from app.services import elevenlabs_service
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+class WelcomeAudioRequest(BaseModel):
+    text: str
+    voice_id: str | None = None
+
+
+@router.post("/welcome-audio")
+async def get_welcome_audio(body: WelcomeAudioRequest) -> Response:
+    """Public endpoint to synthesize short welcome audio for the widget."""
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "Text is required")
+    if len(text) > 400:
+        raise HTTPException(400, "Text must be 400 characters or fewer")
+
+    try:
+        audio_bytes = await elevenlabs_service.synthesize_speech(
+            text=text,
+            voice_id=body.voice_id,
+        )
+    except Exception as exc:
+        logger.error(f"Failed to synthesize welcome audio: {exc}")
+        raise HTTPException(502, "Failed to synthesize welcome audio") from exc
+
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
 @router.get("/widget/{client_id}")

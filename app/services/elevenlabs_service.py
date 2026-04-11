@@ -44,6 +44,7 @@ settings = get_settings()
 
 BASE_URL = "https://api.elevenlabs.io/v1"
 CONVAI_URL = f"{BASE_URL}/convai"
+TTS_URL = f"{BASE_URL}/text-to-speech"
 
 
 def _headers() -> dict[str, str]:
@@ -56,6 +57,39 @@ def _headers() -> dict[str, str]:
 
 def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(timeout=30, headers=_headers())
+
+
+async def synthesize_speech(
+    *,
+    text: str,
+    voice_id: str | None = None,
+    model_id: str = "eleven_turbo_v2_5",
+) -> bytes:
+    """Synthesize speech with ElevenLabs and return MP3 bytes."""
+    if not settings.ELEVENLABS_API_KEY:
+        raise RuntimeError("ElevenLabs is not configured")
+
+    selected_voice_id = voice_id or settings.ELEVENLABS_DEFAULT_VOICE_ID
+    payload = {
+        "text": text,
+        "model_id": model_id,
+        "voice_settings": {
+            "stability": 0.45,
+            "similarity_boost": 0.8,
+            "style": 0.2,
+            "use_speaker_boost": True,
+        },
+    }
+    headers = {
+        "xi-api-key": settings.ELEVENLABS_API_KEY,
+        "Accept": "audio/mpeg",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=45, headers=headers) as http:
+        resp = await http.post(f"{TTS_URL}/{selected_voice_id}", json=payload)
+        resp.raise_for_status()
+        return resp.content
 
 
 # ══════════════════════════════════════════════════════════════════════════════

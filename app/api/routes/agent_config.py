@@ -148,4 +148,5 @@ async def get_widget_embed(
     return {
         "agent_id": config.elevenlabs_agent_id,
         "embed_code": elevenlabs_service.get_widget_embed_code(config.elevenlabs_agent_id),
+        "talk_url": f"https://elevenlabs.io/app/talk-to/{config.elevenlabs_agent_id}",
     }

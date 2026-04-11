@@ -100,7 +100,12 @@ async def create_agent(
     }
 
     # Add knowledge base if provided
-    platform_settings: dict[str, Any] = {}
+    platform_settings: dict[str, Any] = {
+        "widget": {
+            "variant": "compact",
+            "shareable_page_enabled": True,
+        },
+    }
     if knowledge_base_ids:
         agent_config["agent"]["knowledge_base"] = [
             {"id": kb_id, "usage": "auto"} for kb_id in knowledge_base_ids
@@ -109,6 +114,7 @@ async def create_agent(
     payload: dict[str, Any] = {
         "name": name,
         "conversation_config": agent_config,
+        "platform_settings": platform_settings,
     }
 
     if not settings.ELEVENLABS_API_KEY:

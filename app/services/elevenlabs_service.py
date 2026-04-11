@@ -104,6 +104,10 @@ async def create_agent(
         "widget": {
             "variant": "compact",
             "shareable_page_enabled": True,
+            "text_input_enabled": True,
+            "supports_text_only": True,
+            "transcript_enabled": True,
+            "feedback_mode": "during",
         },
     }
     if knowledge_base_ids:

@@ -96,8 +96,8 @@ async def list_available_numbers(
     """
     if not settings.twilio_configured:
         return [
-            {"phone_number": "+15550000001", "location": "New York, NY", "monthly_rate": 1.15, "type": "local"},
-            {"phone_number": "+15550000002", "location": "Los Angeles, CA", "monthly_rate": 1.15, "type": "local"},
+            {"phone_number": "+15550000001", "location": "New York, NY", "monthly_rate": 2.00, "type": "local"},
+            {"phone_number": "+15550000002", "location": "Los Angeles, CA", "monthly_rate": 2.00, "type": "local"},
         ]
 
     try:
@@ -111,10 +111,10 @@ async def list_available_numbers(
         avail = client.available_phone_numbers(country)
         if number_type == "toll_free":
             numbers = avail.toll_free.list(**kwargs)
-            rate = 2.15
+            rate = 3.00
         else:
             numbers = avail.local.list(**kwargs)
-            rate = 1.15
+            rate = 2.00
 
         return [
             {

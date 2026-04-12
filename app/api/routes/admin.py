@@ -17,16 +17,17 @@ Endpoints:
 """
 from typing import Optional
 from uuid import UUID
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, select, and_, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.core.auth import create_access_token, require_admin
 from app.core.logging import get_logger
-from app.models.models import AgentConfig, AgentTemplate, Call, Client, Lead, PhoneNumber
+from app.models.models import AgentConfig, AgentTemplate, Call, Client, Lead, PhoneNumber, ToolCallLog
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -373,6 +374,106 @@ async def delete_template(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  Agents — view all client agent configs
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/agents")
+async def list_agents(
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """List all agents across all clients, joined with client info."""
+    result = await db.execute(
+        select(AgentConfig, Client)
+        .join(Client, AgentConfig.client_id == Client.id)
+        .order_by(desc(AgentConfig.updated_at))
+    )
+    rows = result.all()
+
+    agents = []
+    for config, client in rows:
+        # Get call + lead counts for this client
+        call_count = await db.scalar(
+            select(func.count(Call.id)).where(Call.client_id == client.id)
+        ) or 0
+        lead_count = await db.scalar(
+            select(func.count(Lead.id)).where(Lead.client_id == client.id)
+        ) or 0
+
+        agents.append({
+            "id": str(config.id),
+            "client_id": str(client.id),
+            "client_name": client.name,
+            "client_email": client.email,
+            "business_name": client.business_name,
+            "plan": client.plan,
+            "is_active": client.is_active,
+            "agent_name": config.agent_name,
+            "elevenlabs_agent_id": config.elevenlabs_agent_id,
+            "language": config.language,
+            "supported_languages": config.supported_languages or [],
+            "greeting": config.greeting,
+            "system_prompt": (config.system_prompt or "")[:200],  # truncated preview
+            "call_count": call_count,
+            "lead_count": lead_count,
+            "created_at": config.created_at.isoformat() if config.created_at else None,
+            "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+        })
+
+    return {"agents": agents, "total": len(agents)}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Conversations / Sessions — all calls across all clients
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/conversations")
+async def list_conversations(
+    admin: dict = Depends(require_admin),
+    channel: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, le=200),
+    offset: int = Query(0),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """List all conversations/calls across all clients with client info."""
+    q = select(Call, Client).join(Client, Call.client_id == Client.id)
+    count_q = select(func.count(Call.id))
+
+    if channel:
+        q = q.where(Call.channel == channel)
+        count_q = count_q.where(Call.channel == channel)
+    if status:
+        q = q.where(Call.status == status)
+        count_q = count_q.where(Call.status == status)
+
+    total = await db.scalar(count_q) or 0
+    q = q.order_by(desc(Call.started_at)).limit(limit).offset(offset)
+    result = await db.execute(q)
+    rows = result.all()
+
+    conversations = []
+    for call, client in rows:
+        conversations.append({
+            "id": str(call.id),
+            "client_id": str(client.id),
+            "client_name": client.name,
+            "business_name": client.business_name,
+            "caller_number": call.caller_number,
+            "direction": call.direction,
+            "channel": call.channel,
+            "status": call.status,
+            "duration_seconds": call.duration_seconds,
+            "started_at": call.started_at.isoformat() if call.started_at else None,
+            "ended_at": call.ended_at.isoformat() if call.ended_at else None,
+            "post_call_processed": call.post_call_processed,
+            "elevenlabs_conversation_id": call.elevenlabs_conversation_id,
+        })
+
+    return {"conversations": conversations, "total": total}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  Platform Stats
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -382,6 +483,10 @@ async def platform_stats(
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Get platform-wide statistics for the admin dashboard."""
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=today_start.weekday())
+
     total_clients = await db.scalar(
         select(func.count(Client.id)).where(Client.role == "client")
     ) or 0
@@ -394,6 +499,30 @@ async def platform_stats(
     total_leads = await db.scalar(select(func.count(Lead.id))) or 0
     total_numbers = await db.scalar(select(func.count(PhoneNumber.id))) or 0
 
+    # Today counts
+    calls_today = await db.scalar(
+        select(func.count(Call.id)).where(Call.created_at >= today_start)
+    ) or 0
+    leads_today = await db.scalar(
+        select(func.count(Lead.id)).where(Lead.created_at >= today_start)
+    ) or 0
+
+    # This week
+    calls_this_week = await db.scalar(
+        select(func.count(Call.id)).where(Call.created_at >= week_start)
+    ) or 0
+
+    # Booked appointments
+    booked_appointments = await db.scalar(
+        select(func.count(Lead.id)).where(Lead.status == "booked")
+    ) or 0
+
+    # Leads by status
+    status_result = await db.execute(
+        select(Lead.status, func.count(Lead.id)).group_by(Lead.status)
+    )
+    leads_by_status = {str(row[0]): row[1] for row in status_result}
+
     # Clients per plan
     plan_result = await db.execute(
         select(Client.plan, func.count(Client.id))
@@ -402,11 +531,107 @@ async def platform_stats(
     )
     clients_by_plan = {str(row[0]): row[1] for row in plan_result}
 
+    # Recent leads (last 10)
+    recent_leads_result = await db.execute(
+        select(Lead).order_by(desc(Lead.created_at)).limit(10)
+    )
+    recent_leads = [
+        {
+            "id": str(l.id),
+            "caller_name": l.caller_name,
+            "caller_phone": l.caller_phone,
+            "intent": l.intent,
+            "urgency": l.urgency,
+            "status": l.status,
+            "lead_score": l.lead_score,
+            "services_requested": l.services_requested,
+            "created_at": l.created_at.isoformat() if l.created_at else None,
+        }
+        for l in recent_leads_result.scalars().all()
+    ]
+
+    # Recent calls (last 10)
+    recent_calls_result = await db.execute(
+        select(Call).order_by(desc(Call.started_at)).limit(10)
+    )
+    recent_calls = [
+        {
+            "id": str(c.id),
+            "caller_number": c.caller_number,
+            "direction": c.direction,
+            "channel": c.channel,
+            "status": c.status,
+            "duration_seconds": c.duration_seconds,
+            "started_at": c.started_at.isoformat() if c.started_at else None,
+        }
+        for c in recent_calls_result.scalars().all()
+    ]
+
+    # Tool call stats
+    tool_calls_today = await db.scalar(
+        select(func.count(ToolCallLog.id)).where(ToolCallLog.created_at >= today_start)
+    ) or 0
+
+    tool_summary_result = await db.execute(
+        select(ToolCallLog.tool_name, func.count(ToolCallLog.id))
+        .group_by(ToolCallLog.tool_name)
+    )
+    tool_summary = {str(row[0]): row[1] for row in tool_summary_result}
+
+    recent_tool_calls_result = await db.execute(
+        select(ToolCallLog).order_by(desc(ToolCallLog.created_at)).limit(10)
+    )
+    recent_tool_calls = [
+        {
+            "id": str(t.id),
+            "tool_name": t.tool_name,
+            "success": t.success,
+            "duration_ms": t.duration_ms,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        }
+        for t in recent_tool_calls_result.scalars().all()
+    ]
+
+    # 7-day trend
+    weekly = []
+    for i in range(6, -1, -1):
+        day = today_start - timedelta(days=i)
+        day_end = day + timedelta(days=1)
+        day_calls = await db.scalar(
+            select(func.count(Call.id)).where(
+                Call.created_at >= day,
+                Call.created_at < day_end,
+            )
+        ) or 0
+        day_leads = await db.scalar(
+            select(func.count(Lead.id)).where(
+                Lead.created_at >= day,
+                Lead.created_at < day_end,
+            )
+        ) or 0
+        weekly.append({
+            "date": day.strftime("%Y-%m-%d"),
+            "label": day.strftime("%a"),
+            "calls": day_calls,
+            "leads": day_leads,
+        })
+
     return {
         "total_clients": total_clients,
         "active_clients": active_clients,
         "total_calls": total_calls,
         "total_leads": total_leads,
         "total_numbers": total_numbers,
+        "calls_today": calls_today,
+        "leads_today": leads_today,
+        "calls_this_week": calls_this_week,
+        "booked_appointments": booked_appointments,
+        "leads_by_status": leads_by_status,
         "clients_by_plan": clients_by_plan,
+        "tool_calls_today": tool_calls_today,
+        "tool_summary": tool_summary,
+        "recent_leads": recent_leads,
+        "recent_calls": recent_calls,
+        "recent_tool_calls": recent_tool_calls,
+        "weekly": weekly,
     }

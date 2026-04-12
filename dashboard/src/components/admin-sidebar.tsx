@@ -11,11 +11,15 @@ import {
   Zap,
   LogOut,
   Shield,
+  Bot,
+  MessageSquare,
 } from "lucide-react";
 import { useState } from "react";
 
 const NAV_ITEMS: { id: AdminPageId; label: string; icon: React.ElementType }[] = [
   { id: "overview", label: "Overview", icon: BarChart3 },
+  { id: "agents", label: "Agents", icon: Bot },
+  { id: "sessions", label: "Sessions", icon: MessageSquare },
   { id: "clients", label: "Clients", icon: Users },
   { id: "templates", label: "Templates", icon: FileText },
 ];

@@ -224,6 +224,24 @@ export async function adminGetStats() {
   return apiFetch("/admin/stats");
 }
 
+export async function adminGetAgents() {
+  return apiFetch("/admin/agents");
+}
+
+export async function adminGetConversations(params?: {
+  channel?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.channel) q.set("channel", params.channel);
+  if (params?.status) q.set("status", params.status);
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  return apiFetch(`/admin/conversations?${q}`);
+}
+
 export async function adminGetTemplates() {
   return apiFetch("/admin/templates");
 }

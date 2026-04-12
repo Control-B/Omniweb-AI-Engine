@@ -21,7 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.models import Lead, Client, ToolCallLog
+from app.models.models import AgentConfig, Lead, Client, ToolCallLog
+from app.services.guardrail_middleware import check_response, get_safe_fallback
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -46,31 +47,104 @@ def _verify_secret(secret: str | None):
         raise HTTPException(403, "Invalid tool secret")
 
 
-def _get_client_id() -> uuid.UUID:
-    """Return the client ID to associate with landing-page leads."""
+def _get_default_client_id() -> uuid.UUID:
+    """Return the client ID for landing-page leads (fallback)."""
     if LANDING_PAGE_CLIENT_ID:
         return uuid.UUID(LANDING_PAGE_CLIENT_ID)
-    # Fallback: use a deterministic UUID derived from "omniweb-landing"
     return uuid.uuid5(uuid.NAMESPACE_DNS, "omniweb.ai")
+
+
+async def _resolve_tenant(agent_id: str | None) -> tuple[uuid.UUID, str, list[str]]:
+    """Resolve client_id, industry_slug, and custom_guardrails from an ElevenLabs agent_id.
+
+    Falls back to the landing-page client if the agent_id is not found.
+
+    Returns:
+        (client_id, industry_slug, custom_guardrails)
+    """
+    if not agent_id:
+        return _get_default_client_id(), "general", []
+
+    from app.core.database import async_session_factory
+    from sqlalchemy import select
+
+    try:
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(AgentConfig).where(AgentConfig.elevenlabs_agent_id == agent_id)
+            )
+            config = result.scalar_one_or_none()
+            if config:
+                return (
+                    config.client_id,
+                    config.industry or "general",
+                    config.custom_guardrails or [],
+                )
+    except Exception as e:
+        logger.warning(f"Failed to resolve tenant for agent {agent_id}: {e}")
+
+    return _get_default_client_id(), "general", []
+
+
+def _enforce_guardrails(
+    response_text: str,
+    *,
+    tool_name: str,
+    industry_slug: str,
+    custom_guardrails: list[str] | None = None,
+) -> str:
+    """Run guardrail checks on a tool response and return safe text.
+
+    If violations are detected, returns sanitized text or a safe fallback.
+    """
+    result = check_response(
+        response_text=response_text,
+        industry_slug=industry_slug,
+        custom_guardrails=custom_guardrails,
+    )
+    if result.passed:
+        return response_text
+
+    logger.warning(
+        f"Guardrail violation in {tool_name} response "
+        f"(industry={industry_slug}): {[v['rule'] for v in result.violations]}"
+    )
+
+    # Use sanitized text if available, otherwise fall back to safe default
+    if result.sanitized_text:
+        return result.sanitized_text
+    return get_safe_fallback(tool_name=tool_name, industry_slug=industry_slug)
 
 
 async def _log_tool_call(
     tool_name: str,
     parameters: dict,
     result: dict,
+    *,
+    client_id: uuid.UUID | None = None,
     success: bool = True,
     error_message: str | None = None,
     lead_id: uuid.UUID | None = None,
     duration_ms: int | None = None,
+    guardrail_violations: list[dict] | None = None,
 ):
     """Persist an audit record for every tool invocation."""
     from app.core.database import async_session_factory
+
+    resolved_client_id = client_id or _get_default_client_id()
+
+    # Attach guardrail info to result if violations occurred
+    if guardrail_violations:
+        result = {
+            **result,
+            "_guardrail_violations": guardrail_violations,
+        }
 
     try:
         async with async_session_factory() as db:
             log = ToolCallLog(
                 id=uuid.uuid4(),
-                client_id=_get_client_id(),
+                client_id=resolved_client_id,
                 tool_name=tool_name,
                 parameters=parameters,
                 result=result,
@@ -107,10 +181,14 @@ async def capture_lead(
     body: CaptureLeadRequest,
     request: Request,
     x_tool_secret: Optional[str] = Header(None),
+    x_agent_id: Optional[str] = Header(None),
 ):
     """Save a qualified lead from the AI conversation."""
     _verify_secret(x_tool_secret)
     t0 = time.time()
+
+    # Resolve tenant from agent context
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
 
     from app.core.database import async_session_factory
 
@@ -118,7 +196,7 @@ async def capture_lead(
     async with async_session_factory() as db:
         lead = Lead(
             id=lead_id,
-            client_id=_get_client_id(),
+            client_id=client_id,
             caller_name=body.name,
             caller_phone=body.phone or "not-provided",
             caller_email=body.email,
@@ -133,12 +211,19 @@ async def capture_lead(
         db.add(lead)
         await db.commit()
 
-        logger.info(f"Lead captured via tool call: {body.name} ({body.email})")
+        logger.info(f"Lead captured via tool call: {body.name} ({body.email}) [client={client_id}]")
 
-    result = {
-        "result": f"Lead saved successfully. {body.name}'s information has been recorded. The Omniweb team will follow up shortly."
-    }
-    await _log_tool_call("capture_lead", body.model_dump(), result, lead_id=lead_id, duration_ms=int((time.time() - t0) * 1000))
+    response_text = f"Lead saved successfully. {body.name}'s information has been recorded. Our team will follow up shortly."
+    response_text = _enforce_guardrails(
+        response_text, tool_name="capture_lead",
+        industry_slug=industry_slug, custom_guardrails=custom_guardrails,
+    )
+    result = {"result": response_text}
+    await _log_tool_call(
+        "capture_lead", body.model_dump(), result,
+        client_id=client_id, lead_id=lead_id,
+        duration_ms=int((time.time() - t0) * 1000),
+    )
     return result
 
 
@@ -194,6 +279,7 @@ class BookAppointmentRequest(BaseModel):
 async def book_appointment(
     body: BookAppointmentRequest,
     x_tool_secret: Optional[str] = Header(None),
+    x_agent_id: Optional[str] = Header(None),
 ):
     """Book a consultation appointment.
 
@@ -202,6 +288,8 @@ async def book_appointment(
     """
     _verify_secret(x_tool_secret)
     t0 = time.time()
+
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
 
     # Build a booking reference
     booking_ref = f"OMN-{uuid.uuid4().hex[:8].upper()}"
@@ -215,7 +303,7 @@ async def book_appointment(
         time_str = f" at {body.preferred_time}"
 
     logger.info(
-        f"Appointment booked via tool call: {body.name} ({body.email}){time_str} — ref: {booking_ref}"
+        f"Appointment booked via tool call: {body.name} ({body.email}){time_str} — ref: {booking_ref} [client={client_id}]"
     )
 
     # Also capture as a lead with "booked" status
@@ -225,7 +313,7 @@ async def book_appointment(
     async with async_session_factory() as db:
         lead = Lead(
             id=lead_id,
-            client_id=_get_client_id(),
+            client_id=client_id,
             caller_name=body.name,
             caller_phone=body.phone or "not-provided",
             caller_email=body.email,
@@ -240,10 +328,21 @@ async def book_appointment(
         db.add(lead)
         await db.commit()
 
-    result = {
-        "result": f"Appointment booked! Reference number: {booking_ref}. {body.name} will receive a confirmation at {body.email}. The Omniweb team will reach out{time_str} to discuss {body.topic or 'how we can help'}."
-    }
-    await _log_tool_call("book_appointment", body.model_dump(), result, lead_id=lead_id, duration_ms=int((time.time() - t0) * 1000))
+    response_text = (
+        f"Appointment booked! Reference number: {booking_ref}. "
+        f"{body.name} will receive a confirmation at {body.email}. "
+        f"Our team will reach out{time_str} to discuss {body.topic or 'your needs'}."
+    )
+    response_text = _enforce_guardrails(
+        response_text, tool_name="book_appointment",
+        industry_slug=industry_slug, custom_guardrails=custom_guardrails,
+    )
+    result = {"result": response_text}
+    await _log_tool_call(
+        "book_appointment", body.model_dump(), result,
+        client_id=client_id, lead_id=lead_id,
+        duration_ms=int((time.time() - t0) * 1000),
+    )
     return result
 
 
@@ -263,15 +362,18 @@ class SendConfirmationRequest(BaseModel):
 async def send_confirmation(
     body: SendConfirmationRequest,
     x_tool_secret: Optional[str] = Header(None),
+    x_agent_id: Optional[str] = Header(None),
 ):
     """Send an SMS confirmation to the lead."""
     _verify_secret(x_tool_secret)
     t0 = time.time()
 
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
+
     templates = {
-        "booking": f"Hi {body.name}! 🎉 Your consultation with Omniweb is confirmed. We'll reach out shortly to finalize the time. Questions? Reply here or email support@omniweb.ai",
-        "follow_up": f"Hi {body.name}, thanks for chatting with Omniweb AI! We'd love to help your business grow. Our team will follow up soon. — Omniweb",
-        "info": f"Hi {body.name}, here's the info you requested from Omniweb: {body.details or 'Visit omniweb.ai for details'}. Reply for more help!",
+        "booking": f"Hi {body.name}! 🎉 Your appointment is confirmed. We'll reach out shortly to finalize the time. Questions? Reply to this message.",
+        "follow_up": f"Hi {body.name}, thanks for chatting with us! Our team will follow up soon.",
+        "info": f"Hi {body.name}, here's the info you requested: {body.details or 'Our team will send details shortly'}. Reply for more help!",
     }
     sms_body = templates.get(body.message_type, templates["follow_up"])
 
@@ -284,19 +386,30 @@ async def send_confirmation(
                 from_number=settings.TWILIO_FROM_NUMBER,
                 body=sms_body,
             )
-            logger.info(f"Confirmation SMS sent to {body.phone} ({body.message_type})")
-            result = {"result": f"Confirmation SMS sent to {body.name} at {body.phone}."}
-            await _log_tool_call("send_confirmation_sms", body.model_dump(), result, duration_ms=int((time.time() - t0) * 1000))
-            return result
+            logger.info(f"Confirmation SMS sent to {body.phone} ({body.message_type}) [client={client_id}]")
+            response_text = f"Confirmation SMS sent to {body.name} at {body.phone}."
         else:
             logger.warning("Twilio not configured — SMS not sent")
-            result = {"result": f"Confirmation noted for {body.name}. SMS will be sent when the messaging service is configured."}
-            await _log_tool_call("send_confirmation_sms", body.model_dump(), result, duration_ms=int((time.time() - t0) * 1000))
-            return result
+            response_text = f"Confirmation noted for {body.name}. SMS will be sent when the messaging service is configured."
+
+        response_text = _enforce_guardrails(
+            response_text, tool_name="send_confirmation",
+            industry_slug=industry_slug, custom_guardrails=custom_guardrails,
+        )
+        result = {"result": response_text}
+        await _log_tool_call(
+            "send_confirmation_sms", body.model_dump(), result,
+            client_id=client_id, duration_ms=int((time.time() - t0) * 1000),
+        )
+        return result
     except Exception as e:
         logger.error(f"Failed to send SMS: {e}")
         result = {"result": f"I've noted {body.name}'s number. The team will follow up manually."}
-        await _log_tool_call("send_confirmation_sms", body.model_dump(), result, success=False, error_message=str(e), duration_ms=int((time.time() - t0) * 1000))
+        await _log_tool_call(
+            "send_confirmation_sms", body.model_dump(), result,
+            client_id=client_id, success=False, error_message=str(e),
+            duration_ms=int((time.time() - t0) * 1000),
+        )
         return result
 
 
@@ -313,6 +426,7 @@ class CheckAvailabilityRequest(BaseModel):
 async def check_availability(
     body: CheckAvailabilityRequest,
     x_tool_secret: Optional[str] = Header(None),
+    x_agent_id: Optional[str] = Header(None),
 ):
     """Return available consultation time slots.
 
@@ -321,6 +435,8 @@ async def check_availability(
     """
     _verify_secret(x_tool_secret)
     t0 = time.time()
+
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
 
     # Standard available slots (can be replaced with real calendar integration)
     now = datetime.now(timezone.utc)
@@ -338,10 +454,16 @@ async def check_availability(
 
     available = slots[:6]  # Show up to 6 slots
 
-    result = {
-        "result": f"Here are the available consultation slots: {', '.join(available)}. Which time works best?"
-    }
-    await _log_tool_call("check_availability", body.model_dump(), result, duration_ms=int((time.time() - t0) * 1000))
+    response_text = f"Here are the available slots: {', '.join(available)}. Which time works best?"
+    response_text = _enforce_guardrails(
+        response_text, tool_name="check_availability",
+        industry_slug=industry_slug, custom_guardrails=custom_guardrails,
+    )
+    result = {"result": response_text}
+    await _log_tool_call(
+        "check_availability", body.model_dump(), result,
+        client_id=client_id, duration_ms=int((time.time() - t0) * 1000),
+    )
     return result
 
 
@@ -358,20 +480,33 @@ class GetPricingRequest(BaseModel):
 async def get_pricing(
     body: GetPricingRequest,
     x_tool_secret: Optional[str] = Header(None),
+    x_agent_id: Optional[str] = Header(None),
 ):
-    """Return Omniweb pricing information."""
+    """Return pricing information.
+
+    For the Omniweb landing page agent, returns platform pricing.
+    For tenant agents, pricing should come from the knowledge base.
+    Guardrails may block specific pricing responses for industries
+    that require on-site estimates (roofing, home services, etc.).
+    """
     _verify_secret(x_tool_secret)
     t0 = time.time()
 
-    result = {
-        "result": (
-            "Omniweb offers flexible plans tailored to your business. "
-            "Starter plans begin at $97/month and include one AI voice agent and one chat assistant. "
-            "Growth plans at $197/month add lead automation, SMS follow-ups, and up to 3 phone numbers. "
-            "Pro plans at $397/month include unlimited agents, priority support, and custom integrations. "
-            "All plans include a free setup consultation and 14-day money-back guarantee. "
-            "For enterprise or agency pricing, we build custom packages."
-        )
-    }
-    await _log_tool_call("get_pricing_info", body.model_dump(), result, duration_ms=int((time.time() - t0) * 1000))
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
+
+    # Default pricing (Omniweb's own — overridden by tenant KB in practice)
+    response_text = (
+        "We offer flexible plans tailored to your needs. "
+        "Our team can prepare a personalized quote based on your specific requirements. "
+        "Would you like me to have someone reach out with detailed pricing?"
+    )
+    response_text = _enforce_guardrails(
+        response_text, tool_name="get_pricing",
+        industry_slug=industry_slug, custom_guardrails=custom_guardrails,
+    )
+    result = {"result": response_text}
+    await _log_tool_call(
+        "get_pricing_info", body.model_dump(), result,
+        client_id=client_id, duration_ms=int((time.time() - t0) * 1000),
+    )
     return result

@@ -213,6 +213,7 @@ class TemplateCreate(BaseModel):
     name: str
     description: str = ""
     industry: str = "general"
+    agent_mode: str = "lead_qualifier"
     is_default: bool = False
     agent_name: str = "AI Assistant"
     agent_greeting: str = "Hi, I'd love to help you today, so tell me the problem you're trying to solve, and I'll understand your needs, recommend the right solution, and answer your questions so you can move forward faster by text or voice. Talk to me."
@@ -235,6 +236,7 @@ class TemplateUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     industry: Optional[str] = None
+    agent_mode: Optional[str] = None
     is_default: Optional[bool] = None
     is_active: Optional[bool] = None
     agent_name: Optional[str] = None
@@ -260,6 +262,7 @@ def _template_to_dict(t: AgentTemplate) -> dict:
         "name": t.name,
         "description": t.description,
         "industry": t.industry,
+        "agent_mode": getattr(t, "agent_mode", "lead_qualifier"),
         "is_default": t.is_default,
         "is_active": t.is_active,
         "agent_name": t.agent_name,

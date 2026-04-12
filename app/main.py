@@ -32,6 +32,7 @@ from app.api.routes import (
     automations,
     calls,
     chat,
+    industry,
     knowledge_base,
     leads,
     numbers,
@@ -187,6 +188,7 @@ app.include_router(agent_config.router, prefix=API_PREFIX)
 app.include_router(analytics.router, prefix=API_PREFIX)
 app.include_router(automations.router, prefix=API_PREFIX)
 app.include_router(chat.router, prefix=API_PREFIX)
+app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
 

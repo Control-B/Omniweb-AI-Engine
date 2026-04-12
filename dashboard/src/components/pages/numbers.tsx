@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Phone, Plus, Trash2, Search, ExternalLink, Loader2,
-  AlertCircle, CheckCircle2, MapPin, X, Link2,
+  AlertCircle, CheckCircle2, MapPin, X, Link2, PhoneForwarded, Bot,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { Input, Label } from "@/components/ui/input";
 import { cn, formatPhone } from "@/lib/utils";
 import {
   getNumbers, searchAvailableNumbers, buyNumber,
-  deleteNumber, assignNumberToAgent,
+  deleteNumber, assignNumberToAgent, setNumberMode,
 } from "@/lib/api";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
@@ -26,6 +26,8 @@ interface PhoneNumberRecord {
   elevenlabs_phone_number_id?: string;
   area_code?: string;
   country?: string;
+  mode?: string;       // "ai" | "forward"
+  forward_to?: string; // E.164 number when mode="forward"
 }
 
 interface AvailableNumber {
@@ -59,6 +61,10 @@ export function NumbersPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  // Mode-switching state
+  const [modeEditing, setModeEditing] = useState<string | null>(null); // number id
+  const [forwardInput, setForwardInput] = useState("");
 
   const loadNumbers = useCallback(async () => {
     try {
@@ -138,6 +144,31 @@ export function NumbersPage() {
       await loadNumbers();
     } catch (e: any) {
       setActionError(`Assign failed: ${e.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  /* ── Switch mode (AI ↔ Forward) ────────────────────────────────────── */
+
+  async function handleSetMode(num: PhoneNumberRecord, mode: "ai" | "forward") {
+    if (mode === "forward" && !forwardInput.trim()) {
+      setActionError("Enter a phone number to forward calls to.");
+      return;
+    }
+    setActionLoading(num.id);
+    setActionError(null);
+    try {
+      await setNumberMode(
+        num.id,
+        mode,
+        mode === "forward" ? forwardInput.trim() : undefined,
+      );
+      setModeEditing(null);
+      setForwardInput("");
+      await loadNumbers();
+    } catch (e: any) {
+      setActionError(`Mode switch failed: ${e.message}`);
     } finally {
       setActionLoading(null);
     }
@@ -340,8 +371,14 @@ export function NumbersPage() {
             <Card key={num.id}>
               <CardContent className="p-5">
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary/10">
-                    <Phone className="w-5 h-5 text-primary" />
+                  <div className={cn(
+                    "flex items-center justify-center w-11 h-11 rounded-xl",
+                    num.mode === "forward" ? "bg-amber-500/10" : "bg-primary/10",
+                  )}>
+                    {num.mode === "forward"
+                      ? <PhoneForwarded className="w-5 h-5 text-amber-500" />
+                      : <Bot className="w-5 h-5 text-primary" />
+                    }
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -351,18 +388,46 @@ export function NumbersPage() {
                       <Badge variant={num.is_active ? "success" : "secondary"}>
                         {num.is_active ? "active" : "inactive"}
                       </Badge>
-                      {num.elevenlabs_phone_number_id && (
-                        <Badge variant="default" className="text-[9px]">
-                          <Link2 className="w-2.5 h-2.5 mr-0.5" /> Agent Connected
+                      {num.mode === "forward" ? (
+                        <Badge variant="secondary" className="text-[9px] bg-amber-500/10 text-amber-500 border-amber-500/20">
+                          <PhoneForwarded className="w-2.5 h-2.5 mr-0.5" /> Forwarding
                         </Badge>
-                      )}
+                      ) : num.elevenlabs_phone_number_id ? (
+                        <Badge variant="default" className="text-[9px]">
+                          <Bot className="w-2.5 h-2.5 mr-0.5" /> AI Agent
+                        </Badge>
+                      ) : null}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{num.friendly_name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {num.friendly_name}
+                      {num.mode === "forward" && num.forward_to && (
+                        <span className="ml-1 text-amber-500">&rarr; {formatPhone(num.forward_to)}</span>
+                      )}
+                    </p>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {/* Assign to agent (if not already connected) */}
-                    {!num.elevenlabs_phone_number_id && num.is_active && (
+                    {/* Mode toggle button */}
+                    {num.is_active && modeEditing !== num.id && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setModeEditing(num.id);
+                          setForwardInput(num.forward_to || "");
+                        }}
+                        disabled={actionLoading === num.id}
+                        className="text-xs"
+                      >
+                        {num.mode === "forward"
+                          ? <><Bot className="w-3.5 h-3.5 mr-1" /> Switch to AI</>
+                          : <><PhoneForwarded className="w-3.5 h-3.5 mr-1" /> Forward Calls</>
+                        }
+                      </Button>
+                    )}
+
+                    {/* Assign to agent (AI mode, not yet connected) */}
+                    {!num.elevenlabs_phone_number_id && num.is_active && num.mode !== "forward" && modeEditing !== num.id && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -396,7 +461,7 @@ export function NumbersPage() {
                           Cancel
                         </Button>
                       </div>
-                    ) : (
+                    ) : modeEditing !== num.id ? (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -405,9 +470,70 @@ export function NumbersPage() {
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
-                    )}
+                    ) : null}
                   </div>
                 </div>
+
+                {/* Mode editing panel */}
+                {modeEditing === num.id && (
+                  <div className="mt-4 p-4 rounded-lg bg-accent/30 border border-border space-y-3">
+                    {num.mode === "forward" ? (
+                      <>
+                        <p className="text-sm text-foreground">
+                          Switch back to <strong>AI Agent</strong> mode? The AI agent will answer all calls on this number.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleSetMode(num, "ai")}
+                            disabled={actionLoading === num.id}
+                          >
+                            {actionLoading === num.id
+                              ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Switching...</>
+                              : <><Bot className="w-3.5 h-3.5 mr-1.5" /> Enable AI Agent</>
+                            }
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setModeEditing(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-foreground">
+                          Forward calls to a real phone number. The AI agent will be disconnected.
+                        </p>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Forward calls to</Label>
+                          <Input
+                            placeholder="+15551234567"
+                            value={forwardInput}
+                            onChange={(e) => setForwardInput(e.target.value)}
+                            className="font-mono max-w-xs"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleSetMode(num, "forward")}
+                            disabled={actionLoading === num.id || !forwardInput.trim()}
+                          >
+                            {actionLoading === num.id
+                              ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Setting up...</>
+                              : <><PhoneForwarded className="w-3.5 h-3.5 mr-1.5" /> Enable Forwarding</>
+                            }
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setModeEditing(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          Enter the phone number you want calls forwarded to (e.g. your cell or office phone). Use format: +15551234567
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

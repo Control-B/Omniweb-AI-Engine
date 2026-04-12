@@ -178,6 +178,10 @@ class PhoneNumber(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     friendly_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Call routing mode: "ai" = ElevenLabs agent, "forward" = Twilio forwards to a real phone
+    mode: Mapped[str] = mapped_column(String(20), default="ai", nullable=False)
+    forward_to: Mapped[str | None] = mapped_column(String(30), nullable=True)  # E.164 number to forward to
     area_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     country: Mapped[str] = mapped_column(String(5), default="US", nullable=False)
 

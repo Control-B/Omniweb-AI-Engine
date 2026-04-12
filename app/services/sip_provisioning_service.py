@@ -152,6 +152,64 @@ async def deprovision_number(
     logger.info(f"Deprovisioned number {number.phone_number}")
 
 
+async def set_number_mode(
+    db: AsyncSession,
+    number: PhoneNumber,
+    mode: str,
+    forward_to: str | None = None,
+    elevenlabs_agent_id: str | None = None,
+) -> None:
+    """Switch a phone number between 'ai' and 'forward' mode.
+
+    - ai mode: ElevenLabs handles calls (re-import into ElevenLabs if needed)
+    - forward mode: Twilio forwards calls to `forward_to` phone number
+    """
+    from app.services import twilio_service
+
+    if mode == "forward":
+        if not forward_to:
+            raise ValueError("forward_to is required when mode is 'forward'")
+
+        # Step 1: Remove from ElevenLabs so it stops intercepting calls
+        if number.elevenlabs_phone_number_id:
+            try:
+                await elevenlabs_service.delete_phone_number(number.elevenlabs_phone_number_id)
+                logger.info(f"Removed {number.phone_number} from ElevenLabs for forward mode")
+            except Exception as exc:
+                logger.warning(f"Failed to remove from ElevenLabs: {exc}")
+
+        # Step 2: Configure Twilio to forward calls
+        result = await twilio_service.set_voice_forwarding(number.twilio_sid, forward_to)
+        if not result.get("ok"):
+            raise RuntimeError(f"Failed to set forwarding: {result.get('error')}")
+
+        number.mode = "forward"
+        number.forward_to = forward_to
+        number.elevenlabs_phone_number_id = None  # No longer in ElevenLabs
+
+    elif mode == "ai":
+        # Step 1: Clear Twilio voice URL so ElevenLabs can take over
+        await twilio_service.clear_voice_config(number.twilio_sid)
+
+        # Step 2: Re-import into ElevenLabs
+        el_result = await elevenlabs_service.import_twilio_phone_number(
+            phone_number=number.phone_number,
+            label=number.friendly_name or "AI Line",
+            twilio_account_sid=settings.TWILIO_ACCOUNT_SID,
+            twilio_auth_token=settings.TWILIO_AUTH_TOKEN,
+            agent_id=elevenlabs_agent_id,
+        )
+        number.elevenlabs_phone_number_id = el_result.get("phone_number_id", "")
+        number.mode = "ai"
+        number.forward_to = None
+
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
+
+    await db.commit()
+    logger.info(f"Set {number.phone_number} to mode={mode}")
+
+
 async def _buy_twilio_number(phone_number: str, friendly_name: str) -> str:
     """Purchase a phone number from Twilio. Returns the Twilio SID."""
     if not settings.twilio_configured:

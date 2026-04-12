@@ -98,6 +98,8 @@ async def list_numbers(
                 "is_active": n.is_active,
                 "twilio_sid": n.twilio_sid,
                 "elevenlabs_phone_number_id": n.elevenlabs_phone_number_id,
+                "mode": n.mode,
+                "forward_to": n.forward_to,
             }
             for n in numbers
         ]
@@ -121,6 +123,57 @@ async def deprovision_number(
         db, number, release_twilio_number=release_twilio
     )
     return {"ok": True, "phone_number": number.phone_number}
+
+
+class SetModeRequest(BaseModel):
+    mode: str  # "ai" or "forward"
+    forward_to: Optional[str] = None  # required when mode is "forward"
+
+
+@router.post("/{number_id}/mode")
+async def set_number_mode(
+    number_id: UUID,
+    body: SetModeRequest,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Switch a phone number between AI agent mode and call forwarding mode."""
+    if body.mode not in ("ai", "forward"):
+        raise HTTPException(400, "mode must be 'ai' or 'forward'")
+    if body.mode == "forward" and not body.forward_to:
+        raise HTTPException(400, "forward_to is required when mode is 'forward'")
+
+    number = await db.get(PhoneNumber, number_id)
+    if not number:
+        raise HTTPException(404, "Phone number not found")
+    if current_client.get("role") != "admin" and str(number.client_id) != current_client["client_id"]:
+        raise HTTPException(404, "Phone number not found")
+
+    # Get agent ID for switching back to AI mode
+    elevenlabs_agent_id = None
+    if body.mode == "ai":
+        result = await db.execute(
+            select(AgentConfig).where(AgentConfig.client_id == number.client_id)
+        )
+        config = result.scalar_one_or_none()
+        elevenlabs_agent_id = config.elevenlabs_agent_id if config else None
+
+    try:
+        await sip_provisioning_service.set_number_mode(
+            db, number,
+            mode=body.mode,
+            forward_to=body.forward_to,
+            elevenlabs_agent_id=elevenlabs_agent_id,
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Failed to switch mode: {exc}")
+
+    return {
+        "ok": True,
+        "phone_number": number.phone_number,
+        "mode": number.mode,
+        "forward_to": number.forward_to,
+    }
 
 
 @router.post("/{number_id}/assign-agent")

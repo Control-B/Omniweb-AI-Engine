@@ -224,6 +224,13 @@ export async function assignNumberToAgent(numberId: string) {
   return apiFetch(`/numbers/${numberId}/assign-agent`, { method: "POST" });
 }
 
+export async function setNumberMode(numberId: string, mode: "ai" | "forward", forwardTo?: string) {
+  return apiFetch(`/numbers/${numberId}/mode`, {
+    method: "POST",
+    body: JSON.stringify({ mode, forward_to: forwardTo }),
+  });
+}
+
 // ── Admin endpoints ──────────────────────────────────────────────────────────
 
 export async function adminGetClients(params?: {

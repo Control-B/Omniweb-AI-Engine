@@ -94,6 +94,14 @@ export async function signup(body: {
   return data;
 }
 
+export async function demoLogin(): Promise<AuthResponse> {
+  const data = await apiFetch<AuthResponse>("/auth/demo-token", {
+    method: "POST",
+  });
+  setToken(data.access_token);
+  return data;
+}
+
 export function logout() {
   clearToken();
   if (typeof window !== "undefined") window.location.href = "/login";

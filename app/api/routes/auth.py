@@ -177,6 +177,70 @@ async def login(
     }
 
 
+@router.post("/demo-token", response_model=TokenResponse)
+async def demo_token(
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Generate a JWT for the demo account (no password required).
+
+    Auto-creates the demo client if it doesn't exist yet.
+    Used by the /demo page to provide one-click access.
+    """
+    demo_email = "demo@omniweb.ai"
+    demo_password = "demo1234"
+
+    result = await db.execute(
+        select(Client).where(Client.email == demo_email)
+    )
+    client = result.scalar_one_or_none()
+
+    if not client:
+        # Auto-create the demo account
+        client = Client(
+            name="Demo User",
+            email=demo_email,
+            hashed_password=hash_password(demo_password),
+            plan="pro",
+            role="client",
+            is_active=True,
+        )
+        db.add(client)
+        await db.flush()
+
+        # Create a demo agent config
+        agent_config = AgentConfig(
+            client_id=client.id,
+            agent_name="Demo AI Assistant",
+            agent_greeting="Hello! This is a demo of the Omniweb AI phone agent.",
+            system_prompt="You are a helpful AI assistant for a demo business.",
+            voice_id="EXAVITQu4vr4xnSDxMaL",
+            business_name="Demo Business",
+            business_type="demo",
+        )
+        db.add(agent_config)
+        await db.commit()
+        await db.refresh(client)
+        logger.info(f"Auto-created demo account: {demo_email}")
+
+    token = create_access_token(
+        client_id=str(client.id),
+        email=client.email,
+        plan=client.plan,
+        role=client.role,
+    )
+
+    logger.info(f"Demo token issued for {client.email}")
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "client_id": str(client.id),
+        "email": client.email,
+        "plan": client.plan,
+        "role": client.role,
+    }
+
+
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     current_client: dict = Depends(get_current_client),

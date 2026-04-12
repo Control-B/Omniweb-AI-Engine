@@ -405,14 +405,14 @@ async def list_agents(
             "client_id": str(client.id),
             "client_name": client.name,
             "client_email": client.email,
-            "business_name": client.business_name,
+            "business_name": config.business_name or client.name,
             "plan": client.plan,
             "is_active": client.is_active,
             "agent_name": config.agent_name,
             "elevenlabs_agent_id": config.elevenlabs_agent_id,
-            "language": config.language,
+            "language": (config.supported_languages or ["en"])[0],
             "supported_languages": config.supported_languages or [],
-            "greeting": config.greeting,
+            "greeting": config.agent_greeting,
             "system_prompt": (config.system_prompt or "")[:200],  # truncated preview
             "call_count": call_count,
             "lead_count": lead_count,
@@ -437,7 +437,11 @@ async def list_conversations(
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """List all conversations/calls across all clients with client info."""
-    q = select(Call, Client).join(Client, Call.client_id == Client.id)
+    q = (
+        select(Call, Client, AgentConfig)
+        .join(Client, Call.client_id == Client.id)
+        .outerjoin(AgentConfig, AgentConfig.client_id == Client.id)
+    )
     count_q = select(func.count(Call.id))
 
     if channel:
@@ -453,12 +457,12 @@ async def list_conversations(
     rows = result.all()
 
     conversations = []
-    for call, client in rows:
+    for call, client, config in rows:
         conversations.append({
             "id": str(call.id),
             "client_id": str(client.id),
             "client_name": client.name,
-            "business_name": client.business_name,
+            "business_name": (config.business_name if config else None) or client.name,
             "caller_number": call.caller_number,
             "direction": call.direction,
             "channel": call.channel,

@@ -29,8 +29,10 @@ from app.api.routes import (
     agent_config,
     analytics,
     auth,
+    automations,
     calls,
     chat,
+    knowledge_base,
     leads,
     numbers,
     templates,
@@ -174,7 +176,9 @@ app.include_router(leads.router, prefix=API_PREFIX)
 app.include_router(numbers.router, prefix=API_PREFIX)
 app.include_router(agent_config.router, prefix=API_PREFIX)
 app.include_router(analytics.router, prefix=API_PREFIX)
+app.include_router(automations.router, prefix=API_PREFIX)
 app.include_router(chat.router, prefix=API_PREFIX)
+app.include_router(knowledge_base.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
 
 # Admin API

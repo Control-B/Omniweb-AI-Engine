@@ -156,6 +156,11 @@ async def signup(
 
     logger.info(f"New client signup: {client.email} ({client.id})")
 
+    # Fire welcome email (non-blocking)
+    import asyncio
+    from app.services.email_service import send_welcome_email
+    asyncio.create_task(send_welcome_email(to=client.email, name=client.name))
+
     return {
         "access_token": token,
         "token_type": "bearer",

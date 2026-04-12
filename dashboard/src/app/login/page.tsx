@@ -147,6 +147,27 @@ export default function LoginPage() {
             </>
           )}
         </p>
+
+        {/* Legal links */}
+        <div className="flex items-center justify-center gap-3 text-[11px] text-muted-foreground/60">
+          <a
+            href="https://omniweb.ai/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-muted-foreground transition-colors"
+          >
+            Terms of Service
+          </a>
+          <span className="text-muted-foreground/30">·</span>
+          <a
+            href="https://omniweb.ai/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-muted-foreground transition-colors"
+          >
+            Privacy Policy
+          </a>
+        </div>
       </div>
     </div>
   );

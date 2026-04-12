@@ -89,6 +89,13 @@ class Settings(BaseSettings):
     STRIPE_PRO_PRICE_ID: str = ""
     STRIPE_AGENCY_PRICE_ID: str = ""
 
+    # ── Email / SMTP ─────────────────────────────────────────
+    SMTP_HOST: str = ""
+    SMTP_PORT: str = "587"
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "noreply@omniweb.ai"
+
     # ── Supabase ─────────────────────────────────────────────
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""

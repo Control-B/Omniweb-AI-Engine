@@ -358,3 +358,100 @@ export async function getPublicTemplates(industry?: string) {
   const params = industry ? `?industry=${industry}` : "";
   return apiFetch(`/templates${params}`);
 }
+
+// ── Automations ──────────────────────────────────────────────────────────────
+
+export interface AutomationStep {
+  type: string;
+  config: Record<string, string>;
+}
+
+export interface AutomationSequence {
+  id: string;
+  name: string;
+  trigger: string;
+  enabled: boolean;
+  steps: AutomationStep[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export async function getAutomations(clientId?: string) {
+  const params = clientId ? `?client_id=${clientId}` : "";
+  return apiFetch<{ sequences: AutomationSequence[] }>(`/automations${params}`);
+}
+
+export async function createAutomation(body: {
+  name: string;
+  trigger: string;
+  enabled: boolean;
+  steps: AutomationStep[];
+}) {
+  return apiFetch<AutomationSequence>("/automations", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateAutomation(id: string, body: {
+  name?: string;
+  trigger?: string;
+  enabled?: boolean;
+  steps?: AutomationStep[];
+}) {
+  return apiFetch<AutomationSequence>(`/automations/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteAutomation(id: string) {
+  return apiFetch(`/automations/${id}`, { method: "DELETE" });
+}
+
+// ── Knowledge Base ───────────────────────────────────────────────────────────
+
+export async function getKnowledgeBase() {
+  return apiFetch<{ documents: any[] }>("/knowledge-base");
+}
+
+export async function createKbFromText(text: string, name?: string) {
+  return apiFetch("/knowledge-base/text", {
+    method: "POST",
+    body: JSON.stringify({ text, name }),
+  });
+}
+
+export async function createKbFromUrl(url: string, name?: string) {
+  return apiFetch("/knowledge-base/url", {
+    method: "POST",
+    body: JSON.stringify({ url, name }),
+  });
+}
+
+export async function uploadKbFile(file: File, name?: string) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+  if (name) formData.append("name", name);
+
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${API_PREFIX}/knowledge-base/file`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Upload failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function deleteKbDocument(docId: string) {
+  return apiFetch(`/knowledge-base/${docId}`, { method: "DELETE" });
+}

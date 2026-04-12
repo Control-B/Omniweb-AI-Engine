@@ -114,6 +114,27 @@ export function ClientSidebar({ activePage, onNavigate }: ClientSidebarProps) {
           <ChevronLeft className={cn("w-[18px] h-[18px] transition-transform", collapsed && "rotate-180")} />
           {!collapsed && <span>Collapse</span>}
         </button>
+        {!collapsed && (
+          <div className="flex items-center gap-2 px-3 pt-1">
+            <a
+              href="https://omniweb.ai/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+            >
+              Terms
+            </a>
+            <span className="text-[10px] text-muted-foreground/30">·</span>
+            <a
+              href="https://omniweb.ai/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+            >
+              Privacy
+            </a>
+          </div>
+        )}
       </div>
     </aside>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Zap,
   Plus,
@@ -12,12 +12,22 @@ import {
   PhoneOutgoing,
   GripVertical,
   Power,
+  Loader2,
+  Save,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import {
+  getAutomations,
+  createAutomation,
+  updateAutomation,
+  deleteAutomation,
+  type AutomationStep,
+  type AutomationSequence,
+} from "@/lib/api";
 
 /* ── Types ── */
 type TriggerType = "after_call" | "missed_call" | "new_lead" | "manual";
@@ -35,6 +45,8 @@ interface Sequence {
   trigger: TriggerType;
   enabled: boolean;
   steps: Step[];
+  _dirty?: boolean;
+  _isNew?: boolean;
 }
 
 const TRIGGER_LABELS: Record<TriggerType, string> = {
@@ -49,68 +61,6 @@ const STEP_ICONS: Record<StepType, React.ElementType> = {
   wait: Clock,
   call: PhoneOutgoing,
 };
-
-/* ── Seed Data ── */
-const INITIAL_SEQUENCES: Sequence[] = [
-  {
-    id: "seq_1",
-    name: "Post-Call Follow-Up",
-    trigger: "after_call",
-    enabled: true,
-    steps: [
-      { id: "s1", type: "wait", config: { minutes: "5" } },
-      {
-        id: "s2",
-        type: "sms",
-        config: {
-          body: "Thanks for calling {{business_name}}! We've noted your request for {{services}}. A team member will follow up shortly.",
-        },
-      },
-      { id: "s3", type: "wait", config: { minutes: "1440" } },
-      {
-        id: "s4",
-        type: "sms",
-        config: {
-          body: "Hi {{customer_name}}, just checking in — were you able to get everything sorted? Reply here or call us back anytime.",
-        },
-      },
-    ],
-  },
-  {
-    id: "seq_2",
-    name: "Missed Call Recovery",
-    trigger: "missed_call",
-    enabled: true,
-    steps: [
-      { id: "s5", type: "wait", config: { minutes: "1" } },
-      {
-        id: "s6",
-        type: "sms",
-        config: {
-          body: "Sorry we missed your call to {{business_name}}! You can book online at {{booking_url}} or we'll try you back shortly.",
-        },
-      },
-      { id: "s7", type: "wait", config: { minutes: "30" } },
-      { id: "s8", type: "call", config: { note: "Automated callback attempt" } },
-    ],
-  },
-  {
-    id: "seq_3",
-    name: "New Lead Nurture",
-    trigger: "new_lead",
-    enabled: false,
-    steps: [
-      { id: "s9", type: "wait", config: { minutes: "60" } },
-      {
-        id: "s10",
-        type: "sms",
-        config: {
-          body: "Hi {{customer_name}}, thanks for your interest in {{business_name}}. We'd love to help — reply BOOK to schedule a time.",
-        },
-      },
-    ],
-  },
-];
 
 /* ── Step Editor ── */
 function StepCard({
@@ -190,20 +140,24 @@ function SequenceCard({
   seq,
   onUpdate,
   onDelete,
+  onSave,
+  saving,
 }: {
   seq: Sequence;
   onUpdate: (s: Sequence) => void;
   onDelete: () => void;
+  onSave: () => void;
+  saving: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!seq._isNew);
 
   const updateStep = (idx: number, step: Step) => {
     const steps = [...seq.steps];
     steps[idx] = step;
-    onUpdate({ ...seq, steps });
+    onUpdate({ ...seq, steps, _dirty: true });
   };
   const deleteStep = (idx: number) => {
-    onUpdate({ ...seq, steps: seq.steps.filter((_, i) => i !== idx) });
+    onUpdate({ ...seq, steps: seq.steps.filter((_, i) => i !== idx), _dirty: true });
   };
   const addStep = (type: StepType) => {
     const defaults: Record<StepType, Record<string, string>> = {
@@ -217,6 +171,7 @@ function SequenceCard({
         ...seq.steps,
         { id: `s_${Date.now()}`, type, config: defaults[type] },
       ],
+      _dirty: true,
     });
   };
 
@@ -226,7 +181,7 @@ function SequenceCard({
         {/* Header */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onUpdate({ ...seq, enabled: !seq.enabled })}
+            onClick={() => onUpdate({ ...seq, enabled: !seq.enabled, _dirty: true })}
             className={cn(
               "p-1.5 rounded-lg transition-colors",
               seq.enabled
@@ -242,6 +197,11 @@ function SequenceCard({
               <Badge variant={seq.enabled ? "success" : "secondary"}>
                 {seq.enabled ? "on" : "off"}
               </Badge>
+              {seq._dirty && (
+                <Badge variant="outline" className="text-amber-400 border-amber-400/30">
+                  unsaved
+                </Badge>
+              )}
             </div>
             <p className="text-[11px] text-muted-foreground">
               Trigger: {TRIGGER_LABELS[seq.trigger]} · {seq.steps.length} step
@@ -249,6 +209,12 @@ function SequenceCard({
             </p>
           </div>
           <div className="flex items-center gap-1.5">
+            {seq._dirty && (
+              <Button variant="default" size="sm" onClick={onSave} disabled={saving}>
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Save
+              </Button>
+            )}
             <Button variant="ghost" size="icon" onClick={() => setOpen(!open)}>
               {open ? (
                 <ChevronUp className="w-4 h-4" />
@@ -277,7 +243,7 @@ function SequenceCard({
                 {(Object.keys(TRIGGER_LABELS) as TriggerType[]).map((t) => (
                   <button
                     key={t}
-                    onClick={() => onUpdate({ ...seq, trigger: t })}
+                    onClick={() => onUpdate({ ...seq, trigger: t, _dirty: true })}
                     className={cn(
                       "px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors",
                       seq.trigger === t
@@ -296,7 +262,7 @@ function SequenceCard({
               <Label>Sequence Name</Label>
               <Input
                 value={seq.name}
-                onChange={(e) => onUpdate({ ...seq, name: e.target.value })}
+                onChange={(e) => onUpdate({ ...seq, name: e.target.value, _dirty: true })}
                 className="h-8 text-sm"
               />
             </div>
@@ -345,7 +311,45 @@ function SequenceCard({
 
 /* ── Main ── */
 export function AutomationsPage() {
-  const [sequences, setSequences] = useState<Sequence[]>(INITIAL_SEQUENCES);
+  const [sequences, setSequences] = useState<Sequence[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  // Convert backend steps to frontend format
+  const toFrontendSteps = (backendSteps: any[]): Step[] =>
+    (backendSteps || []).map((s: any, i: number) => ({
+      id: `s_${i}_${Date.now()}`,
+      type: s.type || "sms",
+      config: {
+        ...(s.type === "sms" ? { body: s.template || s.body || s.config?.body || "" } : {}),
+        ...(s.type === "wait" ? { minutes: String(s.delay_minutes || s.minutes || s.config?.minutes || "5") } : {}),
+        ...(s.type === "call" ? { note: s.note || s.config?.note || "" } : {}),
+      },
+    }));
+
+  const loadSequences = useCallback(async () => {
+    try {
+      const data = await getAutomations();
+      setSequences(
+        data.sequences.map((s) => ({
+          id: s.id,
+          name: s.name,
+          trigger: s.trigger as TriggerType,
+          enabled: s.enabled,
+          steps: toFrontendSteps(s.steps),
+        }))
+      );
+    } catch {
+      // If API fails, start empty
+      setSequences([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSequences();
+  }, [loadSequences]);
 
   const updateSeq = (idx: number, seq: Sequence) => {
     const updated = [...sequences];
@@ -353,7 +357,49 @@ export function AutomationsPage() {
     setSequences(updated);
   };
 
-  const deleteSeq = (idx: number) => {
+  const handleSave = async (idx: number) => {
+    const seq = sequences[idx];
+    setSavingId(seq.id);
+    try {
+      const payload = {
+        name: seq.name,
+        trigger: seq.trigger,
+        enabled: seq.enabled,
+        steps: seq.steps.map((s) => ({ type: s.type, config: s.config })),
+      };
+
+      if (seq._isNew) {
+        const created = await createAutomation(payload);
+        const updated = [...sequences];
+        updated[idx] = {
+          ...seq,
+          id: created.id,
+          _dirty: false,
+          _isNew: false,
+        };
+        setSequences(updated);
+      } else {
+        await updateAutomation(seq.id, payload);
+        const updated = [...sequences];
+        updated[idx] = { ...seq, _dirty: false };
+        setSequences(updated);
+      }
+    } catch {
+      // Error handled by apiFetch
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handleDelete = async (idx: number) => {
+    const seq = sequences[idx];
+    if (!seq._isNew) {
+      try {
+        await deleteAutomation(seq.id);
+      } catch {
+        return;
+      }
+    }
     setSequences(sequences.filter((_, i) => i !== idx));
   };
 
@@ -361,14 +407,24 @@ export function AutomationsPage() {
     setSequences([
       ...sequences,
       {
-        id: `seq_${Date.now()}`,
+        id: `new_${Date.now()}`,
         name: "New Sequence",
         trigger: "manual",
         enabled: false,
         steps: [],
+        _dirty: true,
+        _isNew: true,
       },
     ]);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-4 max-w-[900px]">
@@ -408,7 +464,9 @@ export function AutomationsPage() {
             key={seq.id}
             seq={seq}
             onUpdate={(s) => updateSeq(idx, s)}
-            onDelete={() => deleteSeq(idx)}
+            onDelete={() => handleDelete(idx)}
+            onSave={() => handleSave(idx)}
+            saving={savingId === seq.id}
           />
         ))}
       </div>

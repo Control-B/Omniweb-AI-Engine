@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Zap,
   Bot,
+  Globe,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,25 @@ const VOICE_OPTIONS = [
   { id: "pNInz6obpgDQGcFmaJgB", name: "Josh", accent: "American", style: "Conversational" },
 ];
 
+const LANGUAGE_OPTIONS = [
+  { code: "en", label: "English", flag: "🇺🇸" },
+  { code: "es", label: "Spanish", flag: "🇪🇸" },
+  { code: "fr", label: "French", flag: "🇫🇷" },
+  { code: "de", label: "German", flag: "🇩🇪" },
+  { code: "ar", label: "Arabic", flag: "🇸🇦" },
+  { code: "hi", label: "Hindi", flag: "🇮🇳" },
+  { code: "pt", label: "Portuguese", flag: "🇧🇷" },
+  { code: "it", label: "Italian", flag: "🇮🇹" },
+  { code: "ja", label: "Japanese", flag: "🇯🇵" },
+  { code: "ko", label: "Korean", flag: "🇰🇷" },
+  { code: "zh", label: "Chinese", flag: "🇨🇳" },
+  { code: "nl", label: "Dutch", flag: "🇳🇱" },
+  { code: "pl", label: "Polish", flag: "🇵🇱" },
+  { code: "ru", label: "Russian", flag: "🇷🇺" },
+  { code: "tr", label: "Turkish", flag: "🇹🇷" },
+  { code: "uk", label: "Ukrainian", flag: "🇺🇦" },
+];
+
 interface AgentConfig {
   id: string;
   client_id: string;
@@ -44,6 +64,7 @@ interface AgentConfig {
   business_name: string;
   business_type: string;
   elevenlabs_agent_id: string | null;
+  supported_languages: string[];
   [key: string]: any;
 }
 
@@ -62,7 +83,7 @@ export function AgentConfigPage() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"personality" | "voice" | "brain" | "widget">("personality");
+  const [activeTab, setActiveTab] = useState<"personality" | "voice" | "brain" | "languages" | "widget">("personality");
 
   const clientId = user?.client_id || "";
 
@@ -112,6 +133,7 @@ export function AgentConfigPage() {
         temperature: config.temperature,
         business_name: config.business_name,
         business_type: config.business_type,
+        supported_languages: config.supported_languages,
       });
       setSaved(true);
       await loadConfig();
@@ -159,6 +181,7 @@ export function AgentConfigPage() {
     { id: "personality" as const, label: "Personality", icon: MessageSquare },
     { id: "voice" as const, label: "Voice", icon: Volume2 },
     { id: "brain" as const, label: "AI Brain", icon: Brain },
+    { id: "languages" as const, label: "Languages", icon: Globe },
     { id: "widget" as const, label: "Widget & Embed", icon: Code },
   ];
 
@@ -308,6 +331,77 @@ export function AgentConfigPage() {
               <input type="range" min="0" max="1" step="0.1" value={config.temperature ?? 0.7} onChange={(e) => update("temperature", parseFloat(e.target.value))} className="w-full accent-primary" />
               <div className="flex justify-between text-xs text-muted-foreground"><span>Precise & focused</span><span>Creative & varied</span></div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeTab === "languages" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Supported Languages</CardTitle>
+            <CardDescription>
+              Choose which languages your AI agent can speak. Your agent will automatically greet callers in their selected language.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {(config.supported_languages?.length ?? 1)} of {LANGUAGE_OPTIONS.length} languages enabled
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => update("supported_languages", LANGUAGE_OPTIONS.map(l => l.code))}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Enable all
+                </button>
+                <span className="text-muted-foreground">·</span>
+                <button
+                  onClick={() => update("supported_languages", ["en"])}
+                  className="text-xs text-muted-foreground hover:underline"
+                >
+                  English only
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {LANGUAGE_OPTIONS.map((lang) => {
+                const enabled = config.supported_languages?.includes(lang.code) ?? lang.code === "en";
+                const isEnglish = lang.code === "en";
+                return (
+                  <button
+                    key={lang.code}
+                    onClick={() => {
+                      if (isEnglish) return; // English is always required
+                      const current = config.supported_languages ?? ["en"];
+                      const next = enabled
+                        ? current.filter((c: string) => c !== lang.code)
+                        : [...current, lang.code];
+                      update("supported_languages", next);
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 p-3 rounded-lg border text-left transition-colors",
+                      enabled
+                        ? "border-primary bg-primary/5 text-foreground"
+                        : "border-border text-muted-foreground hover:border-muted-foreground/50",
+                      isEnglish && "cursor-default"
+                    )}
+                  >
+                    <span className="text-lg">{lang.flag}</span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{lang.label}</div>
+                      <div className="text-[10px] uppercase tracking-wider opacity-60">{lang.code}</div>
+                    </div>
+                    {isEnglish && (
+                      <Badge variant="secondary" className="ml-auto text-[9px] px-1.5">Required</Badge>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              When a caller or visitor selects a language, the AI agent will use that language for speech recognition, responses, and text chat. The widget will show a language selector.
+            </p>
           </CardContent>
         </Card>
       )}

@@ -18,6 +18,7 @@ import {
   Shield,
   Save,
   Check,
+  Globe,
 } from "lucide-react";
 
 interface ClientDetail {
@@ -38,6 +39,7 @@ interface ClientDetail {
     agent_name: string;
     greeting: string;
     language: string;
+    supported_languages?: string[];
   } | null;
 }
 
@@ -310,6 +312,23 @@ export function AdminClientDetail({ clientId, onBack }: AdminClientDetailProps) 
                   </p>
                 </div>
               </div>
+              {client.agent_config.supported_languages && client.agent_config.supported_languages.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Globe className="w-4 h-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground font-medium">
+                      Supported Languages ({client.agent_config.supported_languages.length})
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {client.agent_config.supported_languages.map((code: string) => (
+                      <Badge key={code} variant="outline" className="text-[10px] px-2 py-0.5">
+                        {code.toUpperCase()}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

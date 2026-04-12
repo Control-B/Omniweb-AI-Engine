@@ -22,6 +22,27 @@ import {
   Star,
 } from "lucide-react";
 
+const LANGUAGE_OPTIONS = [
+  { code: "en", label: "English", flag: "🇺🇸" },
+  { code: "es", label: "Spanish", flag: "🇪🇸" },
+  { code: "fr", label: "French", flag: "🇫🇷" },
+  { code: "de", label: "German", flag: "🇩🇪" },
+  { code: "ar", label: "Arabic", flag: "🇸🇦" },
+  { code: "hi", label: "Hindi", flag: "🇮🇳" },
+  { code: "pt", label: "Portuguese", flag: "🇧🇷" },
+  { code: "it", label: "Italian", flag: "🇮🇹" },
+  { code: "ja", label: "Japanese", flag: "🇯🇵" },
+  { code: "ko", label: "Korean", flag: "🇰🇷" },
+  { code: "zh", label: "Chinese", flag: "🇨🇳" },
+  { code: "nl", label: "Dutch", flag: "🇳🇱" },
+  { code: "pl", label: "Polish", flag: "🇵🇱" },
+  { code: "ru", label: "Russian", flag: "🇷🇺" },
+  { code: "tr", label: "Turkish", flag: "🇹🇷" },
+  { code: "uk", label: "Ukrainian", flag: "🇺🇦" },
+];
+
+const ALL_LANGUAGE_CODES = LANGUAGE_OPTIONS.map(l => l.code);
+
 interface Template {
   id: string;
   name: string;
@@ -29,7 +50,7 @@ interface Template {
   industry: string | null;
   agent_name: string;
   greeting: string;
-  language: string;
+  supported_languages: string[];
   system_prompt: string | null;
   is_default: boolean;
   is_active: boolean;
@@ -42,7 +63,7 @@ const EMPTY_FORM: Omit<Template, "id" | "created_at"> = {
   industry: "",
   agent_name: "",
   greeting: "",
-  language: "en",
+  supported_languages: ALL_LANGUAGE_CODES,
   system_prompt: "",
   is_default: false,
   is_active: true,
@@ -86,7 +107,7 @@ export function AdminTemplates() {
       industry: t.industry || "",
       agent_name: t.agent_name,
       greeting: t.greeting,
-      language: t.language,
+      supported_languages: t.supported_languages ?? ["en"],
       system_prompt: t.system_prompt || "",
       is_default: t.is_default,
       is_active: t.is_active,
@@ -213,13 +234,34 @@ export function AdminTemplates() {
               </div>
               <div>
                 <label className="text-xs text-muted-foreground font-medium block mb-1.5">
-                  Language
+                  Languages ({form.supported_languages.length} selected)
                 </label>
-                <Input
-                  value={form.language}
-                  onChange={(e) => updateField("language", e.target.value)}
-                  placeholder="e.g. en"
-                />
+                <div className="flex flex-wrap gap-1.5">
+                  {LANGUAGE_OPTIONS.map((lang) => {
+                    const on = form.supported_languages.includes(lang.code);
+                    return (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => {
+                          if (lang.code === "en") return;
+                          const next = on
+                            ? form.supported_languages.filter((c: string) => c !== lang.code)
+                            : [...form.supported_languages, lang.code];
+                          updateField("supported_languages", next);
+                        }}
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-xs transition-colors ${
+                          on
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                        } ${lang.code === "en" ? "cursor-default" : "cursor-pointer"}`}
+                      >
+                        <span>{lang.flag}</span>
+                        <span>{lang.code.toUpperCase()}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="md:col-span-2">
                 <label className="text-xs text-muted-foreground font-medium block mb-1.5">
@@ -344,8 +386,8 @@ export function AdminTemplates() {
                     <span className="text-foreground font-medium">{t.agent_name}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Language</span>
-                    <span className="text-foreground font-medium">{t.language}</span>
+                    <span className="text-muted-foreground">Languages</span>
+                    <span className="text-foreground font-medium">{t.supported_languages?.length ?? 1} enabled</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Status</span>

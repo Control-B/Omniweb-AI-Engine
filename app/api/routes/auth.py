@@ -3,10 +3,12 @@
 Endpoints:
     POST /auth/signup    — create a new client + agent config
     POST /auth/login     — email + password → JWT
+    GET  /auth/admin/users   — list admin/team users
+    POST /auth/admin/users   — create an admin/team user
     POST /auth/refresh   — extend JWT lifetime
     POST /auth/api-key   — generate a new API key for the client
 """
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
@@ -22,6 +24,7 @@ from app.core.auth import (
     verify_password,
     decode_access_token,
     get_current_client,
+    require_admin,
 )
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, AgentTemplate, Client
@@ -42,6 +45,7 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+    portal: Literal["client", "admin"] = "client"
 
 
 class TokenResponse(BaseModel):
@@ -83,12 +87,30 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class AdminUserCreateRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+
+
+class AdminUserResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: str
+    is_active: bool
+    created_at: str | None = None
+
+
 @router.post("/signup", response_model=TokenResponse, status_code=201)
 async def signup(
     body: SignupRequest,
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Create a new client account and return a JWT."""
+    if len(body.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+
     # Check if email already exists
     result = await db.execute(
         select(Client).where(Client.email == body.email)
@@ -188,6 +210,12 @@ async def login(
     if not verify_password(body.password, client.hashed_password):
         raise HTTPException(401, "Invalid email or password")
 
+    if body.portal == "admin" and client.role != "admin":
+        raise HTTPException(401, "Invalid email or password")
+
+    if body.portal == "client" and client.role == "admin":
+        raise HTTPException(401, "Use the admin sign-in portal for this account")
+
     token = create_access_token(
         client_id=str(client.id),
         email=client.email,
@@ -195,7 +223,7 @@ async def login(
         role=client.role,
     )
 
-    logger.info(f"Client login: {client.email}")
+    logger.info(f"{body.portal.title()} login: {client.email}")
 
     return {
         "access_token": token,
@@ -204,6 +232,69 @@ async def login(
         "email": client.email,
         "plan": client.plan,
         "role": client.role,
+    }
+
+
+@router.get("/admin/users", response_model=list[AdminUserResponse])
+async def list_admin_users(
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """List all admin/team users stored in the DB."""
+    result = await db.execute(
+        select(Client)
+        .where(Client.role == "admin")
+        .order_by(Client.created_at.asc())
+    )
+    users = result.scalars().all()
+    return [
+        {
+            "id": str(user.id),
+            "name": user.name,
+            "email": user.email,
+            "role": user.role,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        }
+        for user in users
+    ]
+
+
+@router.post("/admin/users", response_model=AdminUserResponse, status_code=201)
+async def create_admin_user(
+    body: AdminUserCreateRequest,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Create a DB-backed admin/team login with email + password."""
+    if len(body.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+
+    existing = await db.execute(select(Client).where(Client.email == body.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(409, "Email already registered")
+
+    user = Client(
+        name=body.name,
+        email=body.email,
+        hashed_password=hash_password(body.password),
+        role="admin",
+        plan="pro",
+        is_active=True,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    logger.info(f"Admin team user created by {admin['email']}: {user.email}")
+
+    return {
+        "id": str(user.id),
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+        "is_active": user.is_active,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
 

@@ -10,9 +10,10 @@ import { AdminTemplates } from "@/components/admin/templates";
 import { AdminClientDetail } from "@/components/admin/client-detail";
 import { AdminAgents } from "@/components/admin/agents";
 import { AdminConversations } from "@/components/admin/conversations";
+import { AdminTeam } from "@/components/admin/team";
 import { Loader2 } from "lucide-react";
 
-export type AdminPageId = "overview" | "agents" | "sessions" | "clients" | "templates" | "client-detail";
+export type AdminPageId = "overview" | "agents" | "sessions" | "clients" | "templates" | "team" | "client-detail";
 
 export default function AdminDashboard() {
   const { user, loading } = useAuth();
@@ -59,6 +60,7 @@ export default function AdminDashboard() {
         {activePage === "sessions" && <AdminConversations />}
         {activePage === "clients" && <AdminClients onViewClient={handleViewClient} />}
         {activePage === "templates" && <AdminTemplates />}
+        {activePage === "team" && <AdminTeam />}
         {activePage === "client-detail" && selectedClientId && (
           <AdminClientDetail clientId={selectedClientId} onBack={handleBackToClients} />
         )}

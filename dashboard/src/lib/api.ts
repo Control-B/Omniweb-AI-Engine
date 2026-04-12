@@ -69,10 +69,14 @@ export interface AuthResponse {
   role: string;
 }
 
-export async function login(email: string, password: string): Promise<AuthResponse> {
+export async function login(
+  email: string,
+  password: string,
+  portal: "client" | "admin" = "client"
+): Promise<AuthResponse> {
   const data = await apiFetch<AuthResponse>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, portal }),
   });
   setToken(data.access_token);
   return data;
@@ -142,6 +146,30 @@ export async function changePassword(currentPassword: string, newPassword: strin
   return apiFetch<{ ok: boolean; message: string }>("/auth/change-password", {
     method: "POST",
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  created_at: string | null;
+}
+
+export async function getAdminUsers(): Promise<AdminUser[]> {
+  return apiFetch<AdminUser[]>("/auth/admin/users");
+}
+
+export async function createAdminUser(body: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<AdminUser> {
+  return apiFetch<AdminUser>("/auth/admin/users", {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 }
 

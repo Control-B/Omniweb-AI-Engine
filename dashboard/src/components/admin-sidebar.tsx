@@ -14,6 +14,7 @@ import {
   Bot,
   MessageSquare,
   ExternalLink,
+  UserCog,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -23,6 +24,7 @@ const NAV_ITEMS: { id: AdminPageId; label: string; icon: React.ElementType }[] =
   { id: "sessions", label: "Sessions", icon: MessageSquare },
   { id: "clients", label: "Clients", icon: Users },
   { id: "templates", label: "Templates", icon: FileText },
+  { id: "team", label: "Team", icon: UserCog },
 ];
 
 interface AdminSidebarProps {

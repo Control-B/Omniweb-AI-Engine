@@ -7,6 +7,7 @@ import { Input, Label } from "@/components/ui/input";
 import { login, signup } from "@/lib/api";
 
 export default function LoginPage() {
+  const [portal, setPortal] = useState<"client" | "admin">("client");
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +23,7 @@ export default function LoginPage() {
 
     try {
       if (mode === "login") {
-        const data = await login(email, password);
+        const data = await login(email, password, portal);
         window.location.href = data.role === "admin" ? "/admin" : "/dashboard";
         return;
       } else {
@@ -52,19 +53,56 @@ export default function LoginPage() {
           <div className="text-center">
             <h1 className="text-xl font-bold text-foreground">Omniweb AI</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {mode === "login"
-                ? "Sign in to your dashboard"
-                : "Create your account"}
+              {portal === "admin"
+                ? "Admin & team sign in"
+                : mode === "login"
+                  ? "Client sign in"
+                  : "Create your client account"}
             </p>
             <p className="text-xs text-muted-foreground/80 mt-2 max-w-xs">
-              Sign in with your Omniweb credentials to access your dashboard.
+              {portal === "admin"
+                ? "Use your internal team credentials to access the admin workspace."
+                : "Clients sign in with their own business email and password. Sign up creates a new client account in the database."}
             </p>
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-secondary p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setPortal("client");
+              setMode("login");
+              setError("");
+            }}
+            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              portal === "client"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Client Portal
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPortal("admin");
+              setMode("login");
+              setError("");
+            }}
+            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              portal === "admin"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Admin Portal
+          </button>
+        </div>
+
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === "signup" && (
+          {portal === "client" && mode === "signup" && (
             <>
               <div className="space-y-1.5">
                 <Label htmlFor="name">Your Name</Label>
@@ -119,34 +157,44 @@ export default function LoginPage() {
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {mode === "login" ? "Sign In" : "Create Account"}
+            {mode === "login"
+              ? portal === "admin"
+                ? "Sign In to Admin"
+                : "Sign In"
+              : "Create Account"}
           </Button>
         </form>
 
         {/* Toggle */}
-        <p className="text-center text-sm text-muted-foreground">
-          {mode === "login" ? (
-            <>
-              Don&apos;t have an account?{" "}
-              <button
-                onClick={() => { setMode("signup"); setError(""); }}
-                className="text-primary hover:underline font-medium"
-              >
-                Sign up
-              </button>
-            </>
-          ) : (
-            <>
-              Already have an account?{" "}
-              <button
-                onClick={() => { setMode("login"); setError(""); }}
-                className="text-primary hover:underline font-medium"
-              >
-                Sign in
-              </button>
-            </>
-          )}
-        </p>
+        {portal === "client" ? (
+          <p className="text-center text-sm text-muted-foreground">
+            {mode === "login" ? (
+              <>
+                Don&apos;t have an account?{" "}
+                <button
+                  onClick={() => { setMode("signup"); setError(""); }}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Sign up
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  onClick={() => { setMode("login"); setError(""); }}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Sign in
+                </button>
+              </>
+            )}
+          </p>
+        ) : (
+          <p className="text-center text-sm text-muted-foreground">
+            Admin accounts are created internally and stored in the database.
+          </p>
+        )}
 
         {/* Legal links */}
         <div className="flex items-center justify-center gap-3 text-[11px] text-muted-foreground/60">

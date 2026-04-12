@@ -18,6 +18,34 @@ export function clearToken() {
   localStorage.removeItem("omniweb_token");
 }
 
+// ── Admin token stash (for demo round-tripping) ──────────────────────────────
+
+const ADMIN_TOKEN_KEY = "omniweb_admin_token_stash";
+
+/** Save the current token before entering demo mode so we can restore it later. */
+export function stashAdminToken() {
+  const current = getToken();
+  if (current) {
+    localStorage.setItem(ADMIN_TOKEN_KEY, current);
+  }
+}
+
+/** Restore the admin token stashed before demo mode. Returns true if restored. */
+export function restoreAdminToken(): boolean {
+  const stashed = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (stashed) {
+    setToken(stashed);
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    return true;
+  }
+  return false;
+}
+
+/** Check if there's a stashed admin session (i.e. we're in demo mode). */
+export function hasStashedAdminToken(): boolean {
+  return !!localStorage.getItem(ADMIN_TOKEN_KEY);
+}
+
 export function parseJwt(token: string): Record<string, any> | null {
   try {
     const payload = token.split(".")[1];

@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { hasStashedAdminToken, restoreAdminToken } from "@/lib/api";
 import type { ClientPageId } from "@/app/dashboard/page";
 import {
   LayoutDashboard,
@@ -14,8 +15,9 @@ import {
   ChevronLeft,
   Workflow,
   LogOut,
+  ArrowLeft,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const NAV_ITEMS: { id: ClientPageId; label: string; icon: React.ElementType }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -35,7 +37,12 @@ interface ClientSidebarProps {
 export function ClientSidebar({ activePage, onNavigate }: ClientSidebarProps) {
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [showBackToAdmin, setShowBackToAdmin] = useState(false);
   const initials = user?.email?.slice(0, 2).toUpperCase() || "??";
+
+  useEffect(() => {
+    setShowBackToAdmin(hasStashedAdminToken());
+  }, []);
 
   return (
     <aside
@@ -100,6 +107,18 @@ export function ClientSidebar({ activePage, onNavigate }: ClientSidebarProps) {
 
       {/* Bottom */}
       <div className="px-2 py-3 border-t border-border space-y-0.5">
+        {showBackToAdmin && (
+          <button
+            onClick={() => {
+              restoreAdminToken();
+              window.location.href = "/admin";
+            }}
+            className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-primary hover:text-primary hover:bg-primary/10 transition-colors font-medium"
+          >
+            <ArrowLeft className="w-[18px] h-[18px]" />
+            {!collapsed && <span>Back to Admin</span>}
+          </button>
+        )}
         <button
           onClick={logout}
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"

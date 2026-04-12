@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
-import { demoLogin } from "@/lib/api";
+import { demoLogin, stashAdminToken } from "@/lib/api";
 
 export default function DemoPage() {
   const [error, setError] = useState("");
@@ -12,6 +12,8 @@ export default function DemoPage() {
 
     async function autoLogin() {
       try {
+        // Save any existing admin session so we can return later
+        stashAdminToken();
         await demoLogin();
         if (!cancelled) {
           // Full page navigation so auth context picks up the token

@@ -7,7 +7,7 @@ import { Input, Label } from "@/components/ui/input";
 import { login, requestPasswordReset, signup } from "@/lib/api";
 
 export default function LoginPage() {
-  const [portal, setPortal] = useState<"client" | "admin">("client");
+  const [portal, setPortal] = useState<"client" | "admin">("admin");
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -233,6 +233,16 @@ export default function LoginPage() {
             Admin accounts are created internally and stored in the database.
           </p>
         )}
+
+        {/* Demo shortcut */}
+        <div className="flex items-center justify-center">
+          <a
+            href="/demo"
+            className="text-sm text-primary hover:underline font-medium"
+          >
+            Try Demo Dashboard →
+          </a>
+        </div>
 
         {/* Legal links */}
         <div className="flex items-center justify-center gap-3 text-[11px] text-muted-foreground/60">

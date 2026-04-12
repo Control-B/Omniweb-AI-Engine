@@ -1,54 +1,313 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Phone, Plus, Trash2, Check, ExternalLink, Wifi, Loader2, AlertCircle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useEffect, useState, useCallback } from "react";
+import {
+  Phone, Plus, Trash2, Search, ExternalLink, Loader2,
+  AlertCircle, CheckCircle2, MapPin, X, Link2,
+} from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { cn, formatPhone } from "@/lib/utils";
-import { getNumbers } from "@/lib/api";
+import {
+  getNumbers, searchAvailableNumbers, buyNumber,
+  deleteNumber, assignNumberToAgent,
+} from "@/lib/api";
+
+/* ── Types ──────────────────────────────────────────────────────────────── */
 
 interface PhoneNumberRecord {
   id: string;
   phone_number: string;
   friendly_name: string;
   is_active: boolean;
-  livekit_sip_trunk_id?: string;
-  monthly_rate?: number;
-  total_calls?: number;
+  twilio_sid?: string;
+  elevenlabs_phone_number_id?: string;
+  area_code?: string;
+  country?: string;
 }
+
+interface AvailableNumber {
+  phone_number: string;
+  friendly_name: string;
+  location: string;
+  capabilities?: { voice?: boolean; sms?: boolean };
+  monthly_rate: number;
+}
+
+/* ── Component ──────────────────────────────────────────────────────────── */
 
 export function NumbersPage() {
   const [numbers, setNumbers] = useState<PhoneNumberRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const res = await getNumbers();
-        setNumbers(res.numbers || res || []);
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    })();
+  // Search / Buy state
+  const [showSearch, setShowSearch] = useState(false);
+  const [areaCode, setAreaCode] = useState("");
+  const [searchResults, setSearchResults] = useState<AvailableNumber[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Buy state
+  const [buyingNumber, setBuyingNumber] = useState<string | null>(null);
+  const [friendlyName, setFriendlyName] = useState("");
+  const [buyTarget, setBuyTarget] = useState<AvailableNumber | null>(null);
+
+  // Action states
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const loadNumbers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await getNumbers();
+      setNumbers(res.numbers || res || []);
+      setError(null);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => { loadNumbers(); }, [loadNumbers]);
+
+  /* ── Search available numbers ──────────────────────────────────────── */
+
+  async function handleSearch() {
+    setSearching(true);
+    setSearchError(null);
+    setSearchResults([]);
+    try {
+      const res = await searchAvailableNumbers(areaCode || undefined);
+      setSearchResults(res.numbers || []);
+      if ((res.numbers || []).length === 0) {
+        setSearchError("No numbers found. Try a different area code.");
+      }
+    } catch (e: any) {
+      setSearchError(e.message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  /* ── Buy a number ──────────────────────────────────────────────────── */
+
+  async function handleBuy() {
+    if (!buyTarget) return;
+    setBuyingNumber(buyTarget.phone_number);
+    try {
+      await buyNumber(buyTarget.phone_number, friendlyName || buyTarget.friendly_name || "AI Line");
+      setSearchResults((prev) => prev.filter((n) => n.phone_number !== buyTarget.phone_number));
+      setBuyTarget(null);
+      setFriendlyName("");
+      await loadNumbers();
+    } catch (e: any) {
+      setSearchError(`Failed to buy: ${e.message}`);
+    } finally {
+      setBuyingNumber(null);
+    }
+  }
+
+  /* ── Delete a number ───────────────────────────────────────────────── */
+
+  async function handleDelete(num: PhoneNumberRecord) {
+    setActionLoading(num.id);
+    setActionError(null);
+    try {
+      await deleteNumber(num.id, true);
+      setNumbers((prev) => prev.filter((n) => n.id !== num.id));
+      setDeleteConfirm(null);
+    } catch (e: any) {
+      setActionError(`Delete failed: ${e.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  /* ── Assign to agent ───────────────────────────────────────────────── */
+
+  async function handleAssign(num: PhoneNumberRecord) {
+    setActionLoading(num.id);
+    setActionError(null);
+    try {
+      await assignNumberToAgent(num.id);
+      await loadNumbers();
+    } catch (e: any) {
+      setActionError(`Assign failed: ${e.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  /* ── Render ─────────────────────────────────────────────────────────── */
+
   return (
-    <div className="p-6 space-y-4 max-w-[900px]">
+    <div className="p-6 space-y-5 max-w-[960px]">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">Phone Numbers</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Manage numbers connected to your AI agent
+            Search, buy, and manage numbers for your AI agent
           </p>
         </div>
+        <Button
+          onClick={() => { setShowSearch(!showSearch); setSearchResults([]); setSearchError(null); setBuyTarget(null); }}
+          className={cn(showSearch && "bg-primary/20 text-primary border-primary/30")}
+          variant={showSearch ? "outline" : "default"}
+          size="sm"
+        >
+          {showSearch ? <X className="w-4 h-4 mr-1.5" /> : <Plus className="w-4 h-4 mr-1.5" />}
+          {showSearch ? "Close" : "Get a Number"}
+        </Button>
       </div>
 
+      {/* Action error toast */}
+      {actionError && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="flex-1">{actionError}</span>
+          <button onClick={() => setActionError(null)} className="text-red-300 hover:text-red-200">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* ── Search Panel ──────────────────────────────────────────── */}
+      {showSearch && (
+        <Card className="border-primary/20 bg-primary/[0.02]">
+          <CardContent className="p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Search Available Numbers</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Find a phone number from our inventory. Numbers are billed at ~$1.15/mo.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Input
+                  placeholder="Area code (e.g. 212, 415, 305)..."
+                  value={areaCode}
+                  onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                  className="font-mono"
+                />
+              </div>
+              <Button onClick={handleSearch} disabled={searching} size="md">
+                {searching ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Search className="w-4 h-4 mr-1.5" />}
+                Search
+              </Button>
+            </div>
+
+            {searchError && (
+              <p className="text-xs text-red-400 flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" /> {searchError}
+              </p>
+            )}
+
+            {/* Search results */}
+            {searchResults.length > 0 && (
+              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                <p className="text-xs text-muted-foreground">{searchResults.length} numbers found</p>
+                {searchResults.map((num) => (
+                  <div
+                    key={num.phone_number}
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-lg border transition-colors",
+                      buyTarget?.phone_number === num.phone_number
+                        ? "border-primary/40 bg-primary/5"
+                        : "border-border hover:border-border/80 hover:bg-accent/30"
+                    )}
+                  >
+                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10">
+                      <Phone className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground font-mono">
+                        {formatPhone(num.phone_number)}
+                      </p>
+                      {num.location && (
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3" /> {num.location}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {num.capabilities?.voice && (
+                        <Badge variant="secondary" className="text-[9px]">Voice</Badge>
+                      )}
+                      {num.capabilities?.sms && (
+                        <Badge variant="secondary" className="text-[9px]">SMS</Badge>
+                      )}
+                      {num.monthly_rate > 0 && (
+                        <span className="text-xs text-muted-foreground">${num.monthly_rate}/mo</span>
+                      )}
+                      <Button
+                        size="sm"
+                        variant={buyTarget?.phone_number === num.phone_number ? "default" : "outline"}
+                        onClick={() => {
+                          setBuyTarget(buyTarget?.phone_number === num.phone_number ? null : num);
+                          setFriendlyName("");
+                        }}
+                        disabled={buyingNumber === num.phone_number}
+                      >
+                        {buyingNumber === num.phone_number ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : buyTarget?.phone_number === num.phone_number ? (
+                          "Selected"
+                        ) : (
+                          "Select"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Buy confirmation */}
+            {buyTarget && (
+              <div className="p-4 rounded-lg bg-card border border-border space-y-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium text-foreground">
+                    Buy {formatPhone(buyTarget.phone_number)}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Friendly Name</Label>
+                  <Input
+                    placeholder="e.g. Main Office, After Hours Line..."
+                    value={friendlyName}
+                    onChange={(e) => setFriendlyName(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button onClick={handleBuy} disabled={!!buyingNumber} size="sm">
+                    {buyingNumber ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Purchasing...</>
+                    ) : (
+                      <><Plus className="w-3.5 h-3.5 mr-1.5" /> Buy &amp; Connect to Agent</>
+                    )}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setBuyTarget(null)}>
+                    Cancel
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  This will purchase the number (~$1.15/mo) and automatically connect it to your AI agent.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── My Numbers ────────────────────────────────────────────── */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -57,19 +316,26 @@ export function NumbersPage() {
         <div className="flex flex-col items-center py-12 gap-2">
           <AlertCircle className="w-6 h-6 text-red-400" />
           <p className="text-sm text-muted-foreground">{error}</p>
+          <Button variant="ghost" size="sm" onClick={loadNumbers}>Retry</Button>
         </div>
-      ) : numbers.length === 0 ? (
+      ) : numbers.length === 0 && !showSearch ? (
         <Card>
-          <CardContent className="p-8 text-center">
-            <Phone className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
-            <p className="text-sm text-foreground font-medium">No phone numbers configured</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Phone numbers will appear here once provisioned for your AI agent
+          <CardContent className="p-10 text-center">
+            <Phone className="w-10 h-10 text-muted-foreground/30 mx-auto mb-4" />
+            <p className="text-sm font-medium text-foreground">No phone numbers yet</p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+              Get a phone number to let your AI agent answer calls. Click &quot;Get a Number&quot; above to search and buy.
             </p>
+            <Button className="mt-4" size="sm" onClick={() => setShowSearch(true)}>
+              <Plus className="w-4 h-4 mr-1.5" /> Get Your First Number
+            </Button>
           </CardContent>
         </Card>
-      ) : (
+      ) : numbers.length > 0 ? (
         <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-foreground">
+            My Numbers <span className="text-muted-foreground font-normal">({numbers.length})</span>
+          </h2>
           {numbers.map((num) => (
             <Card key={num.id}>
               <CardContent className="p-5">
@@ -85,35 +351,68 @@ export function NumbersPage() {
                       <Badge variant={num.is_active ? "success" : "secondary"}>
                         {num.is_active ? "active" : "inactive"}
                       </Badge>
+                      {num.elevenlabs_phone_number_id && (
+                        <Badge variant="default" className="text-[9px]">
+                          <Link2 className="w-2.5 h-2.5 mr-0.5" /> Agent Connected
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{num.friendly_name}</p>
                   </div>
-                  <div className="hidden md:flex items-center gap-6 text-center">
-                    {num.total_calls != null && (
-                      <div>
-                        <p className="text-sm font-bold text-foreground">{num.total_calls}</p>
-                        <p className="text-[10px] text-muted-foreground">Total Calls</p>
-                      </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Assign to agent (if not already connected) */}
+                    {!num.elevenlabs_phone_number_id && num.is_active && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAssign(num)}
+                        disabled={actionLoading === num.id}
+                      >
+                        {actionLoading === num.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <><Link2 className="w-3.5 h-3.5 mr-1" /> Connect</>
+                        )}
+                      </Button>
                     )}
-                    {num.monthly_rate != null && (
-                      <div>
-                        <p className="text-sm font-bold text-foreground">${num.monthly_rate}/mo</p>
-                        <p className="text-[10px] text-muted-foreground">Cost</p>
+
+                    {/* Delete */}
+                    {deleteConfirm === num.id ? (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDelete(num)}
+                          disabled={actionLoading === num.id}
+                        >
+                          {actionLoading === num.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            "Confirm"
+                          )}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(null)}>
+                          Cancel
+                        </Button>
                       </div>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-red-400"
+                        onClick={() => setDeleteConfirm(num.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                     )}
                   </div>
-                  {num.livekit_sip_trunk_id && (
-                    <div className="flex items-center gap-1 text-[11px] text-emerald-400">
-                      <Wifi className="w-3 h-3" />
-                      SIP
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* BYOC Card */}
       <Card className="border-dashed">
@@ -127,7 +426,7 @@ export function NumbersPage() {
                 Bring Your Own Number (BYOC)
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Already have a number with another carrier? Forward it to your SIP trunk to use with your AI agent.
+                Already have a number with another carrier? Contact us to forward it to your AI agent.
               </p>
             </div>
           </div>

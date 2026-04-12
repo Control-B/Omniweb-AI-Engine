@@ -201,6 +201,29 @@ export async function getNumbers(clientId?: string) {
   return apiFetch(`/numbers${params}`);
 }
 
+export async function searchAvailableNumbers(areaCode?: string, country = "US", limit = 20) {
+  const params = new URLSearchParams({ country, limit: String(limit) });
+  if (areaCode) params.set("area_code", areaCode);
+  return apiFetch<{ numbers: any[] }>(`/numbers/available?${params}`);
+}
+
+export async function buyNumber(phoneNumber: string, friendlyName: string) {
+  return apiFetch(`/numbers`, {
+    method: "POST",
+    body: JSON.stringify({ phone_number: phoneNumber, friendly_name: friendlyName }),
+  });
+}
+
+export async function deleteNumber(numberId: string, releaseTwilio = false) {
+  return apiFetch(`/numbers/${numberId}?release_twilio=${releaseTwilio}`, {
+    method: "DELETE",
+  });
+}
+
+export async function assignNumberToAgent(numberId: string) {
+  return apiFetch(`/numbers/${numberId}/assign-agent`, { method: "POST" });
+}
+
 // ── Admin endpoints ──────────────────────────────────────────────────────────
 
 export async function adminGetClients(params?: {

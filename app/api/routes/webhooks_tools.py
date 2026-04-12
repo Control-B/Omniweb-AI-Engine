@@ -8,6 +8,7 @@ that the agent reads back to the user.
 Security: Requests are validated via a shared secret header
 (X-Tool-Secret) that must match settings.ELEVENLABS_TOOL_SECRET.
 """
+import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -20,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.models import Lead, Client
+from app.models.models import Lead, Client, ToolCallLog
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -53,6 +54,37 @@ def _get_client_id() -> uuid.UUID:
     return uuid.uuid5(uuid.NAMESPACE_DNS, "omniweb.ai")
 
 
+async def _log_tool_call(
+    tool_name: str,
+    parameters: dict,
+    result: dict,
+    success: bool = True,
+    error_message: str | None = None,
+    lead_id: uuid.UUID | None = None,
+    duration_ms: int | None = None,
+):
+    """Persist an audit record for every tool invocation."""
+    from app.core.database import async_session_factory
+
+    try:
+        async with async_session_factory() as db:
+            log = ToolCallLog(
+                id=uuid.uuid4(),
+                client_id=_get_client_id(),
+                tool_name=tool_name,
+                parameters=parameters,
+                result=result,
+                success=success,
+                error_message=error_message,
+                lead_id=lead_id,
+                duration_ms=duration_ms,
+            )
+            db.add(log)
+            await db.commit()
+    except Exception as e:
+        logger.error(f"Failed to log tool call {tool_name}: {e}")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Tool 1: capture_lead — save a qualified lead to the database
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -78,12 +110,14 @@ async def capture_lead(
 ):
     """Save a qualified lead from the AI conversation."""
     _verify_secret(x_tool_secret)
+    t0 = time.time()
 
     from app.core.database import async_session_factory
 
+    lead_id = uuid.uuid4()
     async with async_session_factory() as db:
         lead = Lead(
-            id=uuid.uuid4(),
+            id=lead_id,
             client_id=_get_client_id(),
             caller_name=body.name,
             caller_phone=body.phone or "not-provided",
@@ -101,9 +135,11 @@ async def capture_lead(
 
         logger.info(f"Lead captured via tool call: {body.name} ({body.email})")
 
-    return {
+    result = {
         "result": f"Lead saved successfully. {body.name}'s information has been recorded. The Omniweb team will follow up shortly."
     }
+    await _log_tool_call("capture_lead", body.model_dump(), result, lead_id=lead_id, duration_ms=int((time.time() - t0) * 1000))
+    return result
 
 
 def _build_summary(body: CaptureLeadRequest) -> str:
@@ -165,6 +201,7 @@ async def book_appointment(
     Can be extended to integrate with Google Calendar, Calendly, etc.
     """
     _verify_secret(x_tool_secret)
+    t0 = time.time()
 
     # Build a booking reference
     booking_ref = f"OMN-{uuid.uuid4().hex[:8].upper()}"
@@ -184,9 +221,10 @@ async def book_appointment(
     # Also capture as a lead with "booked" status
     from app.core.database import async_session_factory
 
+    lead_id = uuid.uuid4()
     async with async_session_factory() as db:
         lead = Lead(
-            id=uuid.uuid4(),
+            id=lead_id,
             client_id=_get_client_id(),
             caller_name=body.name,
             caller_phone=body.phone or "not-provided",
@@ -202,9 +240,11 @@ async def book_appointment(
         db.add(lead)
         await db.commit()
 
-    return {
+    result = {
         "result": f"Appointment booked! Reference number: {booking_ref}. {body.name} will receive a confirmation at {body.email}. The Omniweb team will reach out{time_str} to discuss {body.topic or 'how we can help'}."
     }
+    await _log_tool_call("book_appointment", body.model_dump(), result, lead_id=lead_id, duration_ms=int((time.time() - t0) * 1000))
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -226,6 +266,7 @@ async def send_confirmation(
 ):
     """Send an SMS confirmation to the lead."""
     _verify_secret(x_tool_secret)
+    t0 = time.time()
 
     templates = {
         "booking": f"Hi {body.name}! 🎉 Your consultation with Omniweb is confirmed. We'll reach out shortly to finalize the time. Questions? Reply here or email support@omniweb.ai",
@@ -244,13 +285,19 @@ async def send_confirmation(
                 body=sms_body,
             )
             logger.info(f"Confirmation SMS sent to {body.phone} ({body.message_type})")
-            return {"result": f"Confirmation SMS sent to {body.name} at {body.phone}."}
+            result = {"result": f"Confirmation SMS sent to {body.name} at {body.phone}."}
+            await _log_tool_call("send_confirmation_sms", body.model_dump(), result, duration_ms=int((time.time() - t0) * 1000))
+            return result
         else:
             logger.warning("Twilio not configured — SMS not sent")
-            return {"result": f"Confirmation noted for {body.name}. SMS will be sent when the messaging service is configured."}
+            result = {"result": f"Confirmation noted for {body.name}. SMS will be sent when the messaging service is configured."}
+            await _log_tool_call("send_confirmation_sms", body.model_dump(), result, duration_ms=int((time.time() - t0) * 1000))
+            return result
     except Exception as e:
         logger.error(f"Failed to send SMS: {e}")
-        return {"result": f"I've noted {body.name}'s number. The team will follow up manually."}
+        result = {"result": f"I've noted {body.name}'s number. The team will follow up manually."}
+        await _log_tool_call("send_confirmation_sms", body.model_dump(), result, success=False, error_message=str(e), duration_ms=int((time.time() - t0) * 1000))
+        return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -273,6 +320,7 @@ async def check_availability(
     Can be extended to query Google Calendar, Calendly, etc.
     """
     _verify_secret(x_tool_secret)
+    t0 = time.time()
 
     # Standard available slots (can be replaced with real calendar integration)
     now = datetime.now(timezone.utc)
@@ -290,9 +338,11 @@ async def check_availability(
 
     available = slots[:6]  # Show up to 6 slots
 
-    return {
+    result = {
         "result": f"Here are the available consultation slots: {', '.join(available)}. Which time works best?"
     }
+    await _log_tool_call("check_availability", body.model_dump(), result, duration_ms=int((time.time() - t0) * 1000))
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -311,8 +361,9 @@ async def get_pricing(
 ):
     """Return Omniweb pricing information."""
     _verify_secret(x_tool_secret)
+    t0 = time.time()
 
-    return {
+    result = {
         "result": (
             "Omniweb offers flexible plans tailored to your business. "
             "Starter plans begin at $97/month and include one AI voice agent and one chat assistant. "
@@ -322,3 +373,5 @@ async def get_pricing(
             "For enterprise or agency pricing, we build custom packages."
         )
     }
+    await _log_tool_call("get_pricing_info", body.model_dump(), result, duration_ms=int((time.time() - t0) * 1000))
+    return result

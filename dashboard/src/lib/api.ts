@@ -106,16 +106,67 @@ export async function getAnalytics(clientId?: string) {
   return apiFetch(`/analytics/summary${params}`);
 }
 
+export async function getWeeklyStats(clientId?: string) {
+  const params = clientId ? `?client_id=${clientId}` : "";
+  return apiFetch(`/analytics/weekly${params}`);
+}
+
+export async function getToolCallLogs(params?: {
+  clientId?: string;
+  toolName?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.clientId) q.set("client_id", params.clientId);
+  if (params?.toolName) q.set("tool_name", params.toolName);
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  return apiFetch(`/analytics/tool-calls?${q}`);
+}
+
 export async function getCalls(clientId?: string, limit = 50, offset = 0) {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (clientId) params.set("client_id", clientId);
   return apiFetch(`/calls?${params}`);
 }
 
-export async function getLeads(clientId?: string, limit = 50) {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (clientId) params.set("client_id", clientId);
-  return apiFetch(`/leads?${params}`);
+export async function getCall(callId: string) {
+  return apiFetch(`/calls/${callId}`);
+}
+
+export async function syncCalls(clientId?: string) {
+  const params = clientId ? `?client_id=${clientId}` : "";
+  return apiFetch(`/calls/sync${params}`, { method: "POST" });
+}
+
+export async function getLeads(params?: {
+  clientId?: string;
+  status?: string;
+  search?: string;
+  sortBy?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.clientId) q.set("client_id", params.clientId);
+  if (params?.status) q.set("status", params.status);
+  if (params?.search) q.set("search", params.search);
+  if (params?.sortBy) q.set("sort_by", params.sortBy);
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  return apiFetch(`/leads?${q}`);
+}
+
+export async function getLead(leadId: string) {
+  return apiFetch(`/leads/${leadId}`);
+}
+
+export async function updateLeadStatus(leadId: string, status: string) {
+  return apiFetch(`/leads/${leadId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
 }
 
 export async function getAgentConfig(clientId: string) {

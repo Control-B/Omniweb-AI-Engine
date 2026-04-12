@@ -1,42 +1,98 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Phone,
   Users,
   Clock,
-  TrendingUp,
+  CalendarCheck,
   PhoneIncoming,
   PhoneOutgoing,
   PhoneMissed,
   ArrowUpRight,
   ArrowDownRight,
   Bot,
+  Loader2,
+  Wrench,
+  AlertCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatDuration, formatPhone, timeAgo } from "@/lib/utils";
-import {
-  MOCK_ANALYTICS,
-  MOCK_CALLS,
-  MOCK_LEADS,
-  MOCK_WEEKLY_CALLS,
-  MOCK_HOURLY_CALLS,
-} from "@/lib/mock-data";
+import { getAnalytics, getWeeklyStats, getCalls, getLeads, getToolCallLogs } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface AnalyticsSummary {
+  total_calls: number;
+  completed_calls: number;
+  calls_today: number;
+  calls_this_week: number;
+  missed_calls: number;
+  avg_duration_seconds: number;
+  total_leads: number;
+  leads_today: number;
+  booked_appointments: number;
+  leads_by_status: Record<string, number>;
+  avg_lead_score: number;
+  conversion_rate: number;
+  tool_calls_today: number;
+}
+
+interface WeeklyDay {
+  date: string;
+  label: string;
+  calls: number;
+  leads: number;
+}
+
+interface CallRecord {
+  id: string;
+  caller_number: string;
+  direction: string;
+  status: string;
+  duration_seconds: number | null;
+  started_at: string | null;
+  created_at: string;
+}
+
+interface LeadRecord {
+  id: string;
+  caller_name: string;
+  caller_phone: string;
+  caller_email: string | null;
+  intent: string | null;
+  urgency: string;
+  summary: string | null;
+  services_requested: string[];
+  status: string;
+  lead_score: number;
+  created_at: string;
+}
+
+interface ToolCallRecord {
+  id: string;
+  tool_name: string;
+  parameters: Record<string, any>;
+  result: Record<string, any>;
+  success: boolean;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+// ── Sub-components ───────────────────────────────────────────────────────────
 
 function StatCard({
   label,
   value,
   subValue,
   icon: Icon,
-  trend,
-  trendUp,
 }: {
   label: string;
   value: string | number;
   subValue?: string;
   icon: React.ElementType;
-  trend?: string;
-  trendUp?: boolean;
 }) {
   return (
     <Card>
@@ -44,24 +100,7 @@ function StatCard({
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <div className="flex items-baseline gap-2">
-              <p className="text-2xl font-bold text-foreground">{value}</p>
-              {trend && (
-                <span
-                  className={cn(
-                    "flex items-center text-[11px] font-medium",
-                    trendUp ? "text-emerald-400" : "text-red-400"
-                  )}
-                >
-                  {trendUp ? (
-                    <ArrowUpRight className="w-3 h-3" />
-                  ) : (
-                    <ArrowDownRight className="w-3 h-3" />
-                  )}
-                  {trend}
-                </span>
-              )}
-            </div>
+            <p className="text-2xl font-bold text-foreground">{value}</p>
             {subValue && (
               <p className="text-[11px] text-muted-foreground">{subValue}</p>
             )}
@@ -75,8 +114,9 @@ function StatCard({
   );
 }
 
-function MiniBarChart({ data, dataKey, color }: { data: { [k: string]: any }[]; dataKey: string; color: string }) {
-  const max = Math.max(...data.map((d) => d[dataKey]));
+function MiniBarChart({ data, dataKey, color }: { data: WeeklyDay[]; dataKey: keyof WeeklyDay; color: string }) {
+  const values = data.map((d) => Number(d[dataKey]) || 0);
+  const max = Math.max(...values, 1);
   return (
     <div className="flex items-end gap-1 h-16">
       {data.map((d, i) => (
@@ -84,12 +124,12 @@ function MiniBarChart({ data, dataKey, color }: { data: { [k: string]: any }[]; 
           <div
             className="w-full rounded-sm transition-all"
             style={{
-              height: `${(d[dataKey] / max) * 100}%`,
+              height: `${(values[i] / max) * 100}%`,
               backgroundColor: color,
               minHeight: "2px",
             }}
           />
-          <span className="text-[9px] text-muted-foreground">{d.day || d.hour}</span>
+          <span className="text-[9px] text-muted-foreground">{d.label}</span>
         </div>
       ))}
     </div>
@@ -106,15 +146,100 @@ function LeadFunnelBar({ label, count, total, color }: { label: string; count: n
       <div className="h-2 bg-secondary rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all"
-          style={{ width: `${(count / total) * 100}%`, backgroundColor: color }}
+          style={{ width: `${total > 0 ? (count / total) * 100 : 0}%`, backgroundColor: color }}
         />
       </div>
     </div>
   );
 }
 
+const FUNNEL_COLORS: Record<string, string> = {
+  new: "hsl(243, 75%, 59%)",
+  contacted: "hsl(200, 70%, 55%)",
+  booked: "hsl(142, 76%, 36%)",
+  closed: "hsl(38, 92%, 50%)",
+  lost: "hsl(0, 62%, 50%)",
+};
+
+const TOOL_LABELS: Record<string, string> = {
+  capture_lead: "Lead Captured",
+  book_appointment: "Appointment Booked",
+  send_confirmation_sms: "SMS Sent",
+  check_availability: "Availability Checked",
+  get_pricing_info: "Pricing Requested",
+};
+
+// ── Main Page ────────────────────────────────────────────────────────────────
+
 export function DashboardPage() {
-  const stats = MOCK_ANALYTICS;
+  const { user } = useAuth();
+  const [stats, setStats] = useState<AnalyticsSummary | null>(null);
+  const [weekly, setWeekly] = useState<WeeklyDay[]>([]);
+  const [recentCalls, setRecentCalls] = useState<CallRecord[]>([]);
+  const [recentLeads, setRecentLeads] = useState<LeadRecord[]>([]);
+  const [toolCalls, setToolCalls] = useState<ToolCallRecord[]>([]);
+  const [toolSummary, setToolSummary] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setLoading(true);
+        setError(null);
+        const [analyticsRes, weeklyRes, callsRes, leadsRes, toolsRes] = await Promise.all([
+          getAnalytics(),
+          getWeeklyStats(),
+          getCalls(undefined, 6, 0),
+          getLeads({ limit: 6 }),
+          getToolCallLogs({ limit: 10 }),
+        ]);
+        setStats(analyticsRes);
+        setWeekly(weeklyRes.days || []);
+        setRecentCalls(callsRes.calls || []);
+        setRecentLeads(leadsRes.leads || []);
+        setToolCalls(toolsRes.logs || []);
+        setToolSummary(toolsRes.tool_summary || {});
+      } catch (e: any) {
+        setError(e.message || "Failed to load dashboard");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-3">
+        <AlertCircle className="w-8 h-8 text-red-400" />
+        <p className="text-sm text-muted-foreground">{error}</p>
+      </div>
+    );
+  }
+
+  if (!stats) return null;
+
+  const funnelOrder = ["new", "contacted", "booked", "closed", "lost"];
+  const funnelTotal = Object.values(stats.leads_by_status).reduce((a, b) => a + b, 0) || 1;
+
+  // Weekly derived stats
+  const weeklyCallsTotal = weekly.reduce((a, d) => a + d.calls, 0);
+  const peakDay = weekly.length > 0
+    ? weekly.reduce((best, d) => (d.calls > best.calls ? d : best), weekly[0])
+    : null;
+  const avgPerDay = weekly.length > 0 ? (weeklyCallsTotal / weekly.length).toFixed(1) : "0";
+  const answerRate = stats.total_calls > 0
+    ? ((stats.completed_calls / stats.total_calls) * 100).toFixed(1)
+    : "0";
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">
@@ -123,7 +248,7 @@ export function DashboardPage() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Bob&apos;s Plumbing — AI Agent Overview
+            AI Agent Overview
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -141,32 +266,24 @@ export function DashboardPage() {
           value={stats.total_calls.toLocaleString()}
           subValue={`${stats.calls_today} today · ${stats.calls_this_week} this week`}
           icon={Phone}
-          trend="+12.5%"
-          trendUp
         />
         <StatCard
           label="Leads Captured"
           value={stats.total_leads}
-          subValue={`${stats.conversion_rate}% conversion rate`}
+          subValue={`${stats.leads_today} today · ${stats.conversion_rate}% conversion`}
           icon={Users}
-          trend="+8.2%"
-          trendUp
+        />
+        <StatCard
+          label="Booked Appointments"
+          value={stats.booked_appointments}
+          subValue={`Avg lead score: ${Math.round(stats.avg_lead_score * 100)}%`}
+          icon={CalendarCheck}
         />
         <StatCard
           label="Avg Call Duration"
           value={formatDuration(stats.avg_duration_seconds)}
-          subValue="Across all completed calls"
+          subValue={`${stats.missed_calls} missed calls`}
           icon={Clock}
-          trend="+15s"
-          trendUp
-        />
-        <StatCard
-          label="Missed Calls"
-          value={stats.missed_calls}
-          subValue="Auto follow-up SMS sent"
-          icon={PhoneMissed}
-          trend="-4.1%"
-          trendUp
         />
       </div>
 
@@ -189,19 +306,25 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <MiniBarChart data={MOCK_WEEKLY_CALLS} dataKey="calls" color="hsl(243, 75%, 59%)" />
+              {weekly.length > 0 ? (
+                <MiniBarChart data={weekly} dataKey="calls" color="hsl(243, 75%, 59%)" />
+              ) : (
+                <div className="h-16 flex items-center justify-center text-xs text-muted-foreground">
+                  No call data this week
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-4 pt-2 border-t border-border">
                 <div>
                   <p className="text-[11px] text-muted-foreground">Peak Day</p>
-                  <p className="text-sm font-semibold">Thursday</p>
+                  <p className="text-sm font-semibold">{peakDay?.label || "—"}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground">Avg / Day</p>
-                  <p className="text-sm font-semibold">24.6 calls</p>
+                  <p className="text-sm font-semibold">{avgPerDay} calls</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground">Answer Rate</p>
-                  <p className="text-sm font-semibold text-emerald-400">94.2%</p>
+                  <p className="text-sm font-semibold text-emerald-400">{answerRate}%</p>
                 </div>
               </div>
             </div>
@@ -215,11 +338,15 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <LeadFunnelBar label="new" count={47} total={312} color="hsl(243, 75%, 59%)" />
-              <LeadFunnelBar label="contacted" count={89} total={312} color="hsl(200, 70%, 55%)" />
-              <LeadFunnelBar label="booked" count={134} total={312} color="hsl(142, 76%, 36%)" />
-              <LeadFunnelBar label="closed" count={28} total={312} color="hsl(38, 92%, 50%)" />
-              <LeadFunnelBar label="lost" count={14} total={312} color="hsl(0, 62%, 50%)" />
+              {funnelOrder.map((status) => (
+                <LeadFunnelBar
+                  key={status}
+                  label={status}
+                  count={stats.leads_by_status[status] || 0}
+                  total={funnelTotal}
+                  color={FUNNEL_COLORS[status] || "hsl(243, 75%, 59%)"}
+                />
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -230,110 +357,174 @@ export function DashboardPage() {
         {/* Recent Calls */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Recent Calls</CardTitle>
-              <button className="text-[11px] text-primary hover:underline">View all →</button>
-            </div>
+            <CardTitle>Recent Calls</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-1">
-              {MOCK_CALLS.slice(0, 6).map((call) => (
-                <div
-                  key={call.id}
-                  className="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-accent/50 transition-colors"
-                >
+            {recentCalls.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No calls yet</p>
+            ) : (
+              <div className="space-y-1">
+                {recentCalls.map((call) => (
                   <div
-                    className={cn(
-                      "flex items-center justify-center w-8 h-8 rounded-full shrink-0",
-                      call.status === "completed"
-                        ? "bg-emerald-500/10 text-emerald-400"
-                        : call.status === "no_answer"
-                        ? "bg-amber-500/10 text-amber-400"
-                        : "bg-red-500/10 text-red-400"
-                    )}
+                    key={call.id}
+                    className="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-accent/50 transition-colors"
                   >
-                    {call.direction === "inbound" ? (
-                      <PhoneIncoming className="w-3.5 h-3.5" />
-                    ) : (
-                      <PhoneOutgoing className="w-3.5 h-3.5" />
-                    )}
+                    <div
+                      className={cn(
+                        "flex items-center justify-center w-8 h-8 rounded-full shrink-0",
+                        call.status === "completed"
+                          ? "bg-emerald-500/10 text-emerald-400"
+                          : call.status === "no_answer" || call.status === "missed"
+                          ? "bg-amber-500/10 text-amber-400"
+                          : "bg-red-500/10 text-red-400"
+                      )}
+                    >
+                      {call.direction === "inbound" ? (
+                        <PhoneIncoming className="w-3.5 h-3.5" />
+                      ) : (
+                        <PhoneOutgoing className="w-3.5 h-3.5" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {formatPhone(call.caller_number)}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {timeAgo(call.started_at || call.created_at)} · {formatDuration(call.duration_seconds)}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={
+                        call.status === "completed"
+                          ? "success"
+                          : call.status === "no_answer" || call.status === "missed"
+                          ? "warning"
+                          : "destructive"
+                      }
+                    >
+                      {call.status.replace("_", " ")}
+                    </Badge>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {formatPhone(call.caller_number)}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {timeAgo(call.started_at)} · {formatDuration(call.duration_seconds)}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      call.status === "completed"
-                        ? "success"
-                        : call.status === "no_answer"
-                        ? "warning"
-                        : "destructive"
-                    }
-                  >
-                    {call.status.replace("_", " ")}
-                  </Badge>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Recent Leads */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Recent Leads</CardTitle>
-              <button className="text-[11px] text-primary hover:underline">View all →</button>
-            </div>
+            <CardTitle>Recent Leads</CardTitle>
           </CardHeader>
           <CardContent>
+            {recentLeads.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No leads yet</p>
+            ) : (
+              <div className="space-y-1">
+                {recentLeads.map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+                      {(lead.caller_name || "?")
+                        .split(" ")
+                        .map((n: string) => n[0])
+                        .join("")}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {lead.caller_name || "Unknown"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {lead.summary || lead.intent || "—"}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <Badge
+                        variant={
+                          lead.urgency === "emergency" || lead.urgency === "high"
+                            ? "destructive"
+                            : lead.status === "booked"
+                            ? "success"
+                            : "secondary"
+                        }
+                      >
+                        {lead.status}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground">
+                        {Math.round(lead.lead_score * 100)}% score
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* AI Tool Activity */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Wrench className="w-4 h-4" />
+              AI Tool Activity
+            </CardTitle>
+            <span className="text-[11px] text-muted-foreground">
+              {stats.tool_calls_today} tool calls today
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Summary badges */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {Object.entries(toolSummary).map(([name, count]) => (
+              <Badge key={name} variant="secondary" className="text-xs">
+                {TOOL_LABELS[name] || name}: {count}
+              </Badge>
+            ))}
+            {Object.keys(toolSummary).length === 0 && (
+              <span className="text-xs text-muted-foreground">No tool calls yet</span>
+            )}
+          </div>
+
+          {/* Recent tool calls */}
+          {toolCalls.length > 0 && (
             <div className="space-y-1">
-              {MOCK_LEADS.map((lead) => (
+              {toolCalls.slice(0, 5).map((tc) => (
                 <div
-                  key={lead.id}
-                  className="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-accent/50 transition-colors"
+                  key={tc.id}
+                  className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-accent/50 transition-colors"
                 >
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-                    {lead.caller_name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
+                  <div className={cn(
+                    "flex items-center justify-center w-7 h-7 rounded-full shrink-0",
+                    tc.success ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                  )}>
+                    <Wrench className="w-3 h-3" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {lead.caller_name}
+                    <p className="text-xs font-medium text-foreground">
+                      {TOOL_LABELS[tc.tool_name] || tc.tool_name}
                     </p>
-                    <p className="text-[11px] text-muted-foreground truncate">
-                      {lead.summary}
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {tc.parameters?.name && `${tc.parameters.name} · `}
+                      {tc.parameters?.email || tc.parameters?.phone || tc.parameters?.service || ""}
                     </p>
                   </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <Badge
-                      variant={
-                        lead.urgency === "emergency"
-                          ? "destructive"
-                          : lead.urgency === "high"
-                          ? "warning"
-                          : "secondary"
-                      }
-                    >
-                      {lead.urgency}
-                    </Badge>
-                    <span className="text-[10px] text-muted-foreground">
-                      {Math.round(lead.lead_score * 100)}% score
-                    </span>
+                  <div className="text-right shrink-0">
+                    <p className="text-[10px] text-muted-foreground">{timeAgo(tc.created_at)}</p>
+                    {tc.duration_ms && (
+                      <p className="text-[9px] text-muted-foreground">{tc.duration_ms}ms</p>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* AI Agent Status Bar */}
       <Card>
@@ -344,27 +535,27 @@ export function DashboardPage() {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-foreground">Aria</span>
+                <span className="text-sm font-semibold text-foreground">AI Agent</span>
                 <Badge variant="success">active</Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Deepgram Nova-3 STT · GPT-4o · ElevenLabs Rachel · 3.2s avg response time
+                ElevenLabs Conversational AI · 5 tools connected
               </p>
             </div>
             <div className="hidden md:flex items-center gap-6 text-center">
               <div>
-                <p className="text-lg font-bold text-foreground">94.2%</p>
+                <p className="text-lg font-bold text-foreground">{answerRate}%</p>
                 <p className="text-[10px] text-muted-foreground">Answer Rate</p>
               </div>
               <div className="w-px h-8 bg-border" />
               <div>
-                <p className="text-lg font-bold text-foreground">4.8/5</p>
-                <p className="text-[10px] text-muted-foreground">Sentiment</p>
+                <p className="text-lg font-bold text-foreground">{stats.conversion_rate}%</p>
+                <p className="text-[10px] text-muted-foreground">Lead Conv.</p>
               </div>
               <div className="w-px h-8 bg-border" />
               <div>
-                <p className="text-lg font-bold text-foreground">28.6%</p>
-                <p className="text-[10px] text-muted-foreground">Lead Conv.</p>
+                <p className="text-lg font-bold text-foreground">{stats.booked_appointments}</p>
+                <p className="text-[10px] text-muted-foreground">Booked</p>
               </div>
             </div>
           </div>

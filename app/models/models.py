@@ -385,6 +385,36 @@ class OutreachSequence(Base):
 
 # ── Agent Templates ───────────────────────────────────────────────────────────
 
+class ToolCallLog(Base):
+    """Audit log for every ElevenLabs tool call processed by the platform."""
+    __tablename__ = "tool_call_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+
+    tool_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    parameters: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    result: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    success: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Optional conversation linkage
+    conversation_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("leads.id", ondelete="SET NULL"), nullable=True)
+
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    # Relationships
+    client: Mapped["Client"] = relationship()
+
+    __table_args__ = (
+        Index("ix_tool_call_logs_client_id", "client_id"),
+        Index("ix_tool_call_logs_tool_name", "tool_name"),
+        Index("ix_tool_call_logs_created_at", "created_at"),
+    )
+
+
 class AgentTemplate(Base):
     """Reusable agent template created by admin.
 

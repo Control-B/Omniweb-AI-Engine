@@ -9,6 +9,7 @@ from app.models.models import (
     SmsMessage,
     OutreachSequence,
     AgentTemplate,
+    ToolCallLog,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "SmsMessage",
     "OutreachSequence",
     "AgentTemplate",
+    "ToolCallLog",
 ]

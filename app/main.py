@@ -130,7 +130,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         now = time.time()
 
         # Determine limit based on path
-        if "/auth/login" in path or "/auth/signup" in path:
+        if any(
+            auth_path in path
+            for auth_path in [
+                "/auth/login",
+                "/auth/signup",
+                "/auth/forgot-password",
+                "/auth/reset-password",
+                "/auth/accept-invite",
+            ]
+        ):
             limit = _RATE_LIMIT_MAX_AUTH
             key = f"auth:{client_ip}"
         elif path.startswith("/api/"):

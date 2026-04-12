@@ -59,6 +59,12 @@ class Client(Base):
     supabase_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
     crm_webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notification_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_reset_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invite_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    invite_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invite_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 

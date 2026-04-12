@@ -156,6 +156,32 @@ export interface AdminUser {
   role: string;
   is_active: boolean;
   created_at: string | null;
+  invited_at: string | null;
+  invite_accepted_at: string | null;
+}
+
+export async function requestPasswordReset(body: {
+  email: string;
+  portal?: "client" | "admin";
+}) {
+  return apiFetch<{ ok: boolean; message: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function resetPasswordWithToken(token: string, newPassword: string) {
+  return apiFetch<{ ok: boolean; message: string }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+}
+
+export async function acceptInvite(token: string, password: string, name?: string) {
+  return apiFetch<{ ok: boolean; message: string }>("/auth/accept-invite", {
+    method: "POST",
+    body: JSON.stringify({ token, password, name }),
+  });
 }
 
 export async function getAdminUsers(): Promise<AdminUser[]> {
@@ -170,6 +196,29 @@ export async function createAdminUser(body: {
   return apiFetch<AdminUser>("/auth/admin/users", {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+export async function inviteAdminUser(body: {
+  name: string;
+  email: string;
+}): Promise<AdminUser> {
+  return apiFetch<AdminUser>("/auth/admin/users/invite", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function setAdminUserStatus(userId: string, isActive: boolean): Promise<AdminUser> {
+  return apiFetch<AdminUser>(`/auth/admin/users/${userId}/status`, {
+    method: "POST",
+    body: JSON.stringify({ is_active: isActive }),
+  });
+}
+
+export async function sendAdminUserReset(userId: string): Promise<AdminUser> {
+  return apiFetch<AdminUser>(`/auth/admin/users/${userId}/send-reset`, {
+    method: "POST",
   });
 }
 

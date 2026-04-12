@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Zap, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
-import { login, signup } from "@/lib/api";
+import { login, requestPasswordReset, signup } from "@/lib/api";
 
 export default function LoginPage() {
   const [portal, setPortal] = useState<"client" | "admin">("client");
@@ -14,11 +14,13 @@ export default function LoginPage() {
   const [name, setName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setNotice("");
     setLoading(true);
 
     try {
@@ -38,6 +40,24 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       setError(err.message || "Something went wrong");
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      setError("Enter your email first");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await requestPasswordReset({ email, portal });
+      setNotice(result.message);
+    } catch (err: any) {
+      setError(err.message || "Failed to send reset email");
+    } finally {
       setLoading(false);
     }
   }
@@ -149,9 +169,27 @@ export default function LoginPage() {
             />
           </div>
 
+          {mode === "login" && (
+            <div className="flex justify-end -mt-1">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-xs text-primary hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
+
           {error && (
             <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
               {error}
+            </div>
+          )}
+
+          {notice && (
+            <div className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+              {notice}
             </div>
           )}
 

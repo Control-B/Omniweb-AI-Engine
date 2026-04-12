@@ -72,6 +72,16 @@ def hash_api_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
+def generate_secure_token() -> str:
+    """Generate a URL-safe token for password reset and invite flows."""
+    return secrets.token_urlsafe(32)
+
+
+def hash_token(token: str) -> str:
+    """One-way hash for storing reset/invite tokens in the DB."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 # ── JWT Tokens ────────────────────────────────────────────────────────────────
 
 def create_access_token(

@@ -6,7 +6,8 @@ when no provider is configured (safe for dev).
 
 Supported emails:
   - Welcome (post-signup)
-  - Password reset (future: when forgot-password flow is added)
+    - Password reset
+    - Team invite
   - Billing alerts
   - Weekly reports
 """
@@ -155,4 +156,32 @@ async def send_password_reset_email(*, to: str, name: str, reset_url: str) -> bo
     </div>
     """
     text = f"Reset your Omniweb password: {reset_url} (expires in 1 hour)"
+    return await send_email(to=to, subject=subject, html_body=html, text_body=text)
+
+
+async def send_team_invite_email(*, to: str, name: str, invited_by: str, accept_url: str) -> bool:
+    """Send an admin/team invitation email."""
+    subject = "You're invited to Omniweb AI Admin"
+    html = f"""
+    <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px;">
+        <h1 style="font-size: 22px; margin: 0 0 8px;">You're invited</h1>
+        <p style="color: #666; font-size: 15px; line-height: 1.6;">
+            Hi {name}, {invited_by} invited you to join the Omniweb AI admin workspace.
+        </p>
+        <div style="text-align: center; margin: 28px 0;">
+            <a href="{accept_url}"
+               style="display: inline-block; background: #6366f1; color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">
+                Accept Invite
+            </a>
+        </div>
+        <p style="color: #999; font-size: 13px;">
+            This invite expires in 72 hours. You'll set your password on the next screen.
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">
+            Omniweb AI · <a href="{settings.PLATFORM_URL}" style="color: #999;">omniweb.ai</a>
+        </p>
+    </div>
+    """
+    text = f"{invited_by} invited you to join Omniweb AI Admin. Accept here: {accept_url}"
     return await send_email(to=to, subject=subject, html_body=html, text_body=text)

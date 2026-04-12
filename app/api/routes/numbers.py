@@ -39,10 +39,11 @@ async def list_available(
     area_code: Optional[str] = Query(None),
     country: str = Query("US"),
     limit: int = Query(20, le=50),
+    number_type: str = Query("local"),  # "local" or "toll_free"
 ) -> dict:
     """Search available phone numbers from Twilio."""
     numbers = await sip_provisioning_service.list_available_numbers(
-        area_code=area_code, country=country, limit=limit
+        area_code=area_code, country=country, limit=limit, number_type=number_type,
     )
     return {"numbers": numbers}
 

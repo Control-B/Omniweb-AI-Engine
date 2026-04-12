@@ -201,8 +201,8 @@ export async function getNumbers(clientId?: string) {
   return apiFetch(`/numbers${params}`);
 }
 
-export async function searchAvailableNumbers(areaCode?: string, country = "US", limit = 20) {
-  const params = new URLSearchParams({ country, limit: String(limit) });
+export async function searchAvailableNumbers(areaCode?: string, country = "US", limit = 20, numberType = "local") {
+  const params = new URLSearchParams({ country, limit: String(limit), number_type: numberType });
   if (areaCode) params.set("area_code", areaCode);
   return apiFetch<{ numbers: any[] }>(`/numbers/available?${params}`);
 }

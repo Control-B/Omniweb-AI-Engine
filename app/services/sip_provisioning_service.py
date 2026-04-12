@@ -87,12 +87,17 @@ async def list_available_numbers(
     area_code: str | None = None,
     country: str = "US",
     limit: int = 20,
+    number_type: str = "local",  # "local" or "toll_free"
 ) -> list[dict]:
-    """Search available phone numbers from Twilio."""
+    """Search available phone numbers from Twilio.
+
+    Args:
+        number_type: "local" for local numbers, "toll_free" for toll-free (800/888/877/etc.)
+    """
     if not settings.twilio_configured:
         return [
-            {"phone_number": "+15550000001", "location": "New York, NY", "monthly_rate": 1.15},
-            {"phone_number": "+15550000002", "location": "Los Angeles, CA", "monthly_rate": 1.15},
+            {"phone_number": "+15550000001", "location": "New York, NY", "monthly_rate": 1.15, "type": "local"},
+            {"phone_number": "+15550000002", "location": "Los Angeles, CA", "monthly_rate": 1.15, "type": "local"},
         ]
 
     try:
@@ -103,21 +108,25 @@ async def list_available_numbers(
         if area_code:
             kwargs["area_code"] = area_code
 
-        if country == "US":
-            numbers = client.available_phone_numbers("US").local.list(**kwargs)
+        avail = client.available_phone_numbers(country)
+        if number_type == "toll_free":
+            numbers = avail.toll_free.list(**kwargs)
+            rate = 2.15
         else:
-            numbers = client.available_phone_numbers(country).local.list(**kwargs)
+            numbers = avail.local.list(**kwargs)
+            rate = 1.15
 
         return [
             {
                 "phone_number": n.phone_number,
                 "friendly_name": n.friendly_name,
-                "location": f"{n.locality}, {n.region}" if n.locality else n.region or "",
+                "location": f"{n.locality}, {n.region}" if hasattr(n, 'locality') and n.locality else (n.region if hasattr(n, 'region') and n.region else ""),
                 "capabilities": {
                     "voice": n.capabilities.get("voice", False),
                     "sms": n.capabilities.get("sms", False),
                 },
-                "monthly_rate": 1.15,
+                "monthly_rate": rate,
+                "type": number_type,
             }
             for n in numbers
         ]

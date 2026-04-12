@@ -48,6 +48,7 @@ export function NumbersPage() {
   // Search / Buy state
   const [showSearch, setShowSearch] = useState(false);
   const [areaCode, setAreaCode] = useState("");
+  const [numberType, setNumberType] = useState<"local" | "toll_free">("local");
   const [searchResults, setSearchResults] = useState<AvailableNumber[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -88,7 +89,7 @@ export function NumbersPage() {
     setSearchError(null);
     setSearchResults([]);
     try {
-      const res = await searchAvailableNumbers(areaCode || undefined);
+      const res = await searchAvailableNumbers(areaCode || undefined, "US", 20, numberType);
       setSearchResults(res.numbers || []);
       if ((res.numbers || []).length === 0) {
         setSearchError("No numbers found. Try a different area code.");
@@ -215,14 +216,40 @@ export function NumbersPage() {
             <div>
               <h3 className="text-sm font-semibold text-foreground">Search Available Numbers</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Find a phone number from our inventory. Numbers are billed at ~$1.15/mo.
+                Find a phone number from our inventory.
               </p>
+            </div>
+
+            {/* Number type toggle */}
+            <div className="flex gap-1 p-0.5 bg-accent/50 rounded-lg w-fit">
+              <button
+                onClick={() => setNumberType("local")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  numberType === "local"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Local
+              </button>
+              <button
+                onClick={() => setNumberType("toll_free")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  numberType === "toll_free"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Toll-Free
+              </button>
             </div>
 
             <div className="flex gap-2">
               <div className="flex-1">
                 <Input
-                  placeholder="Area code (e.g. 212, 415, 305)..."
+                  placeholder={numberType === "toll_free" ? "Area code (e.g. 800, 888, 877)..." : "Area code (e.g. 212, 415, 305)..."}
                   value={areaCode}
                   onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))}
                   className="font-mono"

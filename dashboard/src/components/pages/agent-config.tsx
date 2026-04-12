@@ -15,6 +15,13 @@ import {
   Zap,
   Bot,
   Globe,
+  BookOpen,
+  Upload,
+  FileText,
+  Link2,
+  Trash2,
+  Plus,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +29,16 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea, Label } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { getAgentConfig, updateAgentConfig, getWidgetEmbed } from "@/lib/api";
+import {
+  getAgentConfig,
+  updateAgentConfig,
+  getWidgetEmbed,
+  getKnowledgeBase,
+  createKbFromText,
+  createKbFromUrl,
+  uploadKbFile,
+  deleteKbDocument,
+} from "@/lib/api";
 
 const VOICE_OPTIONS = [
   { id: "EXAVITQu4vr4xnSDxMaL", name: "Rachel", accent: "American", style: "Warm & Professional" },
@@ -83,7 +99,20 @@ export function AgentConfigPage() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"personality" | "voice" | "brain" | "languages" | "widget">("personality");
+  const [activeTab, setActiveTab] = useState<"personality" | "voice" | "brain" | "languages" | "knowledge" | "widget">("personality");
+
+  // Knowledge Base state
+  const [kbDocs, setKbDocs] = useState<any[]>([]);
+  const [kbLoading, setKbLoading] = useState(false);
+  const [kbUploading, setKbUploading] = useState(false);
+  const [kbError, setKbError] = useState("");
+  const [kbAddMode, setKbAddMode] = useState<"" | "text" | "url" | "file">("");
+  const [kbTextName, setKbTextName] = useState("");
+  const [kbTextContent, setKbTextContent] = useState("");
+  const [kbUrlName, setKbUrlName] = useState("");
+  const [kbUrlValue, setKbUrlValue] = useState("");
+  const [kbFileName, setKbFileName] = useState("");
+  const [kbFile, setKbFile] = useState<File | null>(null);
 
   const clientId = user?.client_id || "";
 
@@ -107,9 +136,26 @@ export function AgentConfigPage() {
     }
   }, [clientId]);
 
+  const loadKbDocs = useCallback(async () => {
+    setKbLoading(true);
+    setKbError("");
+    try {
+      const data = await getKnowledgeBase();
+      setKbDocs(data.documents || []);
+    } catch (err: any) {
+      setKbError(err.message || "Failed to load knowledge base");
+    } finally {
+      setKbLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+
+  useEffect(() => {
+    if (activeTab === "knowledge") loadKbDocs();
+  }, [activeTab, loadKbDocs]);
 
   const update = (field: string, value: any) => {
     if (!config) return;
@@ -142,6 +188,71 @@ export function AgentConfigPage() {
       setError(err.message || "Failed to save");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const resetKbForm = () => {
+    setKbAddMode("");
+    setKbTextName("");
+    setKbTextContent("");
+    setKbUrlName("");
+    setKbUrlValue("");
+    setKbFileName("");
+    setKbFile(null);
+  };
+
+  const handleKbAddText = async () => {
+    if (!kbTextContent.trim()) return;
+    setKbUploading(true);
+    setKbError("");
+    try {
+      await createKbFromText(kbTextContent, kbTextName || undefined);
+      resetKbForm();
+      await loadKbDocs();
+    } catch (err: any) {
+      setKbError(err.message || "Failed to add text");
+    } finally {
+      setKbUploading(false);
+    }
+  };
+
+  const handleKbAddUrl = async () => {
+    if (!kbUrlValue.trim()) return;
+    setKbUploading(true);
+    setKbError("");
+    try {
+      await createKbFromUrl(kbUrlValue, kbUrlName || undefined);
+      resetKbForm();
+      await loadKbDocs();
+    } catch (err: any) {
+      setKbError(err.message || "Failed to add URL");
+    } finally {
+      setKbUploading(false);
+    }
+  };
+
+  const handleKbUploadFile = async () => {
+    if (!kbFile) return;
+    setKbUploading(true);
+    setKbError("");
+    try {
+      await uploadKbFile(kbFile, kbFileName || undefined);
+      resetKbForm();
+      await loadKbDocs();
+    } catch (err: any) {
+      setKbError(err.message || "Failed to upload file");
+    } finally {
+      setKbUploading(false);
+    }
+  };
+
+  const handleKbDelete = async (docId: string) => {
+    if (!confirm("Delete this document? The agent will no longer have access to it.")) return;
+    try {
+      await deleteKbDocument(docId);
+      setKbDocs((prev) => prev.filter((d) => d.id !== docId));
+    } catch (err: any) {
+      setKbError(err.message || "Failed to delete");
     }
   };
 
@@ -182,6 +293,7 @@ export function AgentConfigPage() {
     { id: "voice" as const, label: "Voice", icon: Volume2 },
     { id: "brain" as const, label: "AI Brain", icon: Brain },
     { id: "languages" as const, label: "Languages", icon: Globe },
+    { id: "knowledge" as const, label: "Knowledge Base", icon: BookOpen },
     { id: "widget" as const, label: "Widget & Embed", icon: Code },
   ];
 
@@ -404,6 +516,227 @@ export function AgentConfigPage() {
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {activeTab === "knowledge" && (
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Knowledge Base</CardTitle>
+                  <CardDescription>
+                    Upload documents, text, or URLs to give your agent custom knowledge
+                  </CardDescription>
+                </div>
+                {!kbAddMode && (
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setKbAddMode("text")}>
+                      <FileText className="w-3.5 h-3.5" /> Add Text
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setKbAddMode("url")}>
+                      <Link2 className="w-3.5 h-3.5" /> Add URL
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setKbAddMode("file")}>
+                      <Upload className="w-3.5 h-3.5" /> Upload File
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {kbError && (
+                <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {kbError}
+                </div>
+              )}
+
+              {/* ── Add Text form ── */}
+              {kbAddMode === "text" && (
+                <Card className="border-primary/30 bg-primary/[0.02]">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium flex items-center gap-1.5">
+                        <FileText className="w-4 h-4" /> Add Text Content
+                      </span>
+                      <button onClick={resetKbForm} className="text-muted-foreground hover:text-foreground">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Name (optional)</Label>
+                      <Input
+                        value={kbTextName}
+                        onChange={(e) => setKbTextName(e.target.value)}
+                        placeholder="e.g. Company FAQ, Pricing info"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Content</Label>
+                      <Textarea
+                        value={kbTextContent}
+                        onChange={(e) => setKbTextContent(e.target.value)}
+                        placeholder="Paste your knowledge content here...\n\nExample: Our business hours are Monday-Friday 9am-5pm..."
+                        rows={6}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={resetKbForm}>Cancel</Button>
+                      <Button size="sm" onClick={handleKbAddText} disabled={kbUploading || !kbTextContent.trim()}>
+                        {kbUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                        {kbUploading ? "Adding..." : "Add to Knowledge Base"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── Add URL form ── */}
+              {kbAddMode === "url" && (
+                <Card className="border-primary/30 bg-primary/[0.02]">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium flex items-center gap-1.5">
+                        <Link2 className="w-4 h-4" /> Add from URL
+                      </span>
+                      <button onClick={resetKbForm} className="text-muted-foreground hover:text-foreground">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Name (optional)</Label>
+                      <Input
+                        value={kbUrlName}
+                        onChange={(e) => setKbUrlName(e.target.value)}
+                        placeholder="e.g. About Us Page"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>URL</Label>
+                      <Input
+                        value={kbUrlValue}
+                        onChange={(e) => setKbUrlValue(e.target.value)}
+                        placeholder="https://example.com/about"
+                        type="url"
+                      />
+                      <p className="text-xs text-muted-foreground">The page content will be scraped and added to your agent&apos;s knowledge</p>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={resetKbForm}>Cancel</Button>
+                      <Button size="sm" onClick={handleKbAddUrl} disabled={kbUploading || !kbUrlValue.trim()}>
+                        {kbUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                        {kbUploading ? "Adding..." : "Add to Knowledge Base"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── Upload File form ── */}
+              {kbAddMode === "file" && (
+                <Card className="border-primary/30 bg-primary/[0.02]">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium flex items-center gap-1.5">
+                        <Upload className="w-4 h-4" /> Upload File
+                      </span>
+                      <button onClick={resetKbForm} className="text-muted-foreground hover:text-foreground">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Display Name (optional)</Label>
+                      <Input
+                        value={kbFileName}
+                        onChange={(e) => setKbFileName(e.target.value)}
+                        placeholder="e.g. Product Catalog 2026"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>File</Label>
+                      <input
+                        type="file"
+                        accept=".pdf,.txt,.docx,.doc,.md,.csv,.html"
+                        onChange={(e) => setKbFile(e.target.files?.[0] || null)}
+                        className="block w-full text-sm text-muted-foreground
+                          file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border
+                          file:border-border file:text-sm file:font-medium
+                          file:bg-background file:text-foreground
+                          hover:file:bg-secondary cursor-pointer"
+                      />
+                      <p className="text-xs text-muted-foreground">Supported: PDF, TXT, DOCX, DOC, MD, CSV, HTML — max 25 MB</p>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={resetKbForm}>Cancel</Button>
+                      <Button size="sm" onClick={handleKbUploadFile} disabled={kbUploading || !kbFile}>
+                        {kbUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                        {kbUploading ? "Uploading..." : "Upload"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── Documents list ── */}
+              {kbLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : kbDocs.length === 0 ? (
+                <div className="text-center py-10">
+                  <BookOpen className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                  <h3 className="font-medium mb-1">No documents yet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Add text, URLs, or upload files to give your agent custom knowledge about your business.
+                  </p>
+                  {!kbAddMode && (
+                    <Button size="sm" variant="outline" onClick={() => setKbAddMode("text")}>
+                      <Plus className="w-3.5 h-3.5" /> Add Your First Document
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {kbDocs.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 rounded-md bg-secondary">
+                          <FileText className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{doc.name || doc.id}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {doc.type && <span className="capitalize">{doc.type}</span>}
+                            {doc.type && doc.size_bytes && " · "}
+                            {doc.size_bytes && `${(doc.size_bytes / 1024).toFixed(0)} KB`}
+                            {!doc.type && !doc.size_bytes && <span className="font-mono">{doc.id}</span>}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleKbDelete(doc.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <p className="text-xs text-muted-foreground px-1">
+            Documents are automatically attached to your AI agent. The agent will use this knowledge when answering questions from callers and chat visitors.
+          </p>
+        </div>
       )}
 
       {activeTab === "widget" && (

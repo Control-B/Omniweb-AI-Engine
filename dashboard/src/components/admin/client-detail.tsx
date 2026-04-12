@@ -21,6 +21,18 @@ import {
   Globe,
 } from "lucide-react";
 
+const LANGUAGE_FLAGS: Record<string, string> = {
+  ar: "🇸🇦", de: "🇩🇪", en: "🇺🇸", es: "🇪🇸", fr: "🇫🇷", hi: "🇮🇳",
+  it: "🇮🇹", ja: "🇯🇵", ko: "🇰🇷", nl: "🇳🇱", pl: "🇵🇱", pt: "🇧🇷",
+  ru: "🇷🇺", tr: "🇹🇷", uk: "🇺🇦", zh: "🇨🇳",
+};
+
+const LANGUAGE_LABELS: Record<string, string> = {
+  ar: "Arabic", de: "German", en: "English", es: "Spanish", fr: "French", hi: "Hindi",
+  it: "Italian", ja: "Japanese", ko: "Korean", nl: "Dutch", pl: "Polish", pt: "Portuguese",
+  ru: "Russian", tr: "Turkish", uk: "Ukrainian", zh: "Chinese",
+};
+
 interface ClientDetail {
   id: string;
   name: string;
@@ -303,7 +315,10 @@ export function AdminClientDetail({ clientId, onBack }: AdminClientDetailProps) 
                 </div>
                 <div className="p-4 rounded-lg bg-sidebar-accent">
                   <p className="text-[11px] text-muted-foreground font-medium">Language</p>
-                  <p className="text-sm text-foreground mt-1">{client.agent_config.language}</p>
+                  <p className="text-sm text-foreground mt-1">
+                    {LANGUAGE_FLAGS[client.agent_config.language] ?? "🌐"}{" "}
+                    {LANGUAGE_LABELS[client.agent_config.language] ?? client.agent_config.language}
+                  </p>
                 </div>
                 <div className="p-4 rounded-lg bg-sidebar-accent sm:col-span-1">
                   <p className="text-[11px] text-muted-foreground font-medium">Greeting</p>
@@ -322,8 +337,9 @@ export function AdminClientDetail({ clientId, onBack }: AdminClientDetailProps) 
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {client.agent_config.supported_languages.map((code: string) => (
-                      <Badge key={code} variant="outline" className="text-[10px] px-2 py-0.5">
-                        {code.toUpperCase()}
+                      <Badge key={code} variant="outline" className="text-[11px] px-2.5 py-0.5 gap-1">
+                        <span>{LANGUAGE_FLAGS[code] ?? "🌐"}</span>
+                        {LANGUAGE_LABELS[code] ?? code.toUpperCase()}
                       </Badge>
                     ))}
                   </div>

@@ -188,6 +188,28 @@ def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(timeout=30, headers=_headers())
 
 
+def _default_overrides() -> dict[str, Any]:
+    """Return the overrides config that locks down voice-first behaviour.
+
+    The critical setting is `conversation.text_only: false` which **prevents**
+    the widget runtime from switching to text-only mode on its own.  When that
+    flag was `true` (the ElevenLabs default), the widget could flip into text
+    mode and prepend the `first_message` as a chat bubble *in addition* to the
+    agent speaking it — producing the double-welcome-message bug.
+    """
+    return {
+        "conversation_config_override": {
+            "conversation": {
+                "text_only": False,
+            },
+            "agent": {
+                "first_message": False,
+                "language": True,
+            },
+        },
+    }
+
+
 def _default_widget_settings(*, language_selector: bool) -> dict[str, Any]:
     """Return the standard voice-first widget config for all agents.
 
@@ -314,6 +336,7 @@ async def create_agent(
     # Add knowledge base if provided
     platform_settings: dict[str, Any] = {
         "widget": _default_widget_settings(language_selector=bool(lang_presets)),
+        "overrides": _default_overrides(),
     }
     if knowledge_base_ids:
         agent_config["agent"]["knowledge_base"] = [
@@ -415,6 +438,9 @@ async def update_agent(
 
     if "platform_settings" not in payload:
         payload["platform_settings"] = {"widget": widget_settings}
+
+    # Always send overrides to lock down voice-first behaviour
+    payload.setdefault("platform_settings", {})["overrides"] = _default_overrides()
 
     if conversation_config:
         payload["conversation_config"] = conversation_config
@@ -725,14 +751,15 @@ async def get_conversation_audio(conversation_id: str) -> bytes | None:
 
 
 def get_widget_embed_code(agent_id: str) -> str:
-    """Generate the HTML embed snippet for the ElevenLabs chat widget."""
+    """Generate the HTML embed snippet for the ElevenLabs chat widget.
+
+    Voice-first behaviour is enforced server-side via:
+    - ``platform_settings.overrides`` blocking the widget from switching to text-only.
+    - ``platform_settings.widget.text_only = false``.
+    The agent's ``first_message`` is spoken by TTS on connect; no text bubble.
+    """
     return (
-        f'<elevenlabs-convai '\
-        f'agent-id="{agent_id}" '\
-        f'text-input="true" '\
-        f'override-text-only="false" '\
-        f'override-first-message="{DEFAULT_FIRST_MESSAGES["en"].replace("\"", "&quot;")}"'\
-        f'></elevenlabs-convai>\n'
+        f'<elevenlabs-convai agent-id="{agent_id}"></elevenlabs-convai>\n'
         f'<script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>'
     )
 

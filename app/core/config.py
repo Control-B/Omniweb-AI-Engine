@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     SECRET_KEY: str = "change-me-in-production"
     INTERNAL_API_KEY: str = "change-me-in-production"  # platform → engine auth
+    ELEVENLABS_TOOL_SECRET: str = "change-me"  # shared secret for ElevenLabs tool webhooks
+    LANDING_PAGE_CLIENT_ID: str = ""  # client UUID for landing-page leads
     # Allowed CORS origins for the dashboard frontend
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",

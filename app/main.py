@@ -35,6 +35,7 @@ from app.api.routes import (
     templates,
     webhooks_elevenlabs,
     webhooks_stripe,
+    webhooks_tools,
 )
 
 settings = get_settings()
@@ -83,6 +84,7 @@ app.include_router(auth.router, prefix=API_PREFIX)
 # Webhooks (no auth — URLs configured in ElevenLabs/Stripe dashboards)
 app.include_router(webhooks_elevenlabs.router, prefix=API_PREFIX)
 app.include_router(webhooks_stripe.router, prefix=API_PREFIX)
+app.include_router(webhooks_tools.router, prefix=API_PREFIX)
 
 # Data API
 app.include_router(calls.router, prefix=API_PREFIX)

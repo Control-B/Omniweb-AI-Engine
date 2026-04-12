@@ -111,7 +111,7 @@ def get_language_options() -> list[dict[str, Any]]:
 DEFAULT_FIRST_MESSAGES: dict[str, str] = {
     "ar": "مرحبًا! كيف يمكنني مساعدتك اليوم؟",
     "de": "Hallo! Wie kann ich Ihnen heute helfen?",
-    "en": "Hi there! How can I help you today?",
+    "en": "Hi, I'd love to help you today, so tell me the problem you're trying to solve, and I'll understand your needs, recommend the right solution, and answer your questions so you can move forward faster by text or voice. Talk to me.",
     "es": "¡Hola! ¿En qué puedo ayudarte hoy?",
     "fr": "Bonjour ! Comment puis-je vous aider aujourd'hui ?",
     "hi": "नमस्ते! आज मैं आपकी कैसे मदद कर सकता हूँ?",
@@ -293,7 +293,7 @@ async def create_agent(
             "variant": "compact",
             "shareable_page_enabled": True,
             "text_input_enabled": True,
-            "supports_text_only": True,
+            "supports_text_only": False,
             "transcript_enabled": True,
             "feedback_mode": "during",
             "language_selector": bool(lang_presets),
@@ -707,7 +707,7 @@ def get_widget_embed_code(agent_id: str) -> str:
     """Generate the HTML embed snippet for the ElevenLabs chat widget."""
     return (
         f'<elevenlabs-convai agent-id="{agent_id}"></elevenlabs-convai>\n'
-        f'<script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>'
+        f'<script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>'
     )
 
 

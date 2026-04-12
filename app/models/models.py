@@ -93,7 +93,7 @@ class AgentConfig(Base):
     agent_name: Mapped[str] = mapped_column(String(100), default="Alex", nullable=False)
     agent_greeting: Mapped[str] = mapped_column(
         Text,
-        default="Thank you for calling! How can I help you today?",
+        default="Hi, I'd love to help you today, so tell me the problem you're trying to solve, and I'll understand your needs, recommend the right solution, and answer your questions so you can move forward faster by text or voice. Talk to me.",
         nullable=False,
     )
 

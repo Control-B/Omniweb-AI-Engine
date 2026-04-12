@@ -14,12 +14,20 @@ from app.api.deps import get_session
 from app.core.auth import get_current_client
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.models import AgentConfig, PhoneNumber
+from app.models.models import AgentConfig, PhoneNumber, Client
 from app.services import sip_provisioning_service, elevenlabs_service
 
 logger = get_logger(__name__)
 settings = get_settings()
 router = APIRouter(prefix="/numbers", tags=["numbers"])
+
+# Plan limits for phone numbers
+PLAN_NUMBER_LIMITS = {
+    "starter": 1,
+    "growth": 3,
+    "pro": 5,
+    "agency": 50,
+}
 
 
 def _resolve_client_id(current_client: dict, client_id: str | None) -> str:
@@ -56,6 +64,21 @@ async def provision_number(
 ) -> dict:
     """Buy a Twilio number and import it into ElevenLabs for the client's agent."""
     cid = _resolve_client_id(current_client, body.client_id)
+
+    # ── Plan enforcement: check number limit ──────────────────────────
+    plan = current_client.get("plan", "starter")
+    max_numbers = PLAN_NUMBER_LIMITS.get(plan, 1)
+    existing_count_result = await db.execute(
+        select(PhoneNumber).where(PhoneNumber.client_id == cid)
+    )
+    existing_count = len(existing_count_result.scalars().all())
+    if existing_count >= max_numbers:
+        raise HTTPException(
+            403,
+            f"Your {plan} plan allows up to {max_numbers} phone number(s). "
+            f"You currently have {existing_count}. Upgrade your plan to add more.",
+        )
+
     # Look up the client's ElevenLabs agent ID
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == cid)

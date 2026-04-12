@@ -107,6 +107,50 @@ export function logout() {
   if (typeof window !== "undefined") window.location.href = "/login";
 }
 
+// ── Profile ──────────────────────────────────────────────────────────────────
+
+export interface Profile {
+  client_id: string;
+  name: string;
+  email: string;
+  plan: string;
+  role: string;
+  crm_webhook_url: string | null;
+  notification_email: string | null;
+  business_name: string | null;
+  business_type: string | null;
+  created_at: string | null;
+}
+
+export async function getProfile(): Promise<Profile> {
+  return apiFetch<Profile>("/auth/profile");
+}
+
+export async function updateProfile(body: {
+  name?: string;
+  notification_email?: string;
+  crm_webhook_url?: string;
+  business_name?: string;
+}): Promise<Profile> {
+  return apiFetch<Profile>("/auth/profile", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  return apiFetch<{ ok: boolean; message: string }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+export async function generateApiKey() {
+  return apiFetch<{ api_key: string; note: string }>("/auth/api-key", {
+    method: "POST",
+  });
+}
+
 // ── Client data endpoints ────────────────────────────────────────────────────
 
 export async function getAnalytics(clientId?: string) {

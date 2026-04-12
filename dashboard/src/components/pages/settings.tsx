@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Building2,
   Key,
@@ -11,12 +11,24 @@ import {
   Check,
   Eye,
   EyeOff,
+  Loader2,
+  Lock,
+  AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import {
+  getProfile,
+  updateProfile,
+  changePassword,
+  generateApiKey,
+  parseJwt,
+  getToken,
+  type Profile,
+} from "@/lib/api";
 
 const TABS = ["profile", "api-keys", "notifications", "billing"] as const;
 type Tab = (typeof TABS)[number];
@@ -57,11 +69,11 @@ function CopyButton({ value }: { value: string }) {
 
 function RevealKey({ value }: { value: string }) {
   const [visible, setVisible] = useState(false);
-  const masked = value.slice(0, 8) + "•".repeat(24);
+  const masked = value.slice(0, 12) + "•".repeat(Math.max(0, value.length - 12));
   return (
     <div className="flex items-center gap-2 font-mono text-sm">
-      <span className="select-all">{visible ? value : masked}</span>
-      <button onClick={() => setVisible(!visible)} className="p-1 rounded hover:bg-accent">
+      <span className="select-all break-all">{visible ? value : masked}</span>
+      <button onClick={() => setVisible(!visible)} className="p-1 rounded hover:bg-accent shrink-0">
         {visible ? (
           <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
         ) : (
@@ -75,13 +87,80 @@ function RevealKey({ value }: { value: string }) {
 
 /* ─── Profile Tab ─── */
 function ProfileSettings() {
-  const [biz, setBiz] = useState({
-    name: "Bob's Plumbing",
-    email: "bob@bobsplumbing.com",
-    website: "https://bobsplumbing.com",
-    timezone: "America/New_York",
-    webhookUrl: "https://crm.bobsplumbing.com/api/leads",
-  });
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [form, setForm] = useState({ name: "", businessName: "", notificationEmail: "", webhookUrl: "" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Password change
+  const [pwForm, setPwForm] = useState({ current: "", newPw: "", confirm: "" });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    getProfile()
+      .then((p) => {
+        setProfile(p);
+        setForm({
+          name: p.name || "",
+          businessName: p.business_name || "",
+          notificationEmail: p.notification_email || "",
+          webhookUrl: p.crm_webhook_url || "",
+        });
+      })
+      .catch(() => setMsg({ type: "error", text: "Failed to load profile" }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const updated = await updateProfile({
+        name: form.name,
+        business_name: form.businessName,
+        notification_email: form.notificationEmail,
+        crm_webhook_url: form.webhookUrl,
+      });
+      setProfile(updated);
+      setMsg({ type: "success", text: "Profile saved successfully" });
+    } catch (err: any) {
+      setMsg({ type: "error", text: err.message || "Failed to save" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handlePasswordChange() {
+    setPwMsg(null);
+    if (pwForm.newPw !== pwForm.confirm) {
+      setPwMsg({ type: "error", text: "New passwords do not match" });
+      return;
+    }
+    if (pwForm.newPw.length < 6) {
+      setPwMsg({ type: "error", text: "Password must be at least 6 characters" });
+      return;
+    }
+    setPwSaving(true);
+    try {
+      await changePassword(pwForm.current, pwForm.newPw);
+      setPwMsg({ type: "success", text: "Password changed successfully" });
+      setPwForm({ current: "", newPw: "", confirm: "" });
+    } catch (err: any) {
+      setPwMsg({ type: "error", text: err.message || "Failed to change password" });
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -90,22 +169,36 @@ function ProfileSettings() {
           <CardTitle>Business Info</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {(
-            [
-              ["name", "Business Name"],
-              ["email", "Contact Email"],
-              ["website", "Website"],
-              ["timezone", "Timezone"],
-            ] as const
-          ).map(([k, label]) => (
-            <div key={k} className="space-y-1.5">
-              <Label>{label}</Label>
-              <Input
-                value={biz[k]}
-                onChange={(e) => setBiz({ ...biz, [k]: e.target.value })}
-              />
+          <div className="space-y-1.5">
+            <Label>Your Name</Label>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Business Name</Label>
+            <Input
+              value={form.businessName}
+              onChange={(e) => setForm({ ...form, businessName: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Email</Label>
+            <div className="p-2.5 rounded-lg bg-accent/50 border text-sm text-muted-foreground">
+              {profile?.email}
             </div>
-          ))}
+            <p className="text-[11px] text-muted-foreground">Contact support to change your email</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Notification Email</Label>
+            <Input
+              value={form.notificationEmail}
+              onChange={(e) => setForm({ ...form, notificationEmail: e.target.value })}
+              placeholder={profile?.email || "you@company.com"}
+            />
+            <p className="text-[11px] text-muted-foreground">Alerts will be sent here (defaults to account email)</p>
+          </div>
         </CardContent>
       </Card>
 
@@ -121,8 +214,8 @@ function ProfileSettings() {
             <Label>CRM Webhook URL</Label>
             <div className="flex gap-2">
               <Input
-                value={biz.webhookUrl}
-                onChange={(e) => setBiz({ ...biz, webhookUrl: e.target.value })}
+                value={form.webhookUrl}
+                onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
                 placeholder="https://your-crm.com/api/leads"
               />
               <Button variant="outline" size="sm" className="shrink-0">
@@ -131,72 +224,202 @@ function ProfileSettings() {
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              We'll POST lead data here after every qualifying call
+              We&apos;ll POST lead data here after every qualifying call
             </p>
           </div>
         </CardContent>
       </Card>
 
-      <Button size="sm">Save Changes</Button>
+      {msg && (
+        <div
+          className={cn(
+            "text-sm rounded-lg px-3 py-2 border",
+            msg.type === "success"
+              ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+              : "text-red-400 bg-red-500/10 border-red-500/20"
+          )}
+        >
+          {msg.text}
+        </div>
+      )}
+
+      <Button size="sm" onClick={handleSave} disabled={saving}>
+        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+        Save Changes
+      </Button>
+
+      {/* Password change section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lock className="w-4 h-4" />
+            Change Password
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Current Password</Label>
+            <Input
+              type="password"
+              value={pwForm.current}
+              onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>New Password</Label>
+            <Input
+              type="password"
+              value={pwForm.newPw}
+              onChange={(e) => setPwForm({ ...pwForm, newPw: e.target.value })}
+              minLength={6}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Confirm New Password</Label>
+            <Input
+              type="password"
+              value={pwForm.confirm}
+              onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
+              minLength={6}
+            />
+          </div>
+          {pwMsg && (
+            <div
+              className={cn(
+                "text-sm rounded-lg px-3 py-2 border",
+                pwMsg.type === "success"
+                  ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                  : "text-red-400 bg-red-500/10 border-red-500/20"
+              )}
+            >
+              {pwMsg.text}
+            </div>
+          )}
+          <Button size="sm" variant="outline" onClick={handlePasswordChange} disabled={pwSaving}>
+            {pwSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Update Password
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 /* ─── API Keys Tab ─── */
 function ApiKeysSettings() {
+  const [clientId, setClientId] = useState<string>("");
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [confirmRegen, setConfirmRegen] = useState(false);
+
+  useEffect(() => {
+    const token = getToken();
+    if (token) {
+      const payload = parseJwt(token);
+      if (payload?.sub) setClientId(payload.sub);
+    }
+  }, []);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      const result = await generateApiKey();
+      setApiKey(result.api_key);
+      setConfirmRegen(false);
+    } catch {
+      // error handled in apiFetch
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <Card>
         <CardHeader>
           <CardTitle>API Credentials</CardTitle>
           <CardDescription>
-            Use these credentials to connect your dashboard to the Omniweb Agent Engine
+            Use these credentials to connect external integrations to the Omniweb API
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-1.5">
             <Label>Client ID</Label>
             <div className="flex items-center gap-2 p-2.5 rounded-lg bg-accent/50 border">
-              <span className="font-mono text-sm select-all">
-                client_9f8e7d6c5b4a3210
+              <span className="font-mono text-sm select-all break-all">
+                {clientId || "—"}
               </span>
-              <CopyButton value="client_9f8e7d6c5b4a3210" />
+              {clientId && <CopyButton value={clientId} />}
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label>API Key</Label>
-            <div className="p-2.5 rounded-lg bg-accent/50 border">
-              <RevealKey value="sk_test_•••••••••••••••••••••••••••" />
+          {apiKey && (
+            <div className="space-y-1.5">
+              <Label>
+                API Key{" "}
+                <span className="text-amber-400 font-normal">(save now — shown only once)</span>
+              </Label>
+              <div className="p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                <RevealKey value={apiKey} />
+              </div>
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>SIP Trunk ID</Label>
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-accent/50 border">
-              <span className="font-mono text-sm select-all">
-                ST_abc123def456
-              </span>
-              <CopyButton value="ST_abc123def456" />
+          )}
+          {!apiKey && (
+            <div className="space-y-1.5">
+              <Label>API Key</Label>
+              <div className="p-2.5 rounded-lg bg-accent/50 border text-sm text-muted-foreground">
+                Click &quot;Generate API Key&quot; below to create one
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
       <Card className="border-destructive/30">
         <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
+          <CardTitle className="text-destructive">
+            {apiKey ? "Regenerate API Key" : "Generate API Key"}
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">Regenerate API Key</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Current key will be revoked immediately
-              </p>
+          {confirmRegen ? (
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 text-sm text-amber-400">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                <p>This will revoke your current API key immediately. Any integrations using the old key will stop working.</p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="destructive" size="sm" onClick={handleGenerate} disabled={generating}>
+                  {generating && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Confirm
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setConfirmRegen(false)}>
+                  Cancel
+                </Button>
+              </div>
             </div>
-            <Button variant="destructive" size="sm">
-              Regenerate
-            </Button>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {apiKey ? "Regenerate API Key" : "Generate API Key"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {apiKey
+                    ? "Current key will be revoked immediately"
+                    : "Create an API key for external integrations"}
+                </p>
+              </div>
+              <Button
+                variant={apiKey ? "destructive" : "default"}
+                size="sm"
+                onClick={() => (apiKey ? setConfirmRegen(true) : handleGenerate())}
+                disabled={generating}
+              >
+                {generating && <Loader2 className="w-4 h-4 animate-spin" />}
+                {apiKey ? "Regenerate" : "Generate"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -239,6 +462,10 @@ function NotificationSettings() {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-start gap-2 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+        <p>Notification preferences are saved locally for now. Email/SMS delivery coming soon.</p>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Event Alerts</CardTitle>
@@ -287,14 +514,31 @@ function NotificationSettings() {
           ))}
         </CardContent>
       </Card>
-
-      <Button size="sm">Save Preferences</Button>
     </div>
   );
 }
 
 /* ─── Billing Tab ─── */
+const PLAN_DETAILS: Record<string, { label: string; price: string; features: string }> = {
+  starter: { label: "Starter", price: "$29/mo", features: "100 minutes · 1 number" },
+  growth: { label: "Growth", price: "$79/mo", features: "500 minutes · 3 numbers" },
+  pro: { label: "Pro", price: "$199/mo", features: "Unlimited minutes · 5 numbers" },
+  agency: { label: "Agency", price: "$499/mo", features: "Unlimited everything · White-label" },
+};
+
 function BillingSettings() {
+  const [plan, setPlan] = useState("starter");
+
+  useEffect(() => {
+    const token = getToken();
+    if (token) {
+      const payload = parseJwt(token);
+      if (payload?.plan) setPlan(payload.plan);
+    }
+  }, []);
+
+  const details = PLAN_DETAILS[plan] || PLAN_DETAILS.starter;
+
   return (
     <div className="space-y-5">
       <Card>
@@ -305,62 +549,27 @@ function BillingSettings() {
           <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20">
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <p className="text-lg font-bold text-foreground">Pro Plan</p>
+                <p className="text-lg font-bold text-foreground">{details.label} Plan</p>
                 <Badge variant="success">Active</Badge>
               </div>
               <p className="text-sm text-muted-foreground mt-0.5">
-                $99/mo · Unlimited calls · Up to 5 numbers
+                {details.price} · {details.features}
               </p>
             </div>
-            <Button variant="outline" size="sm">
-              Manage Plan
-            </Button>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Usage This Period</CardTitle>
-          <CardDescription>May 1 – May 31, 2025</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {[
-            ["Total Calls", "247", "Unlimited"],
-            ["Phone Numbers", "2", "5 included"],
-            ["SMS Sent", "189", "$0.01/msg after 500"],
-            ["Minutes Used", "1,847", "Included"],
-          ].map(([label, used, limit]) => (
-            <div key={label} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
-              <p className="text-sm text-muted-foreground">{label}</p>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-foreground">{used}</p>
-                <p className="text-[10px] text-muted-foreground">{limit}</p>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Payment Method</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-7 rounded bg-accent flex items-center justify-center">
-                <CreditCard className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">•••• •••• •••• 4242</p>
-                <p className="text-[11px] text-muted-foreground">Visa · Expires 09/27</p>
-              </div>
-            </div>
-            <Button variant="outline" size="sm">Update</Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-start gap-2 text-sm text-muted-foreground bg-accent/50 border border-border rounded-lg px-3 py-2">
+        <CreditCard className="w-4 h-4 mt-0.5 shrink-0" />
+        <p>
+          To upgrade your plan or manage payment methods, contact us at{" "}
+          <a href="mailto:support@omniweb.ai" className="text-primary hover:underline">
+            support@omniweb.ai
+          </a>
+          . Self-service billing coming soon.
+        </p>
+      </div>
     </div>
   );
 }

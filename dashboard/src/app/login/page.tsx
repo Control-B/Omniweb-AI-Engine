@@ -6,19 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { login, signup } from "@/lib/api";
 
-const TEMPORARY_ACCOUNTS = {
-  admin: {
-    label: "Admin",
-    email: "admin@omniweb.ai",
-    password: "admin1234",
-  },
-  demo: {
-    label: "Demo",
-    email: "demo@omniweb.ai",
-    password: "demo1234",
-  },
-} as const;
-
 export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
@@ -28,16 +15,6 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function fillTemporaryAccount(account: keyof typeof TEMPORARY_ACCOUNTS) {
-    const selected = TEMPORARY_ACCOUNTS[account];
-    setMode("login");
-    setName("");
-    setBusinessName("");
-    setEmail(selected.email);
-    setPassword(selected.password);
-    setError("");
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -46,9 +23,8 @@ export default function LoginPage() {
     try {
       if (mode === "login") {
         const data = await login(email, password);
-        // Full page navigation so auth context re-reads the fresh token
         window.location.href = data.role === "admin" ? "/admin" : "/dashboard";
-        return; // don't setLoading(false) — page is navigating away
+        return;
       } else {
         await signup({
           name,
@@ -85,23 +61,6 @@ export default function LoginPage() {
             </p>
           </div>
         </div>
-
-        {mode === "login" && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {Object.entries(TEMPORARY_ACCOUNTS).map(([key, account]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => fillTemporaryAccount(key as keyof typeof TEMPORARY_ACCOUNTS)}
-                className="rounded-xl border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-sidebar-accent"
-              >
-                <div className="text-sm font-semibold text-foreground">{account.label} access</div>
-                <div className="mt-1 text-xs text-muted-foreground">{account.email}</div>
-                <div className="mt-2 text-[11px] text-primary">Click to autofill</div>
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">

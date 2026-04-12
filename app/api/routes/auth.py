@@ -58,6 +58,31 @@ class ApiKeyResponse(BaseModel):
     note: str = "Save this key — it cannot be retrieved again."
 
 
+class ProfileResponse(BaseModel):
+    client_id: str
+    name: str
+    email: str
+    plan: str
+    role: str
+    crm_webhook_url: str | None = None
+    notification_email: str | None = None
+    business_name: str | None = None
+    business_type: str | None = None
+    created_at: str | None = None
+
+
+class UpdateProfileRequest(BaseModel):
+    name: str | None = None
+    notification_email: str | None = None
+    crm_webhook_url: str | None = None
+    business_name: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 @router.post("/signup", response_model=TokenResponse, status_code=201)
 async def signup(
     body: SignupRequest,
@@ -291,3 +316,110 @@ async def create_api_key(
         "api_key": raw_key,
         "note": "Save this key — it cannot be retrieved again.",
     }
+
+
+@router.get("/profile", response_model=ProfileResponse)
+async def get_profile(
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Return the authenticated client's profile."""
+    client = await db.get(Client, current_client["client_id"])
+    if not client:
+        raise HTTPException(404, "Client not found")
+
+    # Get business name from agent config
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client.id)
+    )
+    agent_config = result.scalar_one_or_none()
+
+    return {
+        "client_id": str(client.id),
+        "name": client.name,
+        "email": client.email,
+        "plan": client.plan,
+        "role": client.role,
+        "crm_webhook_url": client.crm_webhook_url,
+        "notification_email": client.notification_email,
+        "business_name": agent_config.business_name if agent_config else None,
+        "business_type": agent_config.business_type if agent_config else None,
+        "created_at": client.created_at.isoformat() if client.created_at else None,
+    }
+
+
+@router.patch("/profile", response_model=ProfileResponse)
+async def update_profile(
+    body: UpdateProfileRequest,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Update the authenticated client's profile fields."""
+    client = await db.get(Client, current_client["client_id"])
+    if not client:
+        raise HTTPException(404, "Client not found")
+
+    if body.name is not None:
+        client.name = body.name
+    if body.notification_email is not None:
+        client.notification_email = body.notification_email
+    if body.crm_webhook_url is not None:
+        client.crm_webhook_url = body.crm_webhook_url
+
+    # Update business_name on agent config too
+    if body.business_name is not None:
+        result = await db.execute(
+            select(AgentConfig).where(AgentConfig.client_id == client.id)
+        )
+        agent_config = result.scalar_one_or_none()
+        if agent_config:
+            agent_config.business_name = body.business_name
+
+    await db.commit()
+    await db.refresh(client)
+
+    # Re-fetch agent config for response
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client.id)
+    )
+    agent_config = result.scalar_one_or_none()
+
+    logger.info(f"Profile updated for {client.email}")
+
+    return {
+        "client_id": str(client.id),
+        "name": client.name,
+        "email": client.email,
+        "plan": client.plan,
+        "role": client.role,
+        "crm_webhook_url": client.crm_webhook_url,
+        "notification_email": client.notification_email,
+        "business_name": agent_config.business_name if agent_config else None,
+        "business_type": agent_config.business_type if agent_config else None,
+        "created_at": client.created_at.isoformat() if client.created_at else None,
+    }
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Change password for the authenticated client."""
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "New password must be at least 6 characters")
+
+    client = await db.get(Client, current_client["client_id"])
+    if not client:
+        raise HTTPException(404, "Client not found")
+
+    if not client.hashed_password or not verify_password(body.current_password, client.hashed_password):
+        raise HTTPException(401, "Current password is incorrect")
+
+    client.hashed_password = hash_password(body.new_password)
+    await db.commit()
+
+    logger.info(f"Password changed for {client.email}")
+
+    return {"ok": True, "message": "Password changed successfully"}

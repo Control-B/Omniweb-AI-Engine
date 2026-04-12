@@ -15,8 +15,9 @@ No agent worker process needed.
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import get_settings
 from app.core.database import engine
@@ -45,6 +46,18 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ── Safety checks ────────────────────────────────────────────────
+    if settings.is_production and settings.SECRET_KEY == "change-me-in-production":
+        raise RuntimeError(
+            "FATAL: SECRET_KEY is set to the default value. "
+            "Set a strong random SECRET_KEY environment variable before running in production."
+        )
+    if settings.is_production and settings.INTERNAL_API_KEY == "change-me-in-production":
+        raise RuntimeError(
+            "FATAL: INTERNAL_API_KEY is set to the default value. "
+            "Set a strong random INTERNAL_API_KEY environment variable before running in production."
+        )
+
     logger.info("Omniweb Agent Engine starting up")
     logger.info(f"ElevenLabs configured: {settings.elevenlabs_configured}")
     logger.info(f"Twilio configured: {settings.twilio_configured}")
@@ -68,9 +81,78 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Internal-Key"],
 )
+
+
+# ── Security Headers Middleware ───────────────────────────────────────────────
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add standard security headers to every response."""
+
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if settings.is_production:
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+
+# ── Rate Limiting Middleware ──────────────────────────────────────────────────
+# Simple in-memory rate limiter for auth endpoints.
+# For production at scale, swap to Redis-backed (e.g. slowapi + redis).
+
+import time
+from collections import defaultdict
+
+_rate_limit_store: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_MAX_AUTH = 10  # max auth requests per window per IP
+_RATE_LIMIT_MAX_GENERAL = 120  # max general API requests per window per IP
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Per-IP rate limiting. Stricter on auth endpoints."""
+
+    async def dispatch(self, request: Request, call_next):
+        client_ip = request.client.host if request.client else "unknown"
+        path = request.url.path
+        now = time.time()
+
+        # Determine limit based on path
+        if "/auth/login" in path or "/auth/signup" in path:
+            limit = _RATE_LIMIT_MAX_AUTH
+            key = f"auth:{client_ip}"
+        elif path.startswith("/api/"):
+            limit = _RATE_LIMIT_MAX_GENERAL
+            key = f"api:{client_ip}"
+        else:
+            return await call_next(request)
+
+        # Clean old entries and check
+        _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < _RATE_LIMIT_WINDOW]
+
+        if len(_rate_limit_store[key]) >= limit:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please try again later."},
+                headers={"Retry-After": str(_RATE_LIMIT_WINDOW)},
+            )
+
+        _rate_limit_store[key].append(now)
+        return await call_next(request)
+
+
+app.add_middleware(RateLimitMiddleware)
 
 # ── Register routers ──────────────────────────────────────────────────────────
 # All API routes live under /api/* so the ingress can cleanly separate

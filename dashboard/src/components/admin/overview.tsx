@@ -450,7 +450,7 @@ export function AdminOverview() {
               { label: "API Status", status: "Operational" },
               { label: "Database", status: "Connected" },
               { label: "Auth Service", status: "Active" },
-              { label: "ElevenLabs", status: "Connected" },
+              { label: "Voice Engine", status: "Connected" },
             ].map((item) => (
               <div
                 key={item.label}

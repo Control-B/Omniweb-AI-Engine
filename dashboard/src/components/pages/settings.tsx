@@ -170,7 +170,7 @@ function ApiKeysSettings() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>LiveKit SIP Trunk ID</Label>
+            <Label>SIP Trunk ID</Label>
             <div className="flex items-center gap-2 p-2.5 rounded-lg bg-accent/50 border">
               <span className="font-mono text-sm select-all">
                 ST_abc123def456

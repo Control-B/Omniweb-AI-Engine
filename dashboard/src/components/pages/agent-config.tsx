@@ -421,6 +421,7 @@ export function AgentConfigPage() {
                   <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                   <span className="text-sm font-medium text-green-500">Active</span>
                   <span className="text-xs text-muted-foreground ml-2 font-mono">{config.elevenlabs_agent_id}</span>
+                  {/* Agent ID shown for debugging — brand name hidden */}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-muted-foreground">

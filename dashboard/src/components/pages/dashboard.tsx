@@ -539,7 +539,7 @@ export function DashboardPage() {
                 <Badge variant="success">active</Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                ElevenLabs Conversational AI · 5 tools connected
+                Omniweb Conversational AI · 5 tools connected
               </p>
             </div>
             <div className="hidden md:flex items-center gap-6 text-center">

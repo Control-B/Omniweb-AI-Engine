@@ -191,7 +191,7 @@ export function AdminAgents() {
                     {/* Info grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                       <div className="p-3 rounded-lg bg-card border border-border">
-                        <p className="text-[10px] text-muted-foreground font-medium">ElevenLabs ID</p>
+                        <p className="text-[10px] text-muted-foreground font-medium">Agent ID</p>
                         <p className="text-xs text-foreground mt-0.5 font-mono truncate">
                           {agent.elevenlabs_agent_id || "not linked"}
                         </p>

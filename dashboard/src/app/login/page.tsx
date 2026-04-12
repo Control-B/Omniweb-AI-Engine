@@ -81,7 +81,7 @@ export default function LoginPage() {
                 : "Create your account"}
             </p>
             <p className="text-xs text-muted-foreground/80 mt-2 max-w-xs">
-              This login uses the AI Engine backend directly. Supabase is not required for temporary admin or demo access.
+              Sign in with your Omniweb credentials to access your dashboard.
             </p>
           </div>
         </div>

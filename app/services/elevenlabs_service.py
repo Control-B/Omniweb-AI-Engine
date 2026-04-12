@@ -214,20 +214,25 @@ def _default_widget_settings(*, language_selector: bool) -> dict[str, Any]:
     """Return the standard voice-first widget config for all agents.
 
     Key behavior:
-    - `text_only=False` makes voice the default mode.
-    - `supports_text_only=False` prevents the widget from starting in pure text mode.
-    - `text_input_enabled=True` still allows users to switch to text during the session.
+    - ``text_only=False`` + ``supports_text_only=False`` → voice is the only
+      start mode; no "Text chat" button is offered.
+    - ``text_input_enabled=False`` → the text input field and the "Text chat"
+      option are hidden, so the user goes straight to a voice call.
+    - ``conversation_mode_toggle_enabled=False`` → removes the text/voice
+      toggle in the sheet header so users can't switch mid-call.
+    - The agent's ``first_message`` is spoken aloud by TTS on connect, never
+      shown as a text bubble (text-only prepend is disabled above).
     """
     return {
         "variant": "compact",
         "shareable_page_enabled": True,
         "text_only": False,
-        "text_input_enabled": True,
+        "text_input_enabled": False,
         "supports_text_only": False,
         "transcript_enabled": True,
         "feedback_mode": "during",
         "language_selector": language_selector,
-        "conversation_mode_toggle_enabled": True,
+        "conversation_mode_toggle_enabled": False,
         "text_contents": {
             "start_call": "Talk to me",
         },

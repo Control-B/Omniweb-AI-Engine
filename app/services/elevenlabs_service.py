@@ -188,6 +188,30 @@ def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(timeout=30, headers=_headers())
 
 
+def _default_widget_settings(*, language_selector: bool) -> dict[str, Any]:
+    """Return the standard voice-first widget config for all agents.
+
+    Key behavior:
+    - `text_only=False` makes voice the default mode.
+    - `supports_text_only=False` prevents the widget from starting in pure text mode.
+    - `text_input_enabled=True` still allows users to switch to text during the session.
+    """
+    return {
+        "variant": "compact",
+        "shareable_page_enabled": True,
+        "text_only": False,
+        "text_input_enabled": True,
+        "supports_text_only": False,
+        "transcript_enabled": True,
+        "feedback_mode": "during",
+        "language_selector": language_selector,
+        "conversation_mode_toggle_enabled": True,
+        "text_contents": {
+            "start_call": "Talk to me",
+        },
+    }
+
+
 async def synthesize_speech(
     *,
     text: str,
@@ -289,15 +313,7 @@ async def create_agent(
 
     # Add knowledge base if provided
     platform_settings: dict[str, Any] = {
-        "widget": {
-            "variant": "compact",
-            "shareable_page_enabled": True,
-            "text_input_enabled": True,
-            "supports_text_only": False,
-            "transcript_enabled": True,
-            "feedback_mode": "during",
-            "language_selector": bool(lang_presets),
-        },
+        "widget": _default_widget_settings(language_selector=bool(lang_presets)),
     }
     if knowledge_base_ids:
         agent_config["agent"]["knowledge_base"] = [
@@ -379,11 +395,13 @@ async def update_agent(
         }
 
     # Language presets
+    widget_settings = _default_widget_settings(
+        language_selector=bool(language_presets_override) if language_presets_override is not None else bool(supported_languages)
+    )
+
     if language_presets_override is not None:
         conversation_config["language_presets"] = language_presets_override
-        payload.setdefault("platform_settings", {})["widget"] = {
-            "language_selector": bool(language_presets_override)
-        }
+        payload.setdefault("platform_settings", {})["widget"] = widget_settings
     elif supported_languages is not None:
         lang_presets = build_language_presets(
             languages=supported_languages,
@@ -391,9 +409,12 @@ async def update_agent(
             voice_id=voice_id,
         )
         conversation_config["language_presets"] = lang_presets
-        payload.setdefault("platform_settings", {})["widget"] = {
-            "language_selector": bool(lang_presets)
-        }
+        payload.setdefault("platform_settings", {})["widget"] = _default_widget_settings(
+            language_selector=bool(lang_presets)
+        )
+
+    if "platform_settings" not in payload:
+        payload["platform_settings"] = {"widget": widget_settings}
 
     if conversation_config:
         payload["conversation_config"] = conversation_config
@@ -706,7 +727,12 @@ async def get_conversation_audio(conversation_id: str) -> bytes | None:
 def get_widget_embed_code(agent_id: str) -> str:
     """Generate the HTML embed snippet for the ElevenLabs chat widget."""
     return (
-        f'<elevenlabs-convai agent-id="{agent_id}"></elevenlabs-convai>\n'
+        f'<elevenlabs-convai '\
+        f'agent-id="{agent_id}" '\
+        f'text-input="true" '\
+        f'override-text-only="false" '\
+        f'override-first-message="{DEFAULT_FIRST_MESSAGES["en"].replace("\"", "&quot;")}"'\
+        f'></elevenlabs-convai>\n'
         f'<script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>'
     )
 

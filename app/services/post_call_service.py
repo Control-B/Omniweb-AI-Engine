@@ -22,6 +22,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import Call, Client, Transcript, Lead, AgentConfig
 from app.services.sms_service import SMSService
+from app.services.lead_qualification_engine import extract_lead_from_transcript
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -58,13 +59,16 @@ class PostCallService:
         # 2. Save transcript
         await PostCallService._save_transcript(db, call=call, turns=turns)
 
-        # 3. Extract lead via LLM
+        # 3. Extract lead via LLM (industry-aware)
         transcript_text = PostCallService._turns_to_text(turns)
-        lead_data = await PostCallService._extract_lead_with_llm(
+        industry_slug = config_dict.get("industry", "general")
+
+        lead_data = await PostCallService._extract_lead(
             transcript_text=transcript_text,
             caller_number=call.caller_number,
             collected_data=collected_data or {},
-            business_type=config_dict.get("business_type", "general"),
+            industry_slug=industry_slug,
+            business_name=config_dict.get("business_name", ""),
         )
 
         lead = None
@@ -164,128 +168,6 @@ class PostCallService:
         return "\n".join(lines)
 
     @staticmethod
-    async def _extract_lead_with_llm(
-        *,
-        transcript_text: str,
-        caller_number: str,
-        collected_data: dict,
-        business_type: str,
-    ) -> Optional[dict]:
-        """Use GPT-4o to extract structured lead data from the transcript.
-
-        Returns a dict with keys: caller_name, caller_email, intent, urgency,
-        summary, services_requested, lead_score, or None if not a lead.
-        """
-        if not transcript_text.strip():
-            return None
-
-        if not settings.openai_configured:
-            # Fallback: build lead from collected_data only
-            return PostCallService._extract_lead_from_collected_data(
-                collected_data, caller_number
-            )
-
-        prompt = f"""You are analyzing a phone call transcript for a {business_type} business.
-Extract the following information as JSON. If a field is not available, use null.
-
-TRANSCRIPT:
-{transcript_text}
-
-ADDITIONAL DATA COLLECTED BY AGENT:
-{json.dumps(collected_data, indent=2)}
-
-Extract and return ONLY valid JSON with these exact keys:
-{{
-  "caller_name": "string or null",
-  "caller_email": "string or null",
-  "intent": "one of: appointment_request, price_inquiry, repair_request, emergency, general_question, complaint, other",
-  "urgency": "one of: low, medium, high, emergency",
-  "summary": "1-2 sentence summary of what the caller wanted",
-  "services_requested": ["list of specific services mentioned"],
-  "lead_score": 0.0-1.0,
-  "is_lead": true or false
-}}
-
-Lead score rubric:
-- 0.9-1.0: Ready to book, urgent, gave contact info
-- 0.6-0.8: Interested, asking real questions
-- 0.3-0.5: Early stage, browsing
-- 0.0-0.2: Wrong number, existing customer, no intent
-"""
-
-        try:
-            from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-            response = await client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a lead extraction assistant. Return only valid JSON."},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.1,
-                response_format={"type": "json_object"},
-                max_tokens=500,
-            )
-            raw = response.choices[0].message.content
-            data = json.loads(raw)
-
-            if not data.get("is_lead", True):
-                return None
-
-            return data
-        except Exception as exc:
-            logger.error(f"Lead extraction LLM failed: {exc}")
-            # Fallback to rule-based extraction
-            return PostCallService._extract_lead_from_collected_data(
-                collected_data, caller_number
-            )
-
-    @staticmethod
-    def _extract_lead_from_collected_data(
-        collected_data: dict, caller_number: str
-    ) -> Optional[dict]:
-        """Rule-based lead extraction when LLM is unavailable."""
-        if not collected_data:
-            return None
-
-        # Determine intent from collected data
-        service = collected_data.get("service_needed", "").lower()
-        intent = "general_question"
-        if any(w in service for w in ("repair", "fix", "broken", "replace")):
-            intent = "repair_request"
-        elif any(w in service for w in ("appoint", "schedule", "book")):
-            intent = "appointment_request"
-        elif any(w in service for w in ("price", "cost", "how much", "quote")):
-            intent = "price_inquiry"
-        elif any(w in service for w in ("emergency", "urgent", "asap")):
-            intent = "emergency"
-
-        # Lead scoring
-        score = 0.3
-        if collected_data.get("caller_name"):
-            score += 0.2
-        if collected_data.get("service_needed"):
-            score += 0.2
-        if intent in ("repair_request", "appointment_request", "emergency"):
-            score += 0.2
-        if collected_data.get("urgency") == "high":
-            score += 0.1
-
-        urgency = collected_data.get("urgency", "medium")
-        if urgency not in ("low", "medium", "high", "emergency"):
-            urgency = "medium"
-
-        return {
-            "caller_name": collected_data.get("caller_name"),
-            "caller_email": None,
-            "intent": intent,
-            "urgency": urgency,
-            "summary": collected_data.get("notes", f"Caller asked about {service}" if service else "General inquiry"),
-            "services_requested": [service] if service else [],
-            "lead_score": min(score, 1.0),
-        }
-
-    @staticmethod
     async def _fire_crm_webhook(
         *,
         url: str,
@@ -330,6 +212,8 @@ Lead score rubric:
             "agent_name": config.agent_name,
             "business_name": config.business_name,
             "business_type": config.business_type,
+            "industry": getattr(config, "industry", "general"),
+            "agent_mode": getattr(config, "agent_mode", "lead_qualifier"),
             "timezone": config.timezone,
             "booking_url": config.booking_url,
             "services": config.services,
@@ -337,3 +221,21 @@ Lead score rubric:
             "system_prompt": config.system_prompt,
             "voice_id": config.voice_id,
         }
+
+    @staticmethod
+    async def _extract_lead(
+        *,
+        transcript_text: str,
+        caller_number: str,
+        collected_data: dict,
+        industry_slug: str,
+        business_name: str,
+    ) -> Optional[dict]:
+        """Industry-aware lead extraction — delegates to lead_qualification_engine."""
+        return await extract_lead_from_transcript(
+            transcript_text=transcript_text,
+            industry_slug=industry_slug,
+            caller_number=caller_number,
+            collected_data=collected_data,
+            business_name=business_name,
+        )

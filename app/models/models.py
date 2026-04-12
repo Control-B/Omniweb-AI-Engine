@@ -154,6 +154,31 @@ class AgentConfig(Base):
     # Widget configuration
     widget_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
+    # ── Multi-tenant AI platform fields ─────────────────────────────────────
+    # Industry & agent mode (drives prompt composition, guardrails, tool set)
+    industry: Mapped[str] = mapped_column(String(100), default="general", nullable=False)
+    agent_mode: Mapped[str] = mapped_column(String(50), default="lead_qualifier", nullable=False)
+
+    # Custom guardrails & escalation triggers (appended to industry defaults)
+    custom_guardrails: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    custom_escalation_triggers: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+
+    # Additional business context (FAQs, policies, etc.)
+    custom_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Whether to use the prompt engine to compose the system_prompt automatically
+    use_prompt_engine: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Human handoff configuration
+    handoff_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    handoff_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    handoff_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    handoff_message: Mapped[str] = mapped_column(
+        Text,
+        default="Let me connect you with a member of our team who can help with this directly.",
+        nullable=False,
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
@@ -163,6 +188,7 @@ class AgentConfig(Base):
     __table_args__ = (
         Index("ix_agent_configs_client_id", "client_id"),
         Index("ix_agent_configs_elevenlabs_agent_id", "elevenlabs_agent_id"),
+        Index("ix_agent_configs_industry", "industry"),
     )
 
 
@@ -436,7 +462,8 @@ class AgentTemplate(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    industry: Mapped[str] = mapped_column(String(100), nullable=False, default="general")  # plumbing, dental, legal, etc.
+    industry: Mapped[str] = mapped_column(String(100), nullable=False, default="general")  # roofing, ecommerce, legal, etc.
+    agent_mode: Mapped[str] = mapped_column(String(50), nullable=False, default="lead_qualifier")
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # auto-applied on signup
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

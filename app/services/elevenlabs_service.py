@@ -214,10 +214,13 @@ def _default_widget_settings(*, language_selector: bool) -> dict[str, Any]:
     """Return the standard voice-first widget config for all agents.
 
     Key behavior:
+    - ``expandable="never"`` → disables the expandable sheet/panel entirely,
+      so the widget never shows the "Choose how to chat" screen.
     - ``text_only=False`` + ``supports_text_only=False`` → voice is the only
       start mode; no "Text chat" button is offered.
-    - ``text_input_enabled=False`` → the text input field and the "Text chat"
-      option are hidden, so the user goes straight to a voice call.
+    - ``text_input_enabled=False`` → the text input field is hidden.
+    - ``transcript_enabled=False`` → no transcript panel (which would make
+      the widget expandable and potentially show text UI).
     - ``conversation_mode_toggle_enabled=False`` → removes the text/voice
       toggle in the sheet header so users can't switch mid-call.
     - The agent's ``first_message`` is spoken aloud by TTS on connect, never
@@ -225,11 +228,12 @@ def _default_widget_settings(*, language_selector: bool) -> dict[str, Any]:
     """
     return {
         "variant": "compact",
+        "expandable": "never",
         "shareable_page_enabled": True,
         "text_only": False,
         "text_input_enabled": False,
         "supports_text_only": False,
-        "transcript_enabled": True,
+        "transcript_enabled": False,
         "feedback_mode": "during",
         "language_selector": language_selector,
         "conversation_mode_toggle_enabled": False,

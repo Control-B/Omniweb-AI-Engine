@@ -326,15 +326,31 @@ async def create_agent(
             "language": language,
             "prompt": {
                 "prompt": system_prompt,
+                "llm": llm_model,
+                "temperature": temperature,
             },
         },
         "tts": {
+            "model_id": "eleven_turbo_v2",
             "voice_id": voice_id,
             "stability": voice_stability,
             "similarity_boost": voice_similarity_boost,
+            "optimize_streaming_latency": 4,
+        },
+        "turn": {
+            "turn_timeout": 5.0,
         },
         "conversation": {
             "max_duration_seconds": max_duration_seconds,
+            "client_events": [
+                "audio",
+                "interruption",
+                "agent_response",
+                "user_transcript",
+                "agent_response_correction",
+                "agent_tool_response",
+                "agent_chat_response_part",
+            ],
         },
     }
 

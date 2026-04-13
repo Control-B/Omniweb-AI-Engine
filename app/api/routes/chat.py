@@ -77,11 +77,13 @@ async def get_widget(
     if not config or not config.elevenlabs_agent_id:
         raise HTTPException(404, "No agent configured for this client")
 
-    embed_code = elevenlabs_service.get_widget_embed_code(config.elevenlabs_agent_id)
+    embed_data = elevenlabs_service.get_widget_embed_code(config.elevenlabs_agent_id)
 
     return {
         "agent_id": config.elevenlabs_agent_id,
-        "embed_code": embed_code,
+        "embed_code": embed_data["iframe"],
+        "legacy_embed_code": embed_data["legacy"],
+        "widget_url": embed_data["widget_url"],
         "agent_name": config.agent_name,
     }
 

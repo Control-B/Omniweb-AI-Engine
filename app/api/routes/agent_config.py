@@ -215,9 +215,13 @@ async def get_widget_embed(
     if not config or not config.elevenlabs_agent_id:
         raise HTTPException(404, "No ElevenLabs agent configured")
 
+    embed_data = elevenlabs_service.get_widget_embed_code(config.elevenlabs_agent_id)
+
     return {
         "agent_id": config.elevenlabs_agent_id,
-        "embed_code": elevenlabs_service.get_widget_embed_code(config.elevenlabs_agent_id),
+        "embed_code": embed_data["iframe"],
+        "legacy_embed_code": embed_data["legacy"],
+        "widget_url": embed_data["widget_url"],
         "talk_url": f"https://elevenlabs.io/app/talk-to/{config.elevenlabs_agent_id}",
     }
 

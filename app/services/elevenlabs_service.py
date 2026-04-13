@@ -759,18 +759,39 @@ async def get_conversation_audio(conversation_id: str) -> bytes | None:
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def get_widget_embed_code(agent_id: str) -> str:
-    """Generate the HTML embed snippet for the ElevenLabs chat widget.
+def get_widget_embed_code(agent_id: str) -> dict[str, str]:
+    """Generate embed snippets for the voice widget.
 
-    Voice-first behaviour is enforced server-side via:
-    - ``platform_settings.overrides`` blocking the widget from switching to text-only.
-    - ``platform_settings.widget.text_only = false``.
-    The agent's ``first_message`` is spoken by TTS on connect; no text bubble.
+    Returns both our custom voice-first widget (iframe) and the fallback
+    ElevenLabs embed tag.  The custom widget is a full-screen React page
+    served from the dashboard at /widget/{agent_id}.
     """
-    return (
+    platform_url = settings.PLATFORM_URL.rstrip("/")
+    custom_widget_url = f"{platform_url}/widget/{agent_id}"
+
+    # Custom widget — iframe embed (voice-first, no text mode)
+    iframe_embed = (
+        f'<iframe\n'
+        f'  src="{custom_widget_url}"\n'
+        f'  width="120"\n'
+        f'  height="120"\n'
+        f'  style="position:fixed;bottom:20px;right:20px;border:none;border-radius:50%;z-index:9999;overflow:hidden;"\n'
+        f'  allow="microphone"\n'
+        f'  title="Voice Assistant"\n'
+        f'></iframe>'
+    )
+
+    # Fallback — standard ElevenLabs embed tag
+    legacy_embed = (
         f'<elevenlabs-convai agent-id="{agent_id}"></elevenlabs-convai>\n'
         f'<script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>'
     )
+
+    return {
+        "iframe": iframe_embed,
+        "legacy": legacy_embed,
+        "widget_url": custom_widget_url,
+    }
 
 
 async def get_signed_url(agent_id: str) -> str | None:

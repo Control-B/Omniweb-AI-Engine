@@ -22,6 +22,7 @@ import {
   Trash2,
   Plus,
   X,
+  Mic,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -87,6 +88,8 @@ interface AgentConfig {
 interface WidgetInfo {
   agent_id: string;
   embed_code: string;
+  legacy_embed_code?: string;
+  widget_url?: string;
   talk_url: string;
 }
 
@@ -769,37 +772,64 @@ export function AgentConfigPage() {
             <>
               <Card>
                 <CardHeader>
-                  <CardTitle>Embed Code</CardTitle>
-                  <CardDescription>Add this snippet to your website to show the chat widget</CardDescription>
+                  <CardTitle>Voice Widget Embed</CardTitle>
+                  <CardDescription>Add this iframe to your website for a voice-first assistant</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="relative">
-                    <pre className="bg-secondary p-4 rounded-lg text-xs overflow-x-auto font-mono">{widget.embed_code}</pre>
+                    <pre className="bg-secondary p-4 rounded-lg text-xs overflow-x-auto font-mono whitespace-pre-wrap">{widget.embed_code}</pre>
                     <Button size="sm" variant="outline" className="absolute top-2 right-2" onClick={() => copyToClipboard(widget.embed_code, "embed")}>
                       {copied === "embed" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Paste this into your website HTML. Supports both voice calls and text chat.</p>
+                  <p className="text-xs text-muted-foreground">Paste this into your website HTML. The widget appears as a floating voice button in the bottom-right corner.</p>
                 </CardContent>
               </Card>
+
+              {widget.legacy_embed_code && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Legacy Embed (ElevenLabs)</CardTitle>
+                    <CardDescription>Alternative embed using the ElevenLabs widget directly</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="relative">
+                      <pre className="bg-secondary p-4 rounded-lg text-xs overflow-x-auto font-mono whitespace-pre-wrap">{widget.legacy_embed_code}</pre>
+                      <Button size="sm" variant="outline" className="absolute top-2 right-2" onClick={() => copyToClipboard(widget.legacy_embed_code!, "legacy")}>
+                        {copied === "legacy" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardHeader>
                   <CardTitle>Test Your Agent</CardTitle>
-                  <CardDescription>Try your agent before deploying to your website</CardDescription>
+                  <CardDescription>Try your voice agent before deploying to your website</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
+                    {widget.widget_url && (
+                      <Button size="sm" onClick={() => window.open(widget.widget_url, "_blank")}>
+                        <Mic className="w-3.5 h-3.5" />
+                        Test Voice Widget
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => window.open(widget.talk_url, "_blank")}>
                       <ExternalLink className="w-3.5 h-3.5" />
-                      Open Test Page
+                      ElevenLabs Test Page
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => copyToClipboard(widget.talk_url, "url")}>
-                      {copied === "url" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                      Copy Link
-                    </Button>
+                    {widget.widget_url && (
+                      <Button variant="outline" size="sm" onClick={() => copyToClipboard(widget.widget_url!, "url")}>
+                        {copied === "url" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        Copy Widget URL
+                      </Button>
+                    )}
                   </div>
-                  <div className="bg-secondary px-3 py-2 rounded-md text-xs text-muted-foreground font-mono break-all">{widget.talk_url}</div>
+                  {widget.widget_url && (
+                    <div className="bg-secondary px-3 py-2 rounded-md text-xs text-muted-foreground font-mono break-all">{widget.widget_url}</div>
+                  )}
                 </CardContent>
               </Card>
             </>

@@ -344,9 +344,10 @@ async def create_agent(
             "optimize_streaming_latency": 4,
         },
         "turn": {
-            "turn_timeout": 3.0,
-            "turn_eagerness": "eager",
+            "turn_timeout": 4.0,
+            "turn_eagerness": "patient",
             "speculative_turn": True,
+            "retranscribe_on_turn_timeout": True,
             "soft_timeout_config": {
                 "timeout_seconds": -1.0,
                 "message": "Take your time.",

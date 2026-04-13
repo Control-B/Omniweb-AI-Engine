@@ -329,6 +329,12 @@ async def create_agent(
                 "llm": llm_model,
                 "temperature": temperature,
             },
+            "disable_first_message_interruptions": False,
+            "max_conversation_duration_message": (
+                "I've really enjoyed this conversation! We've been chatting for a while "
+                "so let me make sure our team follows up with you on everything we discussed. "
+                "What's the best email to reach you?"
+            ),
         },
         "tts": {
             "model_id": "eleven_turbo_v2",
@@ -341,23 +347,30 @@ async def create_agent(
             "turn_timeout": 3.0,
             "turn_eagerness": "eager",
             "speculative_turn": True,
+            "soft_timeout_config": {
+                "timeout_seconds": -1.0,
+                "message": "Take your time.",
+                "use_llm_generated_message": True,
+            },
+        },
+        "vad": {
+            "background_voice_detection": True,
+        },
+        "asr": {
+            "quality": "high",
+            "provider": "elevenlabs",
         },
         "conversation": {
             "max_duration_seconds": max_duration_seconds,
             "client_events": [
                 "audio",
                 "interruption",
-                "agent_response",
                 "user_transcript",
                 "agent_response_correction",
-                "agent_tool_response",
                 "agent_chat_response_part",
             ],
         },
     }
-
-    # Allow first message to be interrupted
-    agent_config["agent"]["disable_first_message_interruptions"] = False
 
     # Add language presets if any non-English languages are configured
     if lang_presets:

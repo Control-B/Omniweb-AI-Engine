@@ -338,7 +338,9 @@ async def create_agent(
             "optimize_streaming_latency": 4,
         },
         "turn": {
-            "turn_timeout": 5.0,
+            "turn_timeout": 3.0,
+            "turn_eagerness": "eager",
+            "speculative_turn": True,
         },
         "conversation": {
             "max_duration_seconds": max_duration_seconds,
@@ -353,6 +355,9 @@ async def create_agent(
             ],
         },
     }
+
+    # Allow first message to be interrupted
+    agent_config["agent"]["disable_first_message_interruptions"] = False
 
     # Add language presets if any non-English languages are configured
     if lang_presets:

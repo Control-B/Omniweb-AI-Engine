@@ -830,3 +830,36 @@ async def admin_signup(
         "plan": client.plan,
         "role": "admin",
     }
+
+
+# ── Clerk SSO ────────────────────────────────────────────────────────────────
+
+@router.post("/clerk-session", response_model=TokenResponse)
+async def clerk_session(
+    client: dict = Depends(get_current_client),
+) -> dict:
+    """Exchange a Clerk JWT for an Omniweb engine JWT.
+
+    The frontend calls this after Clerk sign-in to get an engine-issued
+    JWT that carries `client_id`, `plan`, and `role` — which the dashboard
+    needs for all subsequent API calls.
+
+    The `get_current_client` dependency already handles Clerk JWT
+    verification and auto-provisioning, so by the time we get here the
+    Client record is guaranteed to exist.
+    """
+    token = create_access_token(
+        client_id=client["client_id"],
+        email=client["email"],
+        plan=client["plan"],
+        role=client["role"],
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "client_id": client["client_id"],
+        "email": client["email"],
+        "plan": client["plan"],
+        "role": client.get("role", "client"),
+    }

@@ -23,6 +23,7 @@ from app.core.logging import get_logger
 from app.models.models import Call, Client, Transcript, Lead, AgentConfig
 from app.services.sms_service import SMSService
 from app.services.lead_qualification_engine import extract_lead_from_transcript
+from app.services.webhook_service import fire_lead_created, fire_call_completed
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -107,18 +108,45 @@ class PostCallService:
                     agent_config=config_dict,
                 )
 
-        # 6. Fire CRM webhook
+        # 6. Fire webhooks (new generic system)
         client_result = await db.execute(
             select(Client).where(Client.id == call.client_id)
         )
         client = client_result.scalar_one_or_none()
-        if client and client.crm_webhook_url and lead:
-            await PostCallService._fire_crm_webhook(
-                url=client.crm_webhook_url,
-                call=call,
-                lead=lead,
-                turns=turns,
+        if client and client.crm_webhook_url:
+            # Always fire call.completed
+            await fire_call_completed(
+                db,
+                client=client,
+                call_data={
+                    "id": str(call.id),
+                    "caller_number": call.caller_number,
+                    "direction": call.direction,
+                    "duration_seconds": call.duration_seconds,
+                    "started_at": call.started_at.isoformat() if call.started_at else None,
+                    "ended_at": call.ended_at.isoformat() if call.ended_at else None,
+                    "transcript_turns": len(turns),
+                },
             )
+            # Fire lead.created if we extracted a lead
+            if lead:
+                await fire_lead_created(
+                    db,
+                    client=client,
+                    lead_data={
+                        "id": str(lead.id),
+                        "caller_name": lead.caller_name,
+                        "caller_phone": lead.caller_phone,
+                        "caller_email": lead.caller_email,
+                        "intent": lead.intent,
+                        "urgency": lead.urgency,
+                        "summary": lead.summary,
+                        "services_requested": lead.services_requested,
+                        "lead_score": lead.lead_score,
+                        "status": lead.status,
+                        "call_id": str(call.id),
+                    },
+                )
             call.crm_webhook_fired = True
 
         # 7. Mark call processed
@@ -166,43 +194,6 @@ class PostCallService:
             if text:
                 lines.append(f"{speaker}: {text}")
         return "\n".join(lines)
-
-    @staticmethod
-    async def _fire_crm_webhook(
-        *,
-        url: str,
-        call: "Call",
-        lead: Lead,
-        turns: list[dict],
-    ) -> None:
-        """POST lead + call data to the client's CRM webhook URL."""
-        payload = {
-            "event": "new_lead",
-            "call_id": str(call.id),
-            "client_id": str(call.client_id),
-            "caller_phone": call.caller_number,
-            "direction": call.direction,
-            "duration_seconds": call.duration_seconds,
-            "lead": {
-                "id": str(lead.id),
-                "caller_name": lead.caller_name,
-                "caller_phone": lead.caller_phone,
-                "intent": lead.intent,
-                "urgency": lead.urgency,
-                "summary": lead.summary,
-                "services_requested": lead.services_requested,
-                "lead_score": lead.lead_score,
-                "status": lead.status,
-            },
-            "transcript_turns": len(turns),
-        }
-        try:
-            async with httpx.AsyncClient(timeout=10) as http:
-                resp = await http.post(url, json=payload)
-                resp.raise_for_status()
-                logger.info(f"CRM webhook fired to {url}: {resp.status_code}")
-        except Exception as exc:
-            logger.warning(f"CRM webhook failed for {url}: {exc}")
 
     @staticmethod
     def _config_to_dict(config: Optional[AgentConfig]) -> dict:

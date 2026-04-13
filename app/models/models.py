@@ -57,7 +57,9 @@ class Client(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     supabase_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    clerk_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
     crm_webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    webhook_secret: Mapped[str | None] = mapped_column(String(128), nullable=True)
     notification_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     password_reset_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -83,10 +85,12 @@ class Client(Base):
     leads: Mapped[list["Lead"]] = relationship(back_populates="client")
     sms_messages: Mapped[list["SmsMessage"]] = relationship(back_populates="client")
     outreach_sequences: Mapped[list["OutreachSequence"]] = relationship(back_populates="client")
+    webhook_events: Mapped[list["WebhookEvent"]] = relationship(back_populates="client")
 
     __table_args__ = (
         Index("ix_clients_email", "email"),
         Index("ix_clients_stripe_customer_id", "stripe_customer_id"),
+        Index("ix_clients_clerk_user_id", "clerk_user_id"),
     )
 
 
@@ -424,6 +428,35 @@ class OutreachSequence(Base):
     __table_args__ = (
         Index("ix_outreach_sequences_client_id", "client_id"),
         UniqueConstraint("client_id", "name", name="uq_outreach_sequence_name"),
+    )
+
+
+# ── Webhook Events ────────────────────────────────────────────────────────────
+
+class WebhookEvent(Base):
+    """Log of every outbound webhook delivery attempt."""
+    __tablename__ = "webhook_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+
+    event: Mapped[str] = mapped_column(String(50), nullable=False)          # e.g. lead.created, call.completed
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)   # pending | delivered | failed
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    # Relationships
+    client: Mapped["Client"] = relationship(back_populates="webhook_events")
+
+    __table_args__ = (
+        Index("ix_webhook_events_client_id", "client_id"),
+        Index("ix_webhook_events_event", "event"),
+        Index("ix_webhook_events_created_at", "created_at"),
+        Index("ix_webhook_events_status", "status"),
     )
 
 

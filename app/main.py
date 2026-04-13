@@ -39,6 +39,7 @@ from app.api.routes import (
     numbers,
     subscribe,
     templates,
+    webhooks,
     webhooks_elevenlabs,
     webhooks_stripe,
     webhooks_tools,
@@ -195,6 +196,7 @@ app.include_router(knowledge_base.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
 app.include_router(embed.router, prefix=API_PREFIX)
 app.include_router(subscribe.router, prefix=API_PREFIX)
+app.include_router(webhooks.router, prefix=API_PREFIX)
 
 # Admin API
 app.include_router(admin.router, prefix=API_PREFIX)

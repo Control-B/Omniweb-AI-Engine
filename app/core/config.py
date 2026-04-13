@@ -104,6 +104,11 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
 
+    # ── Clerk (Auth) ─────────────────────────────────────────
+    CLERK_SECRET_KEY: str = ""
+    CLERK_PUBLISHABLE_KEY: str = ""
+    CLERK_JWKS_URL: str = ""  # auto-derived if empty
+
     # ── Telephony limits ─────────────────────────────────────
     MAX_CALL_DURATION_SECONDS: int = 1800  # 30 min hard stop
 
@@ -126,6 +131,10 @@ class Settings(BaseSettings):
     @property
     def openai_configured(self) -> bool:
         return bool(self.OPENAI_API_KEY)
+
+    @property
+    def clerk_configured(self) -> bool:
+        return bool(self.CLERK_SECRET_KEY)
 
 
 @lru_cache

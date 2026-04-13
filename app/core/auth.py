@@ -1,17 +1,21 @@
 """Authentication & authorization for the Omniweb Agent Engine.
 
-Three auth strategies:
+Four auth strategies:
 
 1. **Dashboard JWT** — issued on login, validated on every dashboard API request.
    The JWT payload contains `{"sub": client_id, "email": email, "plan": plan}`.
-   Issued by POST /auth/login (email + password verified against Supabase or
-   the Client table's hashed password).
+   Issued by POST /auth/login (email + password verified against the Client
+   table's hashed password).
 
-2. **API Key** — per-client API key stored in the Client table, used for
+2. **Clerk JWT** — issued by Clerk after social/email login. Validated using
+   Clerk's JWKS public keys. On first login a Client record is auto-created
+   (or linked via email).
+
+3. **API Key** — per-client API key stored in the Client table, used for
    external integrations (CRM, Zapier, Make, etc.).
    Passed as `Authorization: Bearer omniweb_key_...` or `X-API-Key: ...`.
 
-3. **Internal Key** — shared secret between FastAPI and the agent worker.
+4. **Internal Key** — shared secret between FastAPI and the agent worker.
    Passed as `X-Internal-Key: ...` header.
 
 Webhooks (ElevenLabs, Stripe) have their own signature verification — no JWT.
@@ -23,7 +27,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import httpx
 import jwt as pyjwt
+from jwt import PyJWKClient
 from fastapi import Depends, Header, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
@@ -39,6 +45,47 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 24
+
+# ── Clerk JWKS Client (cached, thread-safe) ──────────────────────────────────
+_clerk_jwks_client: Optional[PyJWKClient] = None
+
+
+def _get_clerk_jwks_client() -> Optional[PyJWKClient]:
+    """Lazily initialise the JWKS client for Clerk token verification."""
+    global _clerk_jwks_client
+    if _clerk_jwks_client is not None:
+        return _clerk_jwks_client
+    if not settings.clerk_configured:
+        return None
+
+    # Clerk JWKS URL: either explicit or derived from the publishable key
+    jwks_url = settings.CLERK_JWKS_URL
+    if not jwks_url:
+        # Clerk publishable keys look like pk_test_abc... or pk_live_abc...
+        # The JWKS endpoint is always at https://<frontend-api>/.well-known/jwks.json
+        # We can derive it from the secret key's instance or use a known pattern
+        jwks_url = "https://api.clerk.com/.well-known/jwks.json"
+        # Try to derive from CLERK_PUBLISHABLE_KEY (pk_test_<base64-encoded-frontend-api>)
+        pk = settings.CLERK_PUBLISHABLE_KEY
+        if pk:
+            import base64
+            try:
+                # pk format: pk_test_<base64url(frontend-api-url)> or pk_live_<base64url(...)>
+                parts = pk.split("_", 2)
+                if len(parts) == 3:
+                    encoded = parts[2]
+                    # Add padding if needed
+                    padding = 4 - len(encoded) % 4
+                    if padding != 4:
+                        encoded += "=" * padding
+                    frontend_api = base64.b64decode(encoded).decode().rstrip("$")
+                    jwks_url = f"https://{frontend_api}/.well-known/jwks.json"
+            except Exception:
+                pass  # Fall back to default
+
+    _clerk_jwks_client = PyJWKClient(jwks_url, cache_keys=True)
+    logger.info(f"Clerk JWKS client initialised: {jwks_url}")
+    return _clerk_jwks_client
 
 
 # ── Password Hashing ─────────────────────────────────────────────────────────
@@ -117,7 +164,7 @@ async def get_current_client(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(_bearer_scheme),
     x_api_key: Optional[str] = Header(None),
 ) -> dict:
-    """Extract the authenticated client from JWT or API key.
+    """Extract the authenticated client from JWT, Clerk token, or API key.
 
     Returns {"client_id": str, "email": str, "plan": str, "auth_method": str}.
     Raises 401 if no valid credentials.
@@ -128,7 +175,8 @@ async def get_current_client(
         # Check if it's an API key (starts with omniweb_key_)
         if token.startswith("omniweb_key_"):
             return await _resolve_api_key(token)
-        # Otherwise treat as JWT
+
+        # Try our own JWT first
         try:
             payload = decode_access_token(token)
             return {
@@ -138,10 +186,21 @@ async def get_current_client(
                 "role": payload.get("role", "client"),
                 "auth_method": "jwt",
             }
-        except pyjwt.ExpiredSignatureError:
-            raise HTTPException(401, "Token expired")
-        except pyjwt.InvalidTokenError:
-            raise HTTPException(401, "Invalid token")
+        except (pyjwt.ExpiredSignatureError, pyjwt.InvalidTokenError):
+            pass  # Fall through to try Clerk
+
+        # Try Clerk JWT if configured
+        if settings.clerk_configured:
+            try:
+                return await _resolve_clerk_token(token)
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.debug(f"Clerk token verification failed: {e}")
+                pass
+
+        # Neither worked — raise appropriate error
+        raise HTTPException(401, "Invalid or expired token")
 
     # Try X-API-Key header
     if x_api_key:
@@ -169,6 +228,98 @@ async def _resolve_api_key(key: str) -> dict:
             "plan": client.plan,
             "role": client.role,
             "auth_method": "api_key",
+        }
+
+
+async def _resolve_clerk_token(token: str) -> dict:
+    """Verify a Clerk-issued JWT and resolve (or create) the matching Client.
+
+    Clerk JWTs are signed with RS256 and verified against Clerk's JWKS endpoint.
+    The `sub` claim is the Clerk user ID (e.g. `user_2abc...`).
+    We look up the Client by `clerk_user_id`; if not found, we look up by email
+    and link the account; if still not found, we auto-provision a new Client.
+    """
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import Client
+
+    jwks_client = _get_clerk_jwks_client()
+    if not jwks_client:
+        raise HTTPException(401, "Clerk auth not configured")
+
+    try:
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        payload = pyjwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            options={"verify_aud": False},  # Clerk doesn't always set aud
+        )
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(401, "Clerk token expired")
+    except Exception as e:
+        logger.warning(f"Clerk JWT verification error: {e}")
+        raise HTTPException(401, "Invalid Clerk token")
+
+    clerk_user_id = payload.get("sub")
+    if not clerk_user_id:
+        raise HTTPException(401, "Invalid Clerk token: missing sub")
+
+    # Extract email from Clerk JWT claims
+    # Clerk puts email in different places depending on config
+    email = (
+        payload.get("email")
+        or payload.get("primary_email_address")
+        or (payload.get("email_addresses", [{}])[0].get("email_address") if payload.get("email_addresses") else None)
+        or ""
+    )
+    full_name = (
+        payload.get("name")
+        or f"{payload.get('first_name', '')} {payload.get('last_name', '')}".strip()
+        or email.split("@")[0] if email else "User"
+    )
+
+    async with AsyncSessionLocal() as db:
+        # 1. Try by clerk_user_id
+        result = await db.execute(
+            select(Client).where(Client.clerk_user_id == clerk_user_id, Client.is_active == True)
+        )
+        client = result.scalar_one_or_none()
+
+        if not client and email:
+            # 2. Try by email (link existing account)
+            result = await db.execute(
+                select(Client).where(Client.email == email, Client.is_active == True)
+            )
+            client = result.scalar_one_or_none()
+            if client:
+                client.clerk_user_id = clerk_user_id
+                await db.commit()
+                logger.info(f"Linked Clerk user {clerk_user_id} to existing client {client.id}")
+
+        if not client:
+            # 3. Auto-provision new client
+            import uuid as _uuid
+            client = Client(
+                id=_uuid.uuid4(),
+                name=full_name,
+                email=email,
+                hashed_password="",  # No password — Clerk-only auth
+                clerk_user_id=clerk_user_id,
+                role="client",
+                plan="starter",
+                is_active=True,
+            )
+            db.add(client)
+            await db.commit()
+            await db.refresh(client)
+            logger.info(f"Auto-provisioned client {client.id} from Clerk user {clerk_user_id}")
+
+        return {
+            "client_id": str(client.id),
+            "email": client.email,
+            "plan": client.plan,
+            "role": client.role,
+            "auth_method": "clerk",
         }
 
 

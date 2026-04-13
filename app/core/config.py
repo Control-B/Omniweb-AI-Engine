@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # development | production
     APP_ENV: str = "development"  # legacy alias
     APP_BASE_URL: str = "https://api.omniweb.ai"
-    PLATFORM_URL: str = "https://app.omniweb.ai"
+    PLATFORM_URL: str = "https://omniweb.ai"
     DEBUG: bool = False
     SECRET_KEY: str = "change-me-in-production"
     INTERNAL_API_KEY: str = "change-me-in-production"  # platform → engine auth
@@ -90,7 +90,10 @@ class Settings(BaseSettings):
     STRIPE_PRO_PRICE_ID: str = ""
     STRIPE_AGENCY_PRICE_ID: str = ""
 
-    # ── Email / SMTP ─────────────────────────────────────────
+    # ── Email ────────────────────────────────────────────────
+    # Option 1: Resend (recommended — just set RESEND_API_KEY)
+    RESEND_API_KEY: str = ""
+    # Option 2: SMTP (set SMTP_HOST + credentials)
     SMTP_HOST: str = ""
     SMTP_PORT: str = "587"
     SMTP_USER: str = ""

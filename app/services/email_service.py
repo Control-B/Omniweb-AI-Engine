@@ -1,13 +1,15 @@
 """Email service — transactional emails for the Omniweb platform.
 
-Provides a pluggable email backend. In production, set EMAIL_PROVIDER to
-"smtp" and configure SMTP_* env vars. Falls back to logging-only mode
-when no provider is configured (safe for dev).
+Supports two backends (checked in order):
+  1. Resend  — set RESEND_API_KEY (recommended, simplest)
+  2. SMTP    — set SMTP_HOST + SMTP_USER + SMTP_PASSWORD
+
+Falls back to logging-only mode when neither is configured (safe for dev).
 
 Supported emails:
   - Welcome (post-signup)
-    - Password reset
-    - Team invite
+  - Password reset
+  - Team invite
   - Billing alerts
   - Weekly reports
 """
@@ -21,6 +23,19 @@ logger = get_logger(__name__)
 settings = get_settings()
 
 
+# ── Backend detection ────────────────────────────────────────────────────────
+
+def _email_backend() -> str:
+    """Return 'resend', 'smtp', or 'none'."""
+    if getattr(settings, "RESEND_API_KEY", ""):
+        return "resend"
+    if getattr(settings, "SMTP_HOST", "") and getattr(settings, "SMTP_PORT", ""):
+        return "smtp"
+    return "none"
+
+
+# ── Core send function ──────────────────────────────────────────────────────
+
 async def send_email(
     *,
     to: str,
@@ -28,45 +43,85 @@ async def send_email(
     html_body: str,
     text_body: Optional[str] = None,
 ) -> bool:
-    """Send a transactional email.
+    """Send a transactional email via the configured backend."""
+    backend = _email_backend()
 
-    Returns True if sent (or logged in dev mode), False on error.
-    Uses SMTP if configured, otherwise logs the email for dev visibility.
-    """
-    if not _is_email_configured():
+    if backend == "none":
         logger.info(
             f"[EMAIL-DEV] Would send email to={to} subject=\"{subject}\" "
-            f"(no email provider configured — set SMTP_HOST to enable)"
+            f"(no email provider configured — set RESEND_API_KEY or SMTP_HOST)"
         )
         return True
 
     try:
-        import smtplib
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText
-
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = settings.SMTP_FROM or f"noreply@{settings.SMTP_HOST}"
-        msg["To"] = to
-
-        if text_body:
-            msg.attach(MIMEText(text_body, "plain"))
-        msg.attach(MIMEText(html_body, "html"))
-
-        # Run blocking SMTP in a thread
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, _smtp_send, msg, to)
-
-        logger.info(f"Email sent to {to}: {subject}")
-        return True
-
+        if backend == "resend":
+            return await _send_resend(to=to, subject=subject, html_body=html_body, text_body=text_body)
+        else:
+            return await _send_smtp(to=to, subject=subject, html_body=html_body, text_body=text_body)
     except Exception as e:
         logger.error(f"Failed to send email to {to}: {e}")
         return False
 
 
-def _smtp_send(msg, to: str) -> None:
+# ── Resend backend ───────────────────────────────────────────────────────────
+
+async def _send_resend(*, to: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
+    """Send via Resend API (https://resend.com/docs)."""
+    import httpx
+
+    payload: dict = {
+        "from": settings.SMTP_FROM or "Omniweb AI <noreply@omniweb.ai>",
+        "to": [to],
+        "subject": subject,
+        "html": html_body,
+    }
+    if text_body:
+        payload["text"] = text_body
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=10,
+        )
+
+    if resp.status_code >= 400:
+        logger.error(f"Resend API error {resp.status_code}: {resp.text}")
+        return False
+
+    logger.info(f"Email sent via Resend to {to}: {subject}")
+    return True
+
+
+# ── SMTP backend ─────────────────────────────────────────────────────────────
+
+async def _send_smtp(*, to: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
+    """Send via SMTP."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = settings.SMTP_FROM or f"noreply@{settings.SMTP_HOST}"
+    msg["To"] = to
+
+    if text_body:
+        msg.attach(MIMEText(text_body, "plain"))
+    msg.attach(MIMEText(html_body, "html"))
+
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _smtp_send_blocking, msg, to)
+
+    logger.info(f"Email sent via SMTP to {to}: {subject}")
+    return True
+
+
+def _smtp_send_blocking(msg, to: str) -> None:
     """Blocking SMTP send — called in executor."""
     import smtplib
 
@@ -86,11 +141,6 @@ def _smtp_send(msg, to: str) -> None:
 
     server.sendmail(msg["From"], [to], msg.as_string())
     server.quit()
-
-
-def _is_email_configured() -> bool:
-    """Check if SMTP credentials are set."""
-    return bool(getattr(settings, "SMTP_HOST", "") and getattr(settings, "SMTP_PORT", ""))
 
 
 # ── Email Templates ──────────────────────────────────────────────────────────

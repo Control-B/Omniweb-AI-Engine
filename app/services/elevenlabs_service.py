@@ -189,18 +189,19 @@ def _client() -> httpx.AsyncClient:
 
 
 def _default_overrides() -> dict[str, Any]:
-    """Return the overrides config that locks down voice-first behaviour.
+    """Return the overrides config for voice-first behaviour with text support.
 
-    The critical setting is `conversation.text_only: false` which **prevents**
-    the widget runtime from switching to text-only mode on its own.  When that
-    flag was `true` (the ElevenLabs default), the widget could flip into text
-    mode and prepend the `first_message` as a chat bubble *in addition* to the
-    agent speaking it — producing the double-welcome-message bug.
+    - ``conversation.text_only`` is overridable (True) — the SDK can pass
+      ``textOnly: true`` to start a text-only session, OR leave it False
+      for a voice session.  This does NOT force text-only by default.
+    - ``agent.first_message`` is not overridable (False) — the first message
+      always comes from the agent config, spoken aloud on voice connect.
+    - ``agent.language`` is overridable (True) — the SDK can switch languages.
     """
     return {
         "conversation_config_override": {
             "conversation": {
-                "text_only": False,
+                "text_only": True,
             },
             "agent": {
                 "first_message": False,
@@ -211,28 +212,27 @@ def _default_overrides() -> dict[str, Any]:
 
 
 def _default_widget_settings(*, language_selector: bool) -> dict[str, Any]:
-    """Return the standard voice-first widget config for all agents.
+    """Return the widget config for all agents.
 
     Key behavior:
     - ``expandable="never"`` → disables the expandable sheet/panel entirely,
       so the widget never shows the "Choose how to chat" screen.
-    - ``text_only=False`` + ``supports_text_only=False`` → voice is the only
-      start mode; no "Text chat" button is offered.
-    - ``text_input_enabled=False`` → the text input field is hidden.
-    - ``transcript_enabled=False`` → no transcript panel (which would make
-      the widget expandable and potentially show text UI).
+    - ``text_only=False`` → voice is the default start mode.
+    - ``supports_text_only=True`` → allows text-only sessions via the SDK.
+    - ``text_input_enabled=True`` → allows text input during sessions.
+    - ``transcript_enabled=False`` → no transcript panel (keeps widget compact).
     - ``conversation_mode_toggle_enabled=False`` → removes the text/voice
-      toggle in the sheet header so users can't switch mid-call.
-    - The agent's ``first_message`` is spoken aloud by TTS on connect, never
-      shown as a text bubble (text-only prepend is disabled above).
+      toggle in the ElevenLabs widget header (we handle mode toggle in our own UI).
+    - The agent's ``first_message`` is spoken aloud by TTS on voice connect,
+      never shown as a text bubble (text-only prepend is disabled in overrides).
     """
     return {
         "variant": "compact",
         "expandable": "never",
         "shareable_page_enabled": True,
         "text_only": False,
-        "text_input_enabled": False,
-        "supports_text_only": False,
+        "text_input_enabled": True,
+        "supports_text_only": True,
         "transcript_enabled": False,
         "feedback_mode": "during",
         "language_selector": language_selector,

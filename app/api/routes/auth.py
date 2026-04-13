@@ -772,3 +772,61 @@ async def change_password(
     logger.info(f"Password changed for {client.email}")
 
     return {"ok": True, "message": "Password changed successfully"}
+
+
+# ── Admin Signup (requires special code) ────────────────────────────────────
+
+class AdminSignupRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    admin_code: str
+
+
+@router.post("/admin-signup", response_model=TokenResponse, status_code=201)
+async def admin_signup(
+    body: AdminSignupRequest,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Create a new admin account. Requires the admin signup code."""
+    if body.admin_code != settings.ADMIN_SIGNUP_CODE:
+        raise HTTPException(403, "Invalid admin authorization code")
+
+    if len(body.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+
+    result = await db.execute(
+        select(Client).where(Client.email == body.email)
+    )
+    if result.scalar_one_or_none():
+        raise HTTPException(409, "Email already registered")
+
+    client = Client(
+        name=body.name,
+        email=body.email,
+        hashed_password=hash_password(body.password),
+        plan="admin",
+        role="admin",
+        is_active=True,
+    )
+    db.add(client)
+    await db.commit()
+    await db.refresh(client)
+
+    token = create_access_token(
+        client_id=str(client.id),
+        email=client.email,
+        plan=client.plan,
+        role=client.role,
+    )
+
+    logger.info(f"New admin signup: {client.email} ({client.id})")
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "client_id": str(client.id),
+        "email": client.email,
+        "plan": client.plan,
+        "role": "admin",
+    }

@@ -1,0 +1,204 @@
+"""Embed API — generate & validate embed authorization codes.
+
+Embed codes are unique per client, tied to email + phone, and expire
+when the subscription ends. The embed script validates the code on every
+page load so it cannot be transferred or duplicated.
+
+Endpoints:
+    POST /embed/generate    — generate a new embed code (requires auth)
+    POST /embed/validate    — validate an embed code (public, called by widget)
+    GET  /embed/snippet     — get the embed snippet for the client (requires auth)
+"""
+import secrets
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_session
+from app.core.auth import get_current_client
+from app.core.config import get_settings
+from app.core.logging import get_logger
+from app.models.models import Client, AgentConfig
+
+logger = get_logger(__name__)
+router = APIRouter(prefix="/embed", tags=["embed"])
+settings = get_settings()
+
+
+class GenerateEmbedRequest(BaseModel):
+    phone: str
+    domain: str | None = None
+
+
+class ValidateEmbedRequest(BaseModel):
+    embed_code: str
+    domain: str | None = None
+
+
+class EmbedSnippetResponse(BaseModel):
+    embed_code: str
+    snippet: str
+    domain: str | None
+    expires_at: str | None
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _generate_embed_code() -> str:
+    """Generate a 32-char hex embed code."""
+    return secrets.token_hex(16)
+
+
+@router.post("/generate")
+async def generate_embed_code(
+    body: GenerateEmbedRequest,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Generate a new embed authorization code for the authenticated client.
+
+    The code is tied to the client's email and the phone number provided.
+    It expires when the subscription ends (or never for active subscriptions).
+    """
+    client = await db.get(Client, current_client["client_id"])
+    if not client:
+        raise HTTPException(404, "Client not found")
+
+    if not client.is_active:
+        raise HTTPException(403, "Account is not active")
+
+    # Generate new embed code
+    code = _generate_embed_code()
+    client.embed_code = code
+    client.embed_phone = body.phone
+    client.embed_domain = body.domain
+
+    # Set expiry based on subscription status
+    if client.stripe_subscription_id:
+        # Active subscriber — no explicit expiry (controlled by subscription webhook)
+        client.embed_expires_at = None
+    elif client.trial_ends_at:
+        # Trial user — expires with trial
+        client.embed_expires_at = client.trial_ends_at
+    else:
+        # No subscription, no trial — shouldn't happen, but default 14 days
+        from datetime import timedelta
+        client.embed_expires_at = _now() + timedelta(days=14)
+
+    await db.commit()
+    await db.refresh(client)
+
+    logger.info(f"Embed code generated for {client.email}: {code[:8]}...")
+
+    return {
+        "embed_code": code,
+        "domain": client.embed_domain,
+        "phone": client.embed_phone,
+        "expires_at": client.embed_expires_at.isoformat() if client.embed_expires_at else None,
+    }
+
+
+@router.post("/validate")
+async def validate_embed_code(
+    body: ValidateEmbedRequest,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Validate an embed code (called by the widget script on page load).
+
+    This is a PUBLIC endpoint — no auth required. The embed code itself
+    is the authorization. Returns the agent config needed to render the widget.
+    """
+    result = await db.execute(
+        select(Client).where(Client.embed_code == body.embed_code)
+    )
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(403, "Invalid embed code")
+
+    if not client.is_active:
+        raise HTTPException(403, "Account is not active")
+
+    # Check expiry
+    if client.embed_expires_at and client.embed_expires_at < _now():
+        raise HTTPException(403, "Embed code has expired — subscription required")
+
+    # Optional domain lock
+    if client.embed_domain and body.domain:
+        allowed = client.embed_domain.lower().replace("www.", "")
+        provided = body.domain.lower().replace("www.", "")
+        if allowed not in provided and provided not in allowed:
+            logger.warning(
+                f"Domain mismatch for embed {body.embed_code[:8]}: "
+                f"allowed={client.embed_domain}, got={body.domain}"
+            )
+            raise HTTPException(403, "Embed code not authorized for this domain")
+
+    # Get agent config for the widget
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client.id)
+    )
+    agent_config = result.scalar_one_or_none()
+
+    elevenlabs_agent_id = None
+    widget_config = {}
+    if agent_config:
+        elevenlabs_agent_id = agent_config.elevenlabs_agent_id
+        widget_config = agent_config.widget_config or {}
+
+    return {
+        "valid": True,
+        "client_id": str(client.id),
+        "agent_id": elevenlabs_agent_id,
+        "widget_config": widget_config,
+        "plan": client.plan,
+    }
+
+
+@router.get("/snippet")
+async def get_embed_snippet(
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Get the embed snippet HTML for the authenticated client."""
+    client = await db.get(Client, current_client["client_id"])
+    if not client:
+        raise HTTPException(404, "Client not found")
+
+    if not client.embed_code:
+        raise HTTPException(404, "No embed code generated yet. Generate one first.")
+
+    # Get agent config for agent_id
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client.id)
+    )
+    agent_config = result.scalar_one_or_none()
+    agent_id = agent_config.elevenlabs_agent_id if agent_config else "YOUR_AGENT_ID"
+
+    platform_url = getattr(settings, "PLATFORM_URL", "https://omniweb.ai")
+    engine_url = getattr(settings, "ENGINE_BASE_URL", "https://omniweb-engine-rs6fr.ondigitalocean.app")
+
+    snippet = f"""<!-- Omniweb AI Widget -->
+<script>
+(function(){{
+  var d=document,s=d.createElement('script');
+  s.src='{platform_url}/widget/loader.js';
+  s.async=true;
+  s.dataset.embedCode='{client.embed_code}';
+  s.dataset.agentId='{agent_id}';
+  s.dataset.engineUrl='{engine_url}';
+  d.head.appendChild(s);
+}})();
+</script>"""
+
+    return {
+        "embed_code": client.embed_code,
+        "snippet": snippet,
+        "domain": client.embed_domain,
+        "expires_at": client.embed_expires_at.isoformat() if client.embed_expires_at else None,
+    }

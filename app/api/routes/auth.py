@@ -197,6 +197,7 @@ async def signup(
         raise HTTPException(409, "Email already registered")
 
     # Create client
+    from datetime import timedelta
     client = Client(
         name=body.name,
         email=body.email,
@@ -204,6 +205,7 @@ async def signup(
         plan="starter",
         role="client",
         is_active=True,
+        trial_ends_at=_now() + timedelta(days=14),
     )
     db.add(client)
     await db.flush()

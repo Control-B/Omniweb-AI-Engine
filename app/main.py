@@ -32,10 +32,12 @@ from app.api.routes import (
     automations,
     calls,
     chat,
+    embed,
     industry,
     knowledge_base,
     leads,
     numbers,
+    subscribe,
     templates,
     webhooks_elevenlabs,
     webhooks_stripe,
@@ -191,6 +193,8 @@ app.include_router(chat.router, prefix=API_PREFIX)
 app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
+app.include_router(embed.router, prefix=API_PREFIX)
+app.include_router(subscribe.router, prefix=API_PREFIX)
 
 # Admin API
 app.include_router(admin.router, prefix=API_PREFIX)

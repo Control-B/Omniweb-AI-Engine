@@ -65,6 +65,14 @@ class Client(Base):
     invite_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     invited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     invite_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Embed code — unique per client, tied to email+phone, non-transferable
+    embed_code: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    embed_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    embed_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    embed_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 

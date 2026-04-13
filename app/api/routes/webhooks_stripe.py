@@ -72,6 +72,15 @@ async def _update_subscription(db: AsyncSession, subscription: dict, active: boo
     client.stripe_subscription_id = subscription.get("id")
     client.is_active = active
 
+    # Manage embed code expiry based on subscription status
+    if active:
+        # Active subscription — embed code never expires
+        client.embed_expires_at = None
+    else:
+        # Subscription cancelled — expire embed code immediately
+        from datetime import datetime, timezone
+        client.embed_expires_at = datetime.now(timezone.utc)
+
     # Determine plan from price ID
     items = subscription.get("items", {}).get("data", [])
     if items:

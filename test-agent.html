@@ -34,15 +34,21 @@
 </head>
 <body>
   <h1>⚡ Bobs Plumbing - Aria</h1>
-  <p>Click the chat bubble in the bottom-right to talk to the AI agent</p>
+  <p>Click the voice button in the bottom-right to talk to the AI agent</p>
 
   <div class="info">
-    <p>Allow microphone access when prompted. You can also type messages.</p>
+    <p>Allow microphone access when prompted. Voice-first — just tap and talk.</p>
     <code>Agent ID: agent_4601kny4fvsgfjz8mbqhevyp1k9q</code>
   </div>
 
-  <!-- ElevenLabs Conversational AI Widget (voice-first, controlled server-side) -->
-  <elevenlabs-convai agent-id="agent_4601kny4fvsgfjz8mbqhevyp1k9q"></elevenlabs-convai>
-  <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
+  <!-- Custom Voice Widget (voice-first, no text mode) -->
+  <iframe
+    src="https://app.omniweb.ai/widget/agent_4601kny4fvsgfjz8mbqhevyp1k9q"
+    width="120"
+    height="120"
+    style="position:fixed;bottom:20px;right:20px;border:none;border-radius:50%;z-index:9999;overflow:hidden;"
+    allow="microphone"
+    title="Voice Assistant"
+  ></iframe>
 </body>
 </html>

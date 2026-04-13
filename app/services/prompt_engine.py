@@ -159,7 +159,7 @@ def _goals_block(agent_mode: str, industry: IndustryConfig) -> str:
 
 - LOW INTENT (browsing, curious): Educate more, share insights, delay hard qualification. Build interest.
 - HIGH INTENT (ready to act, asking specifics): Move fast — pricing, demo, signup. Reduce friction.
-- CONFUSED: Simplify: "Think of it as a 24/7 salesperson that talks to your visitors and turns them into customers.""""
+- CONFUSED: Simplify it \u2014 say something like: Think of it as a 24/7 salesperson that talks to your visitors and turns them into customers."""
 
 
 def _qualification_block(fields: list[dict[str, Any]]) -> str:

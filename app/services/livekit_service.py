@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import timedelta
 from typing import Any
 
 from livekit.api import AccessToken, VideoGrants, LiveKitAPI
@@ -60,7 +61,7 @@ def generate_participant_token(
                 can_publish_data=True,
             )
         )
-        .with_ttl(ttl)
+        .with_ttl(timedelta(seconds=ttl))
     )
 
     jwt = token.to_jwt()

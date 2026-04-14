@@ -297,8 +297,9 @@ async def _resolve_clerk_token(token: str) -> dict:
                 logger.info(f"Linked Clerk user {clerk_user_id} to existing client {client.id}")
 
         if not client:
-            # 3. Auto-provision new client
+            # 3. Auto-provision new client with 14-day trial
             import uuid as _uuid
+            trial_end = datetime.now(timezone.utc) + timedelta(days=14)
             client = Client(
                 id=_uuid.uuid4(),
                 name=full_name,
@@ -308,11 +309,20 @@ async def _resolve_clerk_token(token: str) -> dict:
                 role="client",
                 plan="starter",
                 is_active=True,
+                trial_ends_at=trial_end,
             )
             db.add(client)
             await db.commit()
             await db.refresh(client)
-            logger.info(f"Auto-provisioned client {client.id} from Clerk user {clerk_user_id}")
+            logger.info(f"Auto-provisioned client {client.id} from Clerk user {clerk_user_id} (trial until {trial_end.date()})")
+
+            # Fire welcome email (non-blocking)
+            try:
+                import asyncio
+                from app.services.email_service import send_welcome_email
+                asyncio.create_task(send_welcome_email(to=email, name=full_name))
+            except Exception:
+                pass  # Non-critical
 
         return {
             "client_id": str(client.id),
@@ -360,3 +370,68 @@ def require_owner_or_admin(client_id_param: str = "client_id"):
     ):
         return client
     return _check
+
+
+# ── Plan Limits & Trial Enforcement ──────────────────────────────────────────
+
+PLAN_MINUTE_LIMITS = {
+    "starter": 500,
+    "growth": 2500,
+    "pro": 999_999,       # effectively unlimited
+    "agency": 999_999,
+}
+
+
+async def require_active_subscription(
+    client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(lambda: None),  # overridden by route
+) -> dict:
+    """Dependency that blocks requests when trial expired and no active subscription.
+
+    Admins are always allowed. Usage within limits is allowed during trial.
+    """
+    if client.get("role") == "admin":
+        return client
+
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import Client as ClientModel
+
+    async with AsyncSessionLocal() as session:
+        c = await session.get(ClientModel, client["client_id"])
+        if not c:
+            raise HTTPException(404, "Client not found")
+
+        now = datetime.now(timezone.utc)
+
+        # Has active Stripe subscription → allowed
+        if c.stripe_subscription_id:
+            # Check usage limits
+            limit = PLAN_MINUTE_LIMITS.get(c.plan, 500)
+            if c.plan_minutes_used >= limit:
+                raise HTTPException(
+                    402,
+                    f"You have used all {limit} minutes in your {c.plan} plan. "
+                    "Please upgrade your plan.",
+                )
+            return client
+
+        # In trial period → allowed (with limits)
+        if c.trial_ends_at and c.trial_ends_at > now:
+            limit = PLAN_MINUTE_LIMITS.get("starter", 500)
+            if c.plan_minutes_used >= limit:
+                raise HTTPException(
+                    402,
+                    f"You have used all {limit} trial minutes. "
+                    "Please subscribe to continue.",
+                )
+            return client
+
+        # Trial expired, no subscription → blocked
+        if c.trial_ends_at and c.trial_ends_at <= now:
+            raise HTTPException(
+                402,
+                "Your free trial has expired. Please subscribe to continue using Omniweb.",
+            )
+
+        # No trial set (legacy user) → allowed
+        return client

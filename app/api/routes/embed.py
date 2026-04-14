@@ -202,3 +202,86 @@ async def get_embed_snippet(
         "domain": client.embed_domain,
         "expires_at": client.embed_expires_at.isoformat() if client.embed_expires_at else None,
     }
+
+
+@router.get("/verify-domain/{embed_code}")
+async def get_domain_verification(
+    embed_code: str,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Get domain verification instructions for an embed code.
+
+    Returns a meta tag the client should add to their website's <head>
+    to prove domain ownership. Once verified, the embed is domain-locked.
+    """
+    result = await db.execute(
+        select(Client).where(Client.embed_code == embed_code)
+    )
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(404, "Invalid embed code")
+
+    verification_token = f"omniweb-verify-{embed_code[:16]}"
+
+    return {
+        "verification_token": verification_token,
+        "meta_tag": f'<meta name="omniweb-site-verification" content="{verification_token}" />',
+        "instructions": (
+            "Add this meta tag to the <head> of your website's homepage, "
+            "then call POST /api/embed/verify-domain to complete verification."
+        ),
+        "current_domain": client.embed_domain,
+    }
+
+
+class VerifyDomainRequest(BaseModel):
+    embed_code: str
+    domain: str
+
+
+@router.post("/verify-domain")
+async def verify_domain_ownership(
+    body: VerifyDomainRequest,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Verify domain ownership by checking for the meta tag on the client's site.
+
+    This locks the embed code to the verified domain for security.
+    """
+    import httpx as _httpx
+
+    client = await db.get(Client, current_client["client_id"])
+    if not client or client.embed_code != body.embed_code:
+        raise HTTPException(403, "Invalid embed code")
+
+    verification_token = f"omniweb-verify-{body.embed_code[:16]}"
+    domain = body.domain.strip().lower().replace("www.", "")
+
+    # Check for the verification meta tag on the domain
+    try:
+        async with _httpx.AsyncClient(timeout=10, follow_redirects=True) as http:
+            resp = await http.get(f"https://{domain}")
+            if verification_token not in resp.text:
+                # Try www variant
+                resp = await http.get(f"https://www.{domain}")
+                if verification_token not in resp.text:
+                    raise HTTPException(
+                        400,
+                        f"Verification meta tag not found on {domain}. "
+                        "Please add it to your site's <head> and try again.",
+                    )
+    except _httpx.HTTPError as e:
+        raise HTTPException(400, f"Could not reach {domain}: {str(e)}")
+
+    # Domain verified — lock embed to this domain
+    client.embed_domain = domain
+    await db.commit()
+
+    logger.info(f"Domain {domain} verified for client {client.email}")
+
+    return {
+        "verified": True,
+        "domain": domain,
+        "message": f"Domain {domain} has been verified and locked to your embed code.",
+    }

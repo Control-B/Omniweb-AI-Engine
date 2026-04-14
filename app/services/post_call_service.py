@@ -24,6 +24,7 @@ from app.models.models import Call, Client, Transcript, Lead, AgentConfig
 from app.services.sms_service import SMSService
 from app.services.lead_qualification_engine import extract_lead_from_transcript
 from app.services.webhook_service import fire_lead_created, fire_call_completed
+from app.services.email_service import send_new_lead_notification, send_usage_limit_warning
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -113,6 +114,44 @@ class PostCallService:
             select(Client).where(Client.id == call.client_id)
         )
         client = client_result.scalar_one_or_none()
+
+        # 6a. Usage metering — increment plan_minutes_used
+        if client and call.duration_seconds:
+            minutes = max(1, (call.duration_seconds + 59) // 60)  # round up
+            client.plan_minutes_used = (client.plan_minutes_used or 0) + minutes
+            logger.info(
+                f"Usage metered: +{minutes} min for client {client.id} "
+                f"(total: {client.plan_minutes_used})"
+            )
+
+            # Check usage thresholds and send warning emails
+            plan_limits = {"starter": 500, "growth": 2500, "pro": 999999, "agency": 999999}
+            limit = plan_limits.get(client.plan, 500)
+            usage_pct = (client.plan_minutes_used / limit) * 100 if limit > 0 else 0
+            if usage_pct >= 80 and (client.plan_minutes_used - minutes) / limit * 100 < 80:
+                # Just crossed 80% — send warning
+                import asyncio
+                notification_to = client.notification_email or client.email
+                asyncio.create_task(send_usage_limit_warning(
+                    to=notification_to,
+                    name=client.name,
+                    minutes_used=client.plan_minutes_used,
+                    plan_limit=limit,
+                    plan=client.plan,
+                ))
+
+        # 6b. Send lead notification email
+        if client and lead:
+            import asyncio
+            notification_to = client.notification_email or client.email
+            asyncio.create_task(send_new_lead_notification(
+                to=notification_to,
+                lead_name=lead.caller_name or "Unknown",
+                lead_phone=lead.caller_phone or "",
+                lead_intent=lead.intent or "",
+                lead_score=lead.lead_score or 0,
+            ))
+
         if client and client.crm_webhook_url:
             # Always fire call.completed
             await fire_call_completed(

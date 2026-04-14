@@ -235,3 +235,93 @@ async def send_team_invite_email(*, to: str, name: str, invited_by: str, accept_
     """
     text = f"{invited_by} invited you to join Omniweb AI Admin. Accept here: {accept_url}"
     return await send_email(to=to, subject=subject, html_body=html, text_body=text)
+
+
+async def send_new_lead_notification(*, to: str, lead_name: str, lead_phone: str, lead_intent: str, lead_score: float) -> bool:
+    """Notify the business owner when a new lead is captured."""
+    subject = f"🎯 New lead captured: {lead_name or 'Unknown'}"
+    score_pct = int(lead_score * 100) if lead_score <= 1 else int(lead_score)
+    html = f"""
+    <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px;">
+        <h1 style="font-size: 22px; margin: 0 0 8px;">New Lead Captured</h1>
+        <p style="color: #666; font-size: 15px; line-height: 1.6;">
+            Your AI agent just qualified a new lead.
+        </p>
+        <div style="background: #f8f9fa; border-radius: 12px; padding: 20px; margin: 20px 0;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 6px 0; color: #666; font-size: 14px;">Name</td><td style="padding: 6px 0; font-size: 14px; font-weight: 600;">{lead_name or '—'}</td></tr>
+                <tr><td style="padding: 6px 0; color: #666; font-size: 14px;">Phone</td><td style="padding: 6px 0; font-size: 14px;">{lead_phone or '—'}</td></tr>
+                <tr><td style="padding: 6px 0; color: #666; font-size: 14px;">Intent</td><td style="padding: 6px 0; font-size: 14px;">{lead_intent or '—'}</td></tr>
+                <tr><td style="padding: 6px 0; color: #666; font-size: 14px;">Score</td><td style="padding: 6px 0; font-size: 14px; font-weight: 600; color: {'#10b981' if score_pct >= 70 else '#f59e0b' if score_pct >= 40 else '#6b7280'};">{score_pct}%</td></tr>
+            </table>
+        </div>
+        <div style="text-align: center; margin: 24px 0;">
+            <a href="{settings.PLATFORM_URL}/dashboard"
+               style="display: inline-block; background: linear-gradient(135deg, #06b6d4, #3b82f6); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">
+                View in Dashboard
+            </a>
+        </div>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">
+            Omniweb AI · <a href="{settings.PLATFORM_URL}" style="color: #999;">omniweb.ai</a>
+        </p>
+    </div>
+    """
+    text = f"New lead: {lead_name} ({lead_phone}) — Intent: {lead_intent}, Score: {score_pct}%"
+    return await send_email(to=to, subject=subject, html_body=html, text_body=text)
+
+
+async def send_trial_expiring_email(*, to: str, name: str, days_left: int) -> bool:
+    """Warn the user their trial is about to expire."""
+    subject = f"⏰ Your Omniweb trial expires in {days_left} day{'s' if days_left != 1 else ''}"
+    html = f"""
+    <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px;">
+        <h1 style="font-size: 22px; margin: 0 0 8px;">Your trial is ending soon</h1>
+        <p style="color: #666; font-size: 15px; line-height: 1.6;">
+            Hi {name}, your free trial expires in <strong>{days_left} day{'s' if days_left != 1 else ''}</strong>.
+            Subscribe now to keep your AI agent running without interruption.
+        </p>
+        <div style="text-align: center; margin: 28px 0;">
+            <a href="{settings.PLATFORM_URL}/dashboard"
+               style="display: inline-block; background: linear-gradient(135deg, #06b6d4, #3b82f6); color: white; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px;">
+                Subscribe Now
+            </a>
+        </div>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">
+            Omniweb AI · <a href="{settings.PLATFORM_URL}" style="color: #999;">omniweb.ai</a>
+        </p>
+    </div>
+    """
+    text = f"Hi {name}, your Omniweb trial expires in {days_left} days. Subscribe at {settings.PLATFORM_URL}/dashboard"
+    return await send_email(to=to, subject=subject, html_body=html, text_body=text)
+
+
+async def send_usage_limit_warning(*, to: str, name: str, minutes_used: int, plan_limit: int, plan: str) -> bool:
+    """Warn when approaching plan minute limits (e.g., 80% usage)."""
+    pct = int((minutes_used / plan_limit) * 100) if plan_limit > 0 else 100
+    subject = f"⚠️ You've used {pct}% of your {plan} plan minutes"
+    html = f"""
+    <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px;">
+        <h1 style="font-size: 22px; margin: 0 0 8px;">Usage Alert</h1>
+        <p style="color: #666; font-size: 15px; line-height: 1.6;">
+            Hi {name}, you've used <strong>{minutes_used}</strong> of your <strong>{plan_limit}</strong> minutes
+            on the <strong>{plan}</strong> plan ({pct}%).
+        </p>
+        <p style="color: #666; font-size: 15px;">
+            Consider upgrading to avoid service interruption.
+        </p>
+        <div style="text-align: center; margin: 28px 0;">
+            <a href="{settings.PLATFORM_URL}/dashboard"
+               style="display: inline-block; background: linear-gradient(135deg, #06b6d4, #3b82f6); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">
+                Manage Plan
+            </a>
+        </div>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">
+            Omniweb AI · <a href="{settings.PLATFORM_URL}" style="color: #999;">omniweb.ai</a>
+        </p>
+    </div>
+    """
+    text = f"Usage alert: {minutes_used}/{plan_limit} minutes used on {plan} plan ({pct}%). Manage: {settings.PLATFORM_URL}/dashboard"
+    return await send_email(to=to, subject=subject, html_body=html, text_body=text)

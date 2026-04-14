@@ -55,6 +55,9 @@ async def stripe_webhook(request: Request) -> dict:
             await _update_subscription(db, data, active=False)
         elif event_type == "invoice.payment_failed":
             logger.warning(f"Payment failed for customer: {data.get('customer')}")
+        elif event_type == "invoice.paid":
+            # Reset minutes on successful renewal payment
+            await _reset_minutes_on_renewal(db, data)
 
     return {"ok": True}
 
@@ -90,3 +93,32 @@ async def _update_subscription(db: AsyncSession, subscription: dict, active: boo
 
     await db.commit()
     logger.info(f"Updated client {client.id} subscription: active={active} plan={client.plan}")
+
+
+async def _reset_minutes_on_renewal(db: AsyncSession, invoice: dict) -> None:
+    """Reset plan_minutes_used when a subscription invoice is paid.
+
+    Only resets for subscription renewals (billing_reason=subscription_cycle),
+    not for the initial payment.
+    """
+    billing_reason = invoice.get("billing_reason", "")
+    customer_id = invoice.get("customer")
+
+    if billing_reason not in ("subscription_cycle", "subscription_update"):
+        return
+
+    result = await db.execute(
+        select(Client).where(Client.stripe_customer_id == customer_id)
+    )
+    client = result.scalar_one_or_none()
+    if not client:
+        logger.warning(f"No client found for Stripe customer: {customer_id}")
+        return
+
+    old_minutes = client.plan_minutes_used
+    client.plan_minutes_used = 0
+    await db.commit()
+    logger.info(
+        f"Reset plan_minutes_used for client {client.id} "
+        f"({old_minutes} → 0, reason={billing_reason})"
+    )

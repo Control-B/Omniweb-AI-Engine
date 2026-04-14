@@ -2,16 +2,17 @@
 
 This is the DATA PLANE. It:
   - Manages multi-tenant client accounts and auth
-  - Creates/syncs ElevenLabs agents per client
-  - Receives ElevenLabs post-conversation webhooks
+  - Composes per-tenant system prompts (prompt engine)
+  - Generates LiveKit tokens & dispatches the agent worker with prompt metadata
+  - Receives post-conversation webhooks
   - Serves call history, transcripts, leads to the dashboard
   - Handles Stripe billing webhooks
-  - Manages phone numbers (buy via Twilio, import into ElevenLabs)
+  - Manages phone numbers (buy via Twilio, import)
   - Sends SMS via Twilio
   - Provides text chat widget configuration
 
-All real-time voice/text AI is hosted by ElevenLabs.
-No agent worker process needed.
+Real-time voice AI is handled by the self-hosted LiveKit agent worker
+(agent/worker.py) which receives per-tenant prompts via dispatch metadata.
 """
 from contextlib import asynccontextmanager
 

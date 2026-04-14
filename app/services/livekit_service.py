@@ -1,16 +1,15 @@
-"""LiveKit service — token generation & room management.
+"""LiveKit service — token generation, room management & agent dispatch.
 
 The frontend receives a short-lived token, connects to LiveKit Cloud
-via WebRTC, and the hosted agent (configured in the LiveKit Cloud
-dashboard) automatically joins the room to handle the full
-STT → LLM → TTS voice pipeline.
+via WebRTC.  The engine dispatches our self-hosted agent worker with
+per-tenant prompt metadata so every business gets a customized AI voice.
 
-No self-hosted worker process is needed — LiveKit Cloud manages the
-Deepgram STT, OpenAI LLM, and Cartesia TTS pipeline entirely.
+Pipeline: Deepgram STT → OpenAI LLM → Cartesia TTS (via LiveKit Inference).
 """
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from datetime import timedelta
@@ -84,16 +83,27 @@ def create_room_name(client_id: str | None = None, channel: str = "web") -> str:
     return f"omniweb_{channel}_{prefix}_{ts}"
 
 
-async def dispatch_agent(room_name: str) -> None:
-    """Explicitly dispatch the hosted agent to a room.
+async def dispatch_agent(
+    room_name: str,
+    *,
+    system_prompt: str = "",
+    first_message: str = "",
+) -> None:
+    """Dispatch the self-hosted Omniweb agent to a room with prompt metadata.
 
-    LiveKit Cloud hosted agents do NOT auto-join rooms;
-    they must be dispatched via the API.
+    The agent worker reads ``ctx.job.metadata`` to get the system prompt
+    and first message, enabling per-tenant customization.
     """
     agent_name = settings.LIVEKIT_AGENT_NAME
     if not agent_name:
         logger.warning("LIVEKIT_AGENT_NAME not set — skipping agent dispatch")
         return
+
+    # Pack prompt into dispatch metadata so the worker can read it
+    dispatch_metadata = json.dumps({
+        "system_prompt": system_prompt,
+        "first_message": first_message,
+    })
 
     async with LiveKitAPI(
         url=settings.LIVEKIT_URL,
@@ -104,6 +114,7 @@ async def dispatch_agent(room_name: str) -> None:
             CreateAgentDispatchRequest(
                 agent_name=agent_name,
                 room=room_name,
+                metadata=dispatch_metadata,
             )
         )
         logger.info(
@@ -111,6 +122,7 @@ async def dispatch_agent(room_name: str) -> None:
             agent=agent_name,
             room=room_name,
             dispatch_id=dispatch.id,
+            prompt_len=len(system_prompt),
         )
 
 

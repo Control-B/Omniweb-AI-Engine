@@ -51,5 +51,17 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── LiveKit Agent Worker (self-hosted voice agent) ──────────────────────────
+  agent-worker:
+    build:
+      context: .
+      target: agent-worker
+    env_file: .env
+    environment:
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+    restart: unless-stopped
+
 volumes:
   postgres_data:

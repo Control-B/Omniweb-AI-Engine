@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     LIVEKIT_URL: str = ""          # wss://xxx.livekit.cloud
     LIVEKIT_API_KEY: str = ""      # APIxxxxxxxxx
     LIVEKIT_API_SECRET: str = ""   # secret paired with key
-    LIVEKIT_AGENT_NAME: str = ""   # hosted agent name from LiveKit Cloud dashboard
+    LIVEKIT_AGENT_NAME: str = "omniweb-agent"  # self-hosted worker agent name (matches @server.rtc_session)
 
     # ── Cal.com (Appointment Booking) ────────────────────────
     CALCOM_API_KEY: str = ""

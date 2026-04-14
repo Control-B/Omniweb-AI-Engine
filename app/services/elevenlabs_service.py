@@ -111,7 +111,7 @@ def get_language_options() -> list[dict[str, Any]]:
 DEFAULT_FIRST_MESSAGES: dict[str, str] = {
     "ar": "مرحبًا! كيف يمكنني مساعدتك اليوم؟",
     "de": "Hallo! Wie kann ich Ihnen heute helfen?",
-    "en": "Hi, I'd love to help you today, so tell me the problem you're trying to solve, and I'll understand your needs, recommend the right solution, and answer your questions so you can move forward faster by text or voice. Talk to me.",
+    "en": "Hey there! I'm your Omniweb AI assistant. What can I help you with today?",
     "es": "¡Hola! ¿En qué puedo ayudarte hoy?",
     "fr": "Bonjour ! Comment puis-je vous aider aujourd'hui ?",
     "hi": "नमस्ते! आज मैं आपकी कैसे मदद कर सकता हूँ?",

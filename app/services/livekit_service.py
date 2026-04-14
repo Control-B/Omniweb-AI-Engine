@@ -16,7 +16,7 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
-from livekit.api import AccessToken, VideoGrants, LiveKitAPI
+from livekit.api import AccessToken, VideoGrants, LiveKitAPI, CreateAgentDispatchRequest
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -82,6 +82,36 @@ def create_room_name(client_id: str | None = None, channel: str = "web") -> str:
     prefix = (client_id or "anon")[:8]
     ts = hex(int(time.time()))[2:]
     return f"omniweb_{channel}_{prefix}_{ts}"
+
+
+async def dispatch_agent(room_name: str) -> None:
+    """Explicitly dispatch the hosted agent to a room.
+
+    LiveKit Cloud hosted agents do NOT auto-join rooms;
+    they must be dispatched via the API.
+    """
+    agent_name = settings.LIVEKIT_AGENT_NAME
+    if not agent_name:
+        logger.warning("LIVEKIT_AGENT_NAME not set — skipping agent dispatch")
+        return
+
+    async with LiveKitAPI(
+        url=settings.LIVEKIT_URL,
+        api_key=settings.LIVEKIT_API_KEY,
+        api_secret=settings.LIVEKIT_API_SECRET,
+    ) as api:
+        dispatch = await api.agent_dispatch.create_dispatch(
+            CreateAgentDispatchRequest(
+                agent_name=agent_name,
+                room=room_name,
+            )
+        )
+        logger.info(
+            "Dispatched agent to room",
+            agent=agent_name,
+            room=room_name,
+            dispatch_id=dispatch.id,
+        )
 
 
 async def list_rooms() -> list[dict[str, Any]]:

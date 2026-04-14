@@ -65,6 +65,9 @@ async def create_session_token(req: TokenRequest):
         metadata=json.dumps(metadata),
     )
 
+    # Dispatch the hosted agent to the room so it joins automatically
+    await livekit_service.dispatch_agent(room_name)
+
     logger.info(
         "LiveKit session created",
         room=room_name,

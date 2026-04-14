@@ -72,6 +72,16 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_FROM_NUMBER: str = ""  # default outbound SMS number
 
+    # ── LiveKit (WebRTC voice agent infrastructure) ──────────
+    LIVEKIT_URL: str = ""          # wss://xxx.livekit.cloud
+    LIVEKIT_API_KEY: str = ""      # APIxxxxxxxxx
+    LIVEKIT_API_SECRET: str = ""   # secret paired with key
+
+    # ── Cal.com (Appointment Booking) ────────────────────────
+    CALCOM_API_KEY: str = ""
+    CALCOM_API_URL: str = "https://api.cal.com/v2"
+    CALCOM_EVENT_TYPE_ID: str = ""  # default event type for bookings (int as string)
+
     # ── OpenAI (LLM for post-call processing) ────────────────
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
@@ -135,6 +145,14 @@ class Settings(BaseSettings):
     @property
     def clerk_configured(self) -> bool:
         return bool(self.CLERK_SECRET_KEY)
+
+    @property
+    def livekit_configured(self) -> bool:
+        return bool(self.LIVEKIT_URL and self.LIVEKIT_API_KEY and self.LIVEKIT_API_SECRET)
+
+    @property
+    def calcom_configured(self) -> bool:
+        return bool(self.CALCOM_API_KEY)
 
 
 @lru_cache

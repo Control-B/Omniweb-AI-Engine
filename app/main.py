@@ -36,6 +36,7 @@ from app.api.routes import (
     industry,
     knowledge_base,
     leads,
+    livekit,
     numbers,
     subscribe,
     templates,
@@ -130,6 +131,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("Omniweb Agent Engine starting up")
     logger.info(f"ElevenLabs configured: {settings.elevenlabs_configured}")
+    logger.info(f"LiveKit configured: {settings.livekit_configured}")
     logger.info(f"Twilio configured: {settings.twilio_configured}")
     logger.info(f"OpenAI configured: {settings.openai_configured}")
 
@@ -268,6 +270,7 @@ app.include_router(automations.router, prefix=API_PREFIX)
 app.include_router(chat.router, prefix=API_PREFIX)
 app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
+app.include_router(livekit.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
 app.include_router(embed.router, prefix=API_PREFIX)
 app.include_router(subscribe.router, prefix=API_PREFIX)
@@ -284,6 +287,7 @@ async def health() -> dict:
         "service": "omniweb-agent-engine",
         "version": "2.0.0",
         "elevenlabs_configured": settings.elevenlabs_configured,
+        "livekit_configured": settings.livekit_configured,
         "twilio_configured": settings.twilio_configured,
         "openai_configured": settings.openai_configured,
     }

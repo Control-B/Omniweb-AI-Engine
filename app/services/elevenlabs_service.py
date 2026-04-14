@@ -367,7 +367,6 @@ async def create_agent(
                 "audio",
                 "interruption",
                 "user_transcript",
-                "agent_response_correction",
                 "agent_chat_response_part",
             ],
         },

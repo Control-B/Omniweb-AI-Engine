@@ -34,7 +34,8 @@ _project_root = Path(__file__).resolve().parent.parent
 load_dotenv(_project_root / ".env")
 
 from livekit import agents
-from livekit.agents import AgentServer, AgentSession, Agent, room_io, TurnHandlingOptions
+from livekit.agents import AgentServer, AgentSession, Agent, TurnHandlingOptions, llm
+from livekit.agents.llm.tool_context import StopResponse
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
@@ -70,6 +71,52 @@ BACKGROUND_NOISE_HINTS = (
     "luke",
     "sensor",
     "lithium",
+)
+
+DIRECTED_SPEECH_HINTS = (
+    "omniweb",
+    "ava",
+    "can you",
+    "could you",
+    "would you",
+    "will you",
+    "help me",
+    "tell me",
+    "show me",
+    "what",
+    "how",
+    "why",
+    "when",
+    "where",
+    "pricing",
+    "price",
+    "cost",
+    "plan",
+    "demo",
+    "trial",
+    "business",
+    "website",
+    "agent",
+    "voice",
+    "text",
+    "ai",
+    "book",
+    "appointment",
+    "lead",
+    "crm",
+    "integrat",
+)
+
+AMBIENT_SPEECH_HINTS = BACKGROUND_NOISE_HINTS + (
+    "mom",
+    "class",
+    "post",
+    "proud",
+    "friend",
+    "show",
+    "design",
+    "school",
+    "wrist",
 )
 
 # Map language codes → Deepgram STT model variants for best accuracy.
@@ -118,6 +165,42 @@ class OmniwebAgent(Agent):
 
     def __init__(self, instructions: str) -> None:
         super().__init__(instructions=instructions)
+
+    async def on_user_turn_completed(
+        self, turn_ctx: llm.ChatContext, new_message: llm.ChatMessage
+    ) -> None:
+        transcript = (new_message.text_content or "").strip()
+        if not transcript:
+            raise StopResponse()
+
+        if _should_ignore_transcript(transcript):
+            logger.info("Ignoring likely ambient transcript: %s", transcript)
+            raise StopResponse()
+
+
+def _should_ignore_transcript(transcript: str) -> bool:
+    lowered = transcript.strip().lower()
+    if not lowered:
+        return True
+
+    words = lowered.split()
+
+    if len(words) <= 2 and lowered in {"hello", "hello?", "hi", "hey", "okay", "ok"}:
+        return True
+
+    if any(hint in lowered for hint in DIRECTED_SPEECH_HINTS):
+        return False
+
+    if "?" in lowered and len(words) >= 3:
+        return False
+
+    if any(hint in lowered for hint in AMBIENT_SPEECH_HINTS):
+        return True
+
+    if len(words) >= 8:
+        return True
+
+    return False
 
 
 # ── Agent Server & Entrypoint ─────────────────────────────────────────────────

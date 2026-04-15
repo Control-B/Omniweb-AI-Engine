@@ -149,7 +149,7 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
         tts="cartesia/sonic",
         vad=silero.VAD.load(
             min_silence_duration=0.6,   # require 600ms silence before end-of-turn (reduces background noise triggers)
-            min_speech_duration=0.15,   # ignore very short bursts (< 150ms) — likely noise
+            min_speech_duration=0.25,   # ignore very short bursts (< 250ms) — likely noise
             activation_threshold=0.6,   # higher confidence needed to count as speech (default 0.5)
         ),
         turn_handling=TurnHandlingOptions(
@@ -157,18 +157,38 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
         ),
     )
 
-    # Add language instruction to the system prompt so the LLM responds
-    # in the correct language
+    # ── Anti-noise & conciseness guardrails ──────────────────────────
+    system_prompt += (
+        "\n\n## Voice Conversation Rules\n"
+        "- Keep every response to 1-3 SHORT sentences. You are in a real-time voice call — brevity is critical.\n"
+        "- NEVER repeat yourself or restate what the user said unless asked to.\n"
+        "- If you hear unintelligible noise, fragments, or what sounds like a TV/radio/"
+        "background conversation, respond ONLY with a brief clarifier like "
+        "'Sorry, I didn\\'t catch that — could you say that again?' Do NOT attempt "
+        "to answer background noise as if it were directed at you.\n"
+        "- Wait for a clear, complete sentence from the user before responding.\n"
+    )
+
+    # Add language instruction so the LLM responds in the correct language
     if language != "en":
-        system_prompt += f"\n\n## Language\nRespond in the language with code '{language}'. The user chose this language. Always respond in this language unless they switch."
+        system_prompt += f"\n## Language\nYou MUST respond in the language with code '{language}'. The user chose this language. Always respond in this language unless they explicitly switch."
 
     await session.start(
         room=ctx.room,
         agent=OmniwebAgent(instructions=system_prompt),
     )
 
-    # ── Send the first message (greeting) ────────────────────────────────
-    await session.generate_reply(instructions=first_message)
+    # ── Send the first message (greeting) ──────────────────────────────
+    if language != "en":
+        # Tell the LLM to deliver the greeting in the user's chosen language
+        greeting_instruction = (
+            f"Greet the user now in the language with code '{language}'. "
+            f"Translate and adapt this greeting naturally (do NOT speak English): "
+            f"{first_message}"
+        )
+        await session.generate_reply(instructions=greeting_instruction)
+    else:
+        await session.generate_reply(instructions=first_message)
 
 
 # ── CLI entrypoint ────────────────────────────────────────────────────────────

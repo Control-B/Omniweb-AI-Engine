@@ -154,7 +154,7 @@ DEEPGRAM_LANG_MAP: dict[str, str] = {
     "ta": "deepgram/nova-3:ta",
 }
 
-AUTO_GREET_ON_CONNECT = os.getenv("LIVEKIT_AUTO_GREET", "false").lower() == "true"
+AUTO_GREET_ON_CONNECT = os.getenv("LIVEKIT_AUTO_GREET", "true").lower() == "true"
 
 
 # ── Dynamic Agent that accepts runtime instructions ───────────────────────────
@@ -261,10 +261,13 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
         "\n\n## Voice Conversation Rules\n"
         "- Keep every response to 1-3 SHORT sentences. You are in a real-time voice call — brevity is critical.\n"
         "- NEVER repeat yourself or restate what the user said unless asked to.\n"
+        "- Open the session with one concise welcome statement, then wait silently for the user.\n"
         "- Stay passive until the user clearly speaks to you. Do not take initiative unless directly addressed.\n"
+        "- Brief greetings like 'hi', 'hello', or 'hey' count as directed speech and should receive a normal response.\n"
         "- If speech sounds like background chatter, TV, radio, or a conversation not directed at you, IGNORE it and do not respond.\n"
         "- If you only hear fragments, accidental noise, or an incomplete thought, stay silent instead of guessing.\n"
         "- Only respond after a clear, complete sentence that sounds directed at you.\n"
+        "- If the user hangs up, disconnects, or the session ends, do nothing further. Never restart or continue on your own.\n"
         "- If the user is clearly addressing you but the utterance is still unclear, ask one short clarifying question.\n"
     )
 

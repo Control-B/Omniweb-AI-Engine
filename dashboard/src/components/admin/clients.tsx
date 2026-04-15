@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { adminGetClients, adminImpersonate, setToken } from "@/lib/api";
+import { hasPermission, useAuth } from "@/lib/auth-context";
 import {
   Search,
   Loader2,
@@ -42,6 +43,7 @@ const planBadge: Record<string, "default" | "success" | "warning" | "secondary">
 };
 
 export function AdminClients({ onViewClient }: AdminClientsProps) {
+  const { user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -49,6 +51,7 @@ export function AdminClients({ onViewClient }: AdminClientsProps) {
   const [planFilter, setPlanFilter] = useState("");
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
+  const canImpersonate = hasPermission(user, "clients.impersonate");
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
@@ -221,7 +224,7 @@ export function AdminClients({ onViewClient }: AdminClientsProps) {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          {c.role !== "admin" && (
+                            {c.role !== "admin" && canImpersonate && (
                             <button
                               onClick={() => handleImpersonate(c)}
                               className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"

@@ -23,16 +23,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.core.auth import (
     create_access_token,
+    get_default_permissions_for_role,
+    get_effective_permissions,
     generate_api_key,
     hash_api_key,
     hash_password,
     hash_token,
+    normalize_permissions,
     verify_password,
     decode_access_token,
     generate_secure_token,
     get_current_client,
     require_admin,
     require_owner,
+    require_permissions,
     is_internal_staff_role,
 )
 from app.core.config import get_settings
@@ -67,6 +71,7 @@ class TokenResponse(BaseModel):
     email: str
     plan: str
     role: str = "client"
+    permissions: list[str] = []
 
 
 class ApiKeyResponse(BaseModel):
@@ -120,12 +125,14 @@ class AdminUserCreateRequest(BaseModel):
     email: EmailStr
     password: str
     role: Literal["admin", "support"] = "admin"
+    permissions: list[str] | None = None
 
 
 class AdminUserInviteRequest(BaseModel):
     name: str
     email: EmailStr
     role: Literal["admin", "support"] = "admin"
+    permissions: list[str] | None = None
 
 
 class AdminUserStatusRequest(BaseModel):
@@ -137,10 +144,16 @@ class AdminUserResponse(BaseModel):
     name: str
     email: str
     role: str
+    permissions: list[str]
     is_active: bool
     created_at: str | None = None
     invited_at: str | None = None
     invite_accepted_at: str | None = None
+
+
+class AdminUserUpdateRequest(BaseModel):
+    role: Literal["admin", "support"] | None = None
+    permissions: list[str] | None = None
 
 
 def _now() -> datetime:
@@ -161,6 +174,7 @@ def _serialize_admin_user(user: Client) -> dict:
         "name": user.name,
         "email": user.email,
         "role": user.role,
+        "permissions": get_effective_permissions(user.role, user.permissions),
         "is_active": user.is_active,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "invited_at": user.invited_at.isoformat() if user.invited_at else None,
@@ -286,6 +300,7 @@ async def signup(
         email=client.email,
         plan=client.plan,
         role=client.role,
+          permissions=get_effective_permissions(client.role, client.permissions),
     )
 
     logger.info(f"New client signup: {client.email} ({client.id})")
@@ -335,6 +350,7 @@ async def login(
         email=client.email,
         plan=client.plan,
         role=client.role,
+          permissions=get_effective_permissions(client.role, client.permissions),
     )
 
     logger.info(f"{body.portal.title()} login: {client.email}")
@@ -346,6 +362,7 @@ async def login(
         "email": client.email,
         "plan": client.plan,
         "role": client.role,
+          "permissions": get_effective_permissions(client.role, client.permissions),
     }
 
 
@@ -440,7 +457,7 @@ async def accept_invite(
 
 @router.get("/admin/users", response_model=list[AdminUserResponse])
 async def list_admin_users(
-    admin: dict = Depends(require_owner),
+    admin: dict = Depends(require_permissions("team.read")),
     db: AsyncSession = Depends(get_session),
 ) -> list[dict]:
     """List all internal team users stored in the DB."""
@@ -456,7 +473,7 @@ async def list_admin_users(
 @router.post("/admin/users/invite", response_model=AdminUserResponse, status_code=201)
 async def invite_admin_user(
     body: AdminUserInviteRequest,
-    admin: dict = Depends(require_owner),
+    admin: dict = Depends(require_permissions("team.manage")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Invite a new internal team user by email and persist the invite in the DB."""
@@ -469,6 +486,7 @@ async def invite_admin_user(
         email=body.email,
         hashed_password=None,
         role=body.role,
+          permissions=normalize_permissions(body.permissions) or get_default_permissions_for_role(body.role),
         plan="pro",
         is_active=True,
     )
@@ -496,7 +514,7 @@ async def invite_admin_user(
 @router.post("/admin/users", response_model=AdminUserResponse, status_code=201)
 async def create_admin_user(
     body: AdminUserCreateRequest,
-    admin: dict = Depends(require_owner),
+    admin: dict = Depends(require_permissions("team.manage")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Create a DB-backed internal team login with email + password."""
@@ -512,6 +530,7 @@ async def create_admin_user(
         email=body.email,
         hashed_password=hash_password(body.password),
         role=body.role,
+          permissions=normalize_permissions(body.permissions) or get_default_permissions_for_role(body.role),
         plan="pro",
         is_active=True,
         invite_accepted_at=_now(),
@@ -525,11 +544,42 @@ async def create_admin_user(
     return _serialize_admin_user(user)
 
 
+@router.patch("/admin/users/{user_id}", response_model=AdminUserResponse)
+async def update_admin_user(
+    user_id: str,
+    body: AdminUserUpdateRequest,
+    admin: dict = Depends(require_permissions("team.manage")),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Update an internal team member's role and permissions."""
+    user = await db.get(Client, user_id)
+    if not user or user.role not in INTERNAL_TEAM_ROLES:
+        raise HTTPException(404, "Internal user not found")
+    if user.role == "owner":
+        raise HTTPException(400, "Owner permissions cannot be modified")
+
+    updates = body.model_dump(exclude_none=True)
+    next_role = updates.get("role", user.role)
+    if next_role == "owner":
+        raise HTTPException(400, "Owner role cannot be assigned from this endpoint")
+
+    user.role = next_role
+    if "permissions" in updates:
+        user.permissions = normalize_permissions(updates["permissions"]) or get_default_permissions_for_role(next_role)
+    elif "role" in updates:
+        user.permissions = get_default_permissions_for_role(next_role)
+
+    await db.commit()
+    await db.refresh(user)
+    logger.info(f"Internal user {user.email} permissions updated by {admin['email']}")
+    return _serialize_admin_user(user)
+
+
 @router.post("/admin/users/{user_id}/status", response_model=AdminUserResponse)
 async def set_admin_user_status(
     user_id: str,
     body: AdminUserStatusRequest,
-    admin: dict = Depends(require_owner),
+    admin: dict = Depends(require_permissions("team.manage")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Activate or deactivate an internal team user."""
@@ -551,7 +601,7 @@ async def set_admin_user_status(
 @router.post("/admin/users/{user_id}/send-reset", response_model=AdminUserResponse)
 async def send_admin_reset(
     user_id: str,
-    admin: dict = Depends(require_owner),
+    admin: dict = Depends(require_permissions("team.manage")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Send a reset link for an existing internal user, or re-send invite if pending."""
@@ -638,6 +688,7 @@ async def demo_token(
         email=client.email,
         plan=client.plan,
         role=client.role,
+          permissions=get_effective_permissions(client.role, client.permissions),
     )
 
     logger.info(f"Demo token issued for {client.email}")
@@ -649,6 +700,7 @@ async def demo_token(
         "email": client.email,
         "plan": client.plan,
         "role": client.role,
+          "permissions": get_effective_permissions(client.role, client.permissions),
     }
 
 
@@ -669,6 +721,7 @@ async def refresh_token(
         email=client.email,
         plan=client.plan,
         role=client.role,
+          permissions=get_effective_permissions(client.role, client.permissions),
     )
 
     return {
@@ -678,6 +731,7 @@ async def refresh_token(
         "email": client.email,
         "plan": client.plan,
         "role": client.role,
+          "permissions": get_effective_permissions(client.role, client.permissions),
     }
 
 

@@ -11,6 +11,7 @@ import { AgentConfigPage } from "@/components/pages/agent-config";
 import { NumbersPage } from "@/components/pages/numbers";
 import { SettingsPage } from "@/components/pages/settings";
 import { AutomationsPage } from "@/components/pages/automations";
+import { SitesPage } from "@/components/pages/sites";
 import { Loader2 } from "lucide-react";
 
 export type ClientPageId =
@@ -19,6 +20,7 @@ export type ClientPageId =
   | "leads"
   | "agent"
   | "numbers"
+  | "sites"
   | "automations"
   | "settings";
 
@@ -56,6 +58,7 @@ export default function ClientDashboard() {
         {activePage === "leads" && <LeadsPage />}
         {activePage === "agent" && <AgentConfigPage />}
         {activePage === "numbers" && <NumbersPage />}
+          {activePage === "sites" && <SitesPage />}
         {activePage === "automations" && <AutomationsPage />}
         {activePage === "settings" && <SettingsPage />}
       </main>

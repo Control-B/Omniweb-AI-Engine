@@ -10,6 +10,7 @@ import {
   Users,
   Bot,
   Hash,
+  PanelsTopLeft,
   Settings,
   Zap,
   ChevronLeft,
@@ -25,6 +26,7 @@ const NAV_ITEMS: { id: ClientPageId; label: string; icon: React.ElementType }[] 
   { id: "leads", label: "Leads", icon: Users },
   { id: "agent", label: "AI Agent", icon: Bot },
   { id: "numbers", label: "Phone Numbers", icon: Hash },
+  { id: "sites", label: "Websites", icon: PanelsTopLeft },
   { id: "automations", label: "Automations", icon: Workflow },
   { id: "settings", label: "Settings", icon: Settings },
 ];

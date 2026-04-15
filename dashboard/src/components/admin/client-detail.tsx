@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { adminGetClient, adminPatchClient } from "@/lib/api";
+import { hasPermission, useAuth } from "@/lib/auth-context";
 import {
   ArrowLeft,
   Loader2,
@@ -69,6 +70,7 @@ const planBadge: Record<string, "default" | "success" | "warning" | "secondary">
 };
 
 export function AdminClientDetail({ clientId, onBack }: AdminClientDetailProps) {
+  const { user } = useAuth();
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -76,6 +78,7 @@ export function AdminClientDetail({ clientId, onBack }: AdminClientDetailProps) 
   const [editActive, setEditActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const canEditClient = hasPermission(user, "clients.write");
 
   useEffect(() => {
     setLoading(true);
@@ -237,6 +240,7 @@ export function AdminClientDetail({ clientId, onBack }: AdminClientDetailProps) 
                 <select
                   value={editPlan}
                   onChange={(e) => setEditPlan(e.target.value)}
+                    disabled={!canEditClient}
                   className="w-full h-10 px-3 rounded-lg border border-border bg-card text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
                   {planOptions.map((p) => (
@@ -254,6 +258,7 @@ export function AdminClientDetail({ clientId, onBack }: AdminClientDetailProps) 
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setEditActive(true)}
+                      disabled={!canEditClient}
                     className={`flex-1 h-10 rounded-lg border text-sm font-medium transition-colors ${
                       editActive
                         ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
@@ -264,6 +269,7 @@ export function AdminClientDetail({ clientId, onBack }: AdminClientDetailProps) 
                   </button>
                   <button
                     onClick={() => setEditActive(false)}
+                      disabled={!canEditClient}
                     className={`flex-1 h-10 rounded-lg border text-sm font-medium transition-colors ${
                       !editActive
                         ? "border-red-500/30 bg-red-500/10 text-red-400"
@@ -277,7 +283,7 @@ export function AdminClientDetail({ clientId, onBack }: AdminClientDetailProps) 
 
               <button
                 onClick={handleSave}
-                disabled={saving}
+                  disabled={saving || !canEditClient}
                 className="w-full h-10 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
               >
                 {saving ? (

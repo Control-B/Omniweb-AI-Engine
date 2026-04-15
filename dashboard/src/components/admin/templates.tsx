@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { hasPermission, useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -70,6 +72,7 @@ const EMPTY_FORM: Omit<Template, "id" | "created_at"> = {
 };
 
 export function AdminTemplates() {
+  const { user } = useAuth();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -77,6 +80,7 @@ export function AdminTemplates() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const canWriteTemplates = hasPermission(user, "templates.write");
 
   async function fetchTemplates() {
     setLoading(true);
@@ -172,12 +176,30 @@ export function AdminTemplates() {
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            disabled={!canWriteTemplates}
+            className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           <Plus className="w-4 h-4" />
           New Template
         </button>
       </div>
+
+        <Card className="border-cyan-500/20 bg-gradient-to-r from-cyan-500/5 via-transparent to-violet-500/5">
+          <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-foreground">Website template system</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                The first Webflow-inspired site-template scaffold is now live, including a premium sample layout and an embedded Omniweb AI agent zone.
+              </p>
+            </div>
+            <Link
+              href="/templates"
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-4 text-sm font-medium text-foreground transition-colors hover:bg-cyan-400/20"
+            >
+              Open website templates
+            </Link>
+          </CardContent>
+        </Card>
 
       {error && (
         <div className="flex items-center gap-2 text-red-400 text-sm">
@@ -187,7 +209,7 @@ export function AdminTemplates() {
       )}
 
       {/* Form */}
-      {showForm && (
+      {showForm && canWriteTemplates && (
         <Card className="border-primary/30">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -400,14 +422,16 @@ export function AdminTemplates() {
                 <div className="flex items-center gap-2 pt-3 border-t border-border">
                   <button
                     onClick={() => openEdit(t)}
-                    className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+                      disabled={!canWriteTemplates}
+                      className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors disabled:opacity-50"
                   >
                     <Pencil className="w-3.5 h-3.5" />
                     Edit
                   </button>
                   <button
                     onClick={() => handleDelete(t)}
-                    className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      disabled={!canWriteTemplates}
+                      className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     Delete

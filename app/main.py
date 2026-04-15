@@ -40,6 +40,7 @@ from app.api.routes import (
     leads,
     livekit,
     numbers,
+    site_templates,
     subscribe,
     templates,
     webhooks,
@@ -298,6 +299,7 @@ app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
 app.include_router(livekit.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
+app.include_router(site_templates.router, prefix=API_PREFIX)
 app.include_router(embed.router, prefix=API_PREFIX)
 app.include_router(subscribe.router, prefix=API_PREFIX)
 app.include_router(webhooks.router, prefix=API_PREFIX)

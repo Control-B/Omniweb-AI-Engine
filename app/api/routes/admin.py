@@ -25,7 +25,7 @@ from sqlalchemy import desc, func, select, and_, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
-from app.core.auth import create_access_token, require_admin
+from app.core.auth import create_access_token, get_effective_permissions, require_permissions
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, AgentTemplate, Call, Client, Lead, PhoneNumber, ToolCallLog
 
@@ -39,7 +39,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 @router.get("/clients")
 async def list_clients(
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("clients.read")),
     search: Optional[str] = Query(None),
     plan: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
@@ -87,7 +87,7 @@ async def list_clients(
 @router.get("/clients/{client_id}")
 async def get_client(
     client_id: str,
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("clients.read")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Get full client details including agent config summary."""
@@ -145,7 +145,7 @@ class ClientPatchRequest(BaseModel):
 async def update_client(
     client_id: str,
     body: ClientPatchRequest,
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("clients.write")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Update a client's plan, status, or role."""
@@ -175,7 +175,7 @@ async def update_client(
 @router.post("/impersonate/{client_id}")
 async def impersonate_client(
     client_id: str,
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("clients.impersonate")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Generate a JWT token as if you were this client.
@@ -191,6 +191,7 @@ async def impersonate_client(
         email=client.email,
         plan=client.plan,
         role=client.role,
+          permissions=get_effective_permissions(client.role, client.permissions),
         extra={"impersonated_by": admin["client_id"]},
     )
 
@@ -287,7 +288,7 @@ def _template_to_dict(t: AgentTemplate) -> dict:
 
 @router.get("/templates")
 async def list_templates(
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("templates.read")),
     industry: Optional[str] = Query(None),
     active_only: bool = Query(True),
     db: AsyncSession = Depends(get_session),
@@ -307,7 +308,7 @@ async def list_templates(
 @router.post("/templates", status_code=201)
 async def create_template(
     body: TemplateCreate,
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("templates.write")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Create a new agent template."""
@@ -331,7 +332,7 @@ async def create_template(
 async def update_template(
     template_id: str,
     body: TemplateUpdate,
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("templates.write")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Update an existing template."""
@@ -363,7 +364,7 @@ async def update_template(
 @router.delete("/templates/{template_id}")
 async def delete_template(
     template_id: str,
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("templates.write")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Soft-delete a template (set is_active=False)."""
@@ -382,7 +383,7 @@ async def delete_template(
 
 @router.get("/agents")
 async def list_agents(
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("agents.read")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """List all agents across all clients, joined with client info."""
@@ -432,7 +433,7 @@ async def list_agents(
 
 @router.get("/conversations")
 async def list_conversations(
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("conversations.read")),
     channel: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
@@ -486,7 +487,7 @@ async def list_conversations(
 
 @router.get("/stats")
 async def platform_stats(
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_permissions("overview.read")),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Get platform-wide statistics for the admin dashboard."""

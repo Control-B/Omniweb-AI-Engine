@@ -61,6 +61,7 @@ class Client(Base):
     crm_webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     webhook_secret: Mapped[str | None] = mapped_column(String(128), nullable=True)
     notification_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    permissions: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     password_reset_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     invite_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
@@ -86,6 +87,7 @@ class Client(Base):
     sms_messages: Mapped[list["SmsMessage"]] = relationship(back_populates="client")
     outreach_sequences: Mapped[list["OutreachSequence"]] = relationship(back_populates="client")
     webhook_events: Mapped[list["WebhookEvent"]] = relationship(back_populates="client")
+    site_template_instances: Mapped[list["SiteTemplateInstance"]] = relationship(back_populates="client")
 
     __table_args__ = (
         Index("ix_clients_email", "email"),
@@ -533,3 +535,38 @@ class AgentTemplate(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class SiteTemplateInstance(Base):
+    """A client-specific website instance created from a coded site template."""
+    __tablename__ = "site_template_instances"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("clients.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    site_slug: Mapped[str] = mapped_column(String(255), nullable=False)
+    public_slug: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    template_slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    content: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    theme_overrides: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    agent_embed_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="site_template_instances")
+
+    __table_args__ = (
+        Index("ix_site_template_instances_client_id", "client_id"),
+        Index("ix_site_template_instances_template_slug", "template_slug"),
+        Index("ix_site_template_instances_public_slug", "public_slug"),
+        UniqueConstraint("client_id", "site_slug", name="uq_site_template_instance_slug_per_client"),
+    )

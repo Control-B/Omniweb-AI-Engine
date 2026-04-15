@@ -95,6 +95,7 @@ export interface AuthResponse {
   email: string;
   plan: string;
   role: string;
+  permissions?: string[];
 }
 
 export async function login(
@@ -182,6 +183,7 @@ export interface AdminUser {
   name: string;
   email: string;
   role: string;
+  permissions: string[];
   is_active: boolean;
   created_at: string | null;
   invited_at: string | null;
@@ -221,6 +223,7 @@ export async function createAdminUser(body: {
   email: string;
   password: string;
   role: "admin" | "support";
+  permissions?: string[];
 }): Promise<AdminUser> {
   return apiFetch<AdminUser>("/auth/admin/users", {
     method: "POST",
@@ -232,6 +235,7 @@ export async function inviteAdminUser(body: {
   name: string;
   email: string;
   role: "admin" | "support";
+  permissions?: string[];
 }): Promise<AdminUser> {
   return apiFetch<AdminUser>("/auth/admin/users/invite", {
     method: "POST",
@@ -243,6 +247,16 @@ export async function setAdminUserStatus(userId: string, isActive: boolean): Pro
   return apiFetch<AdminUser>(`/auth/admin/users/${userId}/status`, {
     method: "POST",
     body: JSON.stringify({ is_active: isActive }),
+  });
+}
+
+export async function updateAdminUser(
+  userId: string,
+  body: { role?: "admin" | "support"; permissions?: string[] }
+): Promise<AdminUser> {
+  return apiFetch<AdminUser>(`/auth/admin/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
   });
 }
 
@@ -514,6 +528,84 @@ export async function updateAutomation(id: string, body: {
 
 export async function deleteAutomation(id: string) {
   return apiFetch(`/automations/${id}`, { method: "DELETE" });
+}
+
+export interface SiteTemplateInstance {
+  id: string;
+  client_id: string;
+  name: string;
+  site_slug: string;
+  public_slug: string;
+  template_slug: string;
+  status: "draft" | "published" | "archived";
+  is_active: boolean;
+  content: Record<string, any>;
+  theme_overrides: Record<string, any>;
+  agent_embed_config: Record<string, any>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export async function getSiteTemplateInstances(clientId?: string) {
+  const params = clientId ? `?client_id=${clientId}` : "";
+  return apiFetch<{ instances: SiteTemplateInstance[] }>(`/site-templates${params}`);
+}
+
+export async function createSiteTemplateInstance(body: {
+  client_id?: string;
+  name: string;
+  site_slug: string;
+  public_slug?: string;
+  template_slug: string;
+  status?: "draft" | "published" | "archived";
+  content?: Record<string, any>;
+  theme_overrides?: Record<string, any>;
+  agent_embed_config?: Record<string, any>;
+}) {
+  return apiFetch<SiteTemplateInstance>("/site-templates", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateSiteTemplateInstance(
+  id: string,
+  body: {
+    name?: string;
+    site_slug?: string;
+    public_slug?: string;
+    status?: "draft" | "published" | "archived";
+    is_active?: boolean;
+    content?: Record<string, any>;
+    theme_overrides?: Record<string, any>;
+    agent_embed_config?: Record<string, any>;
+  }
+) {
+  return apiFetch<SiteTemplateInstance>(`/site-templates/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteSiteTemplateInstance(id: string) {
+  return apiFetch(`/site-templates/${id}`, { method: "DELETE" });
+}
+
+export async function getPublicSiteTemplateInstance(publicSlug: string) {
+  const res = await fetch(`${API_BASE}${API_PREFIX}/site-templates/public/${publicSlug}`, {
+    cache: "no-store",
+  });
+
+  if (res.status === 404) {
+    return null;
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `API error ${res.status}`);
+  }
+
+  return (await res.json()) as SiteTemplateInstance;
 }
 
 // ── Knowledge Base ───────────────────────────────────────────────────────────

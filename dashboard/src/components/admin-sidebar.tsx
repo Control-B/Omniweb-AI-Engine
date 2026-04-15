@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/auth-context";
+import { hasPermission, useAuth, type UserPermission } from "@/lib/auth-context";
 import type { AdminPageId } from "@/app/admin/page";
 import {
   BarChart3,
@@ -18,13 +18,13 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-const NAV_ITEMS: { id: AdminPageId; label: string; icon: React.ElementType; ownerOnly?: boolean }[] = [
-  { id: "overview", label: "Overview", icon: BarChart3 },
-  { id: "agents", label: "Agents", icon: Bot },
-  { id: "sessions", label: "Sessions", icon: MessageSquare },
-  { id: "clients", label: "Clients", icon: Users },
-  { id: "templates", label: "Templates", icon: FileText },
-  { id: "team", label: "Team", icon: UserCog, ownerOnly: true },
+const NAV_ITEMS: { id: AdminPageId; label: string; icon: React.ElementType; permission?: UserPermission }[] = [
+  { id: "overview", label: "Overview", icon: BarChart3, permission: "overview.read" },
+  { id: "agents", label: "Agents", icon: Bot, permission: "agents.read" },
+  { id: "sessions", label: "Sessions", icon: MessageSquare, permission: "conversations.read" },
+  { id: "clients", label: "Clients", icon: Users, permission: "clients.read" },
+  { id: "templates", label: "Templates", icon: FileText, permission: "templates.read" },
+  { id: "team", label: "Team", icon: UserCog, permission: "team.read" },
 ];
 
 interface AdminSidebarProps {
@@ -35,7 +35,7 @@ interface AdminSidebarProps {
 export function AdminSidebar({ activePage, onNavigate }: AdminSidebarProps) {
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
-  const navItems = NAV_ITEMS.filter((item) => !item.ownerOnly || user?.role === "owner");
+  const navItems = NAV_ITEMS.filter((item) => !item.permission || hasPermission(user, item.permission));
 
   return (
     <aside

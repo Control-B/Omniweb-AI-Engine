@@ -46,6 +46,39 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 24
 INTERNAL_STAFF_ROLES = {"owner", "admin", "support"}
+OWNER_WILDCARD_PERMISSION = "*"
+RBAC_PERMISSIONS = {
+    "overview.read",
+    "clients.read",
+    "clients.write",
+    "clients.impersonate",
+    "agents.read",
+    "conversations.read",
+    "templates.read",
+    "templates.write",
+    "team.read",
+    "team.manage",
+}
+DEFAULT_ROLE_PERMISSIONS = {
+    "owner": [OWNER_WILDCARD_PERMISSION],
+    "admin": [
+        "overview.read",
+        "clients.read",
+        "clients.write",
+        "agents.read",
+        "conversations.read",
+        "templates.read",
+        "templates.write",
+    ],
+    "support": [
+        "overview.read",
+        "clients.read",
+        "agents.read",
+        "conversations.read",
+        "templates.read",
+    ],
+    "client": [],
+}
 
 # ── Clerk JWKS Client (cached, thread-safe) ──────────────────────────────────
 _clerk_jwks_client: Optional[PyJWKClient] = None
@@ -53,6 +86,37 @@ _clerk_jwks_client: Optional[PyJWKClient] = None
 
 def is_internal_staff_role(role: Optional[str]) -> bool:
     return (role or "") in INTERNAL_STAFF_ROLES
+
+
+def normalize_permissions(permissions: Optional[list[str]]) -> list[str]:
+    if not permissions:
+        return []
+    normalized: list[str] = []
+    for permission in permissions:
+        if not permission:
+            continue
+        if permission == OWNER_WILDCARD_PERMISSION or permission in RBAC_PERMISSIONS:
+            if permission not in normalized:
+                normalized.append(permission)
+    return normalized
+
+
+def get_default_permissions_for_role(role: Optional[str]) -> list[str]:
+    return list(DEFAULT_ROLE_PERMISSIONS.get(role or "client", []))
+
+
+def get_effective_permissions(role: Optional[str], permissions: Optional[list[str]] = None) -> list[str]:
+    if role == "owner":
+        return [OWNER_WILDCARD_PERMISSION]
+    explicit = normalize_permissions(permissions)
+    if explicit:
+        return explicit
+    return get_default_permissions_for_role(role)
+
+
+def has_permission(client: dict, permission: str) -> bool:
+    permissions = client.get("permissions") or []
+    return OWNER_WILDCARD_PERMISSION in permissions or permission in permissions
 
 
 def _get_clerk_jwks_client() -> Optional[PyJWKClient]:
@@ -141,6 +205,7 @@ def create_access_token(
     email: str,
     plan: str = "starter",
     role: str = "client",
+    permissions: Optional[list[str]] = None,
     extra: Optional[dict] = None,
 ) -> str:
     """Create a JWT access token for dashboard login."""
@@ -150,6 +215,7 @@ def create_access_token(
         "email": email,
         "plan": plan,
         "role": role,
+        "permissions": get_effective_permissions(role, permissions),
         "iat": now,
         "exp": now + timedelta(hours=JWT_EXPIRY_HOURS),
     }
@@ -189,6 +255,7 @@ async def get_current_client(
                 "email": payload.get("email", ""),
                 "plan": payload.get("plan", "starter"),
                 "role": payload.get("role", "client"),
+                  "permissions": get_effective_permissions(payload.get("role", "client"), payload.get("permissions")),
                 "auth_method": "jwt",
             }
         except (pyjwt.ExpiredSignatureError, pyjwt.InvalidTokenError):
@@ -232,6 +299,7 @@ async def _resolve_api_key(key: str) -> dict:
             "email": client.email,
             "plan": client.plan,
             "role": client.role,
+              "permissions": get_effective_permissions(client.role, getattr(client, "permissions", None)),
             "auth_method": "api_key",
         }
 
@@ -334,6 +402,7 @@ async def _resolve_clerk_token(token: str) -> dict:
             "email": client.email,
             "plan": client.plan,
             "role": client.role,
+              "permissions": get_effective_permissions(client.role, getattr(client, "permissions", None)),
             "auth_method": "clerk",
         }
 
@@ -363,6 +432,7 @@ async def require_admin(
     """Dependency that restricts access to internal staff users."""
     if not is_internal_staff_role(client.get("role")):
         raise HTTPException(403, "Internal staff access required")
+    client["permissions"] = get_effective_permissions(client.get("role"), client.get("permissions"))
     return client
 
 
@@ -384,6 +454,15 @@ def require_owner_or_admin(client_id_param: str = "client_id"):
     ):
         return client
     return _check
+
+
+    def require_permissions(*required_permissions: str):
+        async def _check(client: dict = Depends(require_admin)) -> dict:
+            missing = [permission for permission in required_permissions if not has_permission(client, permission)]
+            if missing:
+                raise HTTPException(403, f"Missing required permissions: {', '.join(missing)}")
+            return client
+        return _check
 
 
 # ── Plan Limits & Trial Enforcement ──────────────────────────────────────────

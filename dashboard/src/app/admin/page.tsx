@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { isInternalRole, useAuth } from "@/lib/auth-context";
+import { hasPermission, isInternalRole, useAuth, type UserPermission } from "@/lib/auth-context";
 import { AdminSidebar } from "@/components/admin-sidebar";
 import { AdminOverview } from "@/components/admin/overview";
 import { AdminClients } from "@/components/admin/clients";
@@ -14,6 +14,15 @@ import { AdminTeam } from "@/components/admin/team";
 import { Loader2 } from "lucide-react";
 
 export type AdminPageId = "overview" | "agents" | "sessions" | "clients" | "templates" | "team" | "client-detail";
+
+const PAGE_PERMISSIONS: Partial<Record<Exclude<AdminPageId, "client-detail">, UserPermission>> = {
+  overview: "overview.read",
+  agents: "agents.read",
+  sessions: "conversations.read",
+  clients: "clients.read",
+  templates: "templates.read",
+  team: "team.read",
+};
 
 export default function AdminDashboard() {
   const { user, loading } = useAuth();
@@ -32,6 +41,23 @@ export default function AdminDashboard() {
       setAuthChecked(true);
     }
   }, [user, loading, router]);
+
+    useEffect(() => {
+      if (!user) return;
+      if (activePage === "client-detail") {
+        if (!hasPermission(user, "clients.read")) {
+          setSelectedClientId(null);
+          setActivePage("overview");
+        }
+        return;
+      }
+
+      const permission = PAGE_PERMISSIONS[activePage];
+      if (permission && !hasPermission(user, permission)) {
+        const fallback = (Object.entries(PAGE_PERMISSIONS).find(([, nextPermission]) => nextPermission && hasPermission(user, nextPermission))?.[0] ?? "overview") as AdminPageId;
+        setActivePage(fallback);
+      }
+    }, [activePage, user]);
 
   if (loading || !authChecked) {
     return (

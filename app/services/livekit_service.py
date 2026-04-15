@@ -88,21 +88,23 @@ async def dispatch_agent(
     *,
     system_prompt: str = "",
     first_message: str = "",
+    language: str = "en",
 ) -> None:
     """Dispatch the self-hosted Omniweb agent to a room with prompt metadata.
 
-    The agent worker reads ``ctx.job.metadata`` to get the system prompt
-    and first message, enabling per-tenant customization.
+    The agent worker reads ``ctx.job.metadata`` to get the system prompt,
+    first message, and language, enabling per-tenant customization.
     """
     agent_name = settings.LIVEKIT_AGENT_NAME
     if not agent_name:
         logger.warning("LIVEKIT_AGENT_NAME not set — skipping agent dispatch")
         return
 
-    # Pack prompt into dispatch metadata so the worker can read it
+    # Pack prompt + language into dispatch metadata so the worker can read it
     dispatch_metadata = json.dumps({
         "system_prompt": system_prompt,
         "first_message": first_message,
+        "language": language,
     })
 
     async with LiveKitAPI(

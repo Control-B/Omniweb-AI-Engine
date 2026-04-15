@@ -78,6 +78,7 @@ class TokenRequest(BaseModel):
     """Request body for creating a LiveKit session token."""
     client_id: str | None = None
     channel: str = "web"  # "web" | "phone" | "embed"
+    language: str = "en"  # ISO 639-1 language code
 
 
 class TokenResponse(BaseModel):
@@ -126,12 +127,14 @@ async def create_session_token(req: TokenRequest):
         room_name,
         system_prompt=system_prompt,
         first_message=first_message,
+        language=req.language,
     )
 
     logger.info(
         "LiveKit session created",
         room=room_name,
         channel=req.channel,
+        language=req.language,
         prompt_len=len(system_prompt),
     )
 

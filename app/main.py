@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import get_settings
@@ -279,6 +280,12 @@ app.include_router(webhooks.router, prefix=API_PREFIX)
 
 # Admin API
 app.include_router(admin.router, prefix=API_PREFIX)
+
+
+@app.get("/")
+async def root_redirect():
+    """Redirect bare engine URL to the Omniweb admin dashboard."""
+    return RedirectResponse("https://omniweb.ai/admin", status_code=302)
 
 
 @app.get("/health")

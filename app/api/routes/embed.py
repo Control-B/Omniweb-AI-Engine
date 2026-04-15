@@ -181,7 +181,7 @@ async def get_embed_snippet(
     agent_id = agent_config.elevenlabs_agent_id if agent_config else "YOUR_AGENT_ID"
 
     platform_url = getattr(settings, "PLATFORM_URL", "https://omniweb.ai")
-    engine_url = getattr(settings, "ENGINE_BASE_URL", "https://omniweb-engine-rs6fr.ondigitalocean.app")
+    engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL)
 
     snippet = f"""<!-- Omniweb AI Widget -->
 <script>

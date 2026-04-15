@@ -21,7 +21,11 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # development | production
     APP_ENV: str = "development"  # legacy alias
     APP_BASE_URL: str = "https://api.omniweb.ai"
+    ENGINE_BASE_URL: str = "https://api.omniweb.ai"
     PLATFORM_URL: str = "https://omniweb.ai"
+    NON_CANONICAL_ENGINE_HOSTS: list[str] = [
+        "omniweb-engine-rs6fr.ondigitalocean.app",
+    ]
     DEBUG: bool = False
     SECRET_KEY: str = "change-me-in-production"
     INTERNAL_API_KEY: str = "change-me-in-production"  # platform → engine auth
@@ -36,7 +40,6 @@ class Settings(BaseSettings):
         "https://www.omniweb.ai",
         "https://roadcall.ai",
         "https://www.roadcall.ai",
-        "https://omniweb-engine-rs6fr.ondigitalocean.app",
     ]
 
     # ── Database ─────────────────────────────────────────────

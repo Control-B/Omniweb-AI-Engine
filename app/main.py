@@ -191,6 +191,30 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 
 
+class CanonicalHostMiddleware(BaseHTTPMiddleware):
+    """Redirect requests from non-canonical engine hosts to the intended public hosts."""
+
+    async def dispatch(self, request: Request, call_next):
+        forwarded_host = request.headers.get("x-forwarded-host")
+        raw_host = forwarded_host or request.headers.get("host", "")
+        request_host = raw_host.split(",")[0].strip().split(":")[0].lower()
+
+        if request_host in {host.lower() for host in settings.NON_CANONICAL_ENGINE_HOSTS}:
+            path = request.url.path
+            query = f"?{request.url.query}" if request.url.query else ""
+
+            if path.startswith("/api") or path == "/health":
+                target = f"{settings.APP_BASE_URL.rstrip('/')}{path}{query}"
+                return RedirectResponse(target, status_code=307)
+
+            return RedirectResponse(f"{settings.PLATFORM_URL.rstrip('/')}/admin", status_code=302)
+
+        return await call_next(request)
+
+
+app.add_middleware(CanonicalHostMiddleware)
+
+
 # ── Rate Limiting Middleware ──────────────────────────────────────────────────
 # Simple in-memory rate limiter for auth endpoints.
 # For production at scale, swap to Redis-backed (e.g. slowapi + redis).

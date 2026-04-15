@@ -73,7 +73,7 @@ services:
         value: ""
       - key: CORS_ORIGINS
         scope: RUN_AND_BUILD_TIME
-        value: '["https://omniweb.ai","https://www.omniweb.ai","https://roadcall.ai","https://www.roadcall.ai","https://omniweb-engine-rs6fr.ondigitalocean.app"]'
+          value: '["https://omniweb.ai","https://www.omniweb.ai","https://roadcall.ai","https://www.roadcall.ai"]'
 
   - name: dashboard
     github:
@@ -88,7 +88,7 @@ services:
     envs:
       - key: NEXT_PUBLIC_API_URL
         scope: BUILD_TIME
-        value: ""
+          value: "https://api.omniweb.ai"
 
 ingress:
   rules:

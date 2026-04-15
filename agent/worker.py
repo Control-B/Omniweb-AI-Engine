@@ -173,12 +173,14 @@ def _build_tts(language: str) -> InferenceTTS:
         "style": 0.28,
         "speed": 1.0,
         "use_speaker_boost": True,
+        "auto_mode": True,
+        "inactivity_timeout": 20,
     }
     if language:
         extra_kwargs["language_code"] = language
 
     tts_kwargs: dict[str, object] = {
-        "model": "elevenlabs/eleven_multilingual_v2",
+        "model": "elevenlabs/eleven_flash_v2_5",
         "language": language,
         "extra_kwargs": extra_kwargs,
         "fallback": [
@@ -290,12 +292,25 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
         llm="openai/gpt-4.1-mini",
         tts=_build_tts(language),
         vad=silero.VAD.load(
-            min_silence_duration=0.9,   # require a clearer pause before end-of-turn
+            min_silence_duration=0.7,   # reduce awkward wait before a reply starts
             min_speech_duration=0.4,    # ignore short bursts and clipped background phrases
             activation_threshold=0.72,  # require stronger voice confidence before triggering
         ),
         turn_handling=TurnHandlingOptions(
             turn_detection=MultilingualModel(),  # smarter turn detection — reduces false triggers
+            endpointing={
+                "mode": "dynamic",
+                "min_delay": 0.35,
+                "max_delay": 1.2,
+            },
+            interruption={
+                "enabled": True,
+                "mode": "vad",
+                "min_duration": 0.85,
+                "min_words": 2,
+                "resume_false_interruption": True,
+                "false_interruption_timeout": 1.2,
+            },
         ),
     )
 

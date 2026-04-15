@@ -1,6 +1,14 @@
 name: omniweb-engine
 region: nyc
 
+domains:
+  - domain: omniweb.ai
+    type: PRIMARY
+    minimum_tls_version: "1.2"
+  - domain: api.omniweb.ai
+    type: ALIAS
+    minimum_tls_version: "1.2"
+
 databases:
   - engine: PG
     name: db
@@ -73,7 +81,7 @@ services:
         value: ""
       - key: CORS_ORIGINS
         scope: RUN_AND_BUILD_TIME
-          value: '["https://omniweb.ai","https://www.omniweb.ai","https://roadcall.ai","https://www.roadcall.ai"]'
+        value: '["https://omniweb.ai","https://www.omniweb.ai","https://roadcall.ai","https://www.roadcall.ai"]'
 
   - name: dashboard
     github:
@@ -88,10 +96,38 @@ services:
     envs:
       - key: NEXT_PUBLIC_API_URL
         scope: BUILD_TIME
-          value: "https://api.omniweb.ai"
+        value: "https://api.omniweb.ai"
 
 ingress:
   rules:
+    - match:
+        authority:
+          exact: omniweb-engine-rs6fr.ondigitalocean.app
+        path:
+          prefix: /api
+      redirect:
+        authority: api.omniweb.ai
+        scheme: https
+        redirect_code: 307
+    - match:
+        authority:
+          exact: omniweb-engine-rs6fr.ondigitalocean.app
+        path:
+          exact: /health
+      redirect:
+        authority: api.omniweb.ai
+        scheme: https
+        redirect_code: 307
+    - match:
+        authority:
+          exact: omniweb-engine-rs6fr.ondigitalocean.app
+        path:
+          prefix: /
+      redirect:
+        authority: omniweb.ai
+        scheme: https
+        uri: /admin
+        redirect_code: 302
     - component:
         name: api
         preserve_path_prefix: true

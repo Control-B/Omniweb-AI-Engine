@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
+import { isInternalRole, useAuth } from "@/lib/auth-context";
 import { AdminSidebar } from "@/components/admin-sidebar";
 import { AdminOverview } from "@/components/admin/overview";
 import { AdminClients } from "@/components/admin/clients";
@@ -26,7 +26,7 @@ export default function AdminDashboard() {
     if (loading) return;
     if (!user) {
       router.replace("/login");
-    } else if (user.role !== "admin") {
+    } else if (!isInternalRole(user.role)) {
       router.replace("/dashboard");
     } else {
       setAuthChecked(true);

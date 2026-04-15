@@ -10,11 +10,17 @@ import {
 } from "react";
 import { getToken, parseJwt, clearToken, logout as apiLogout } from "@/lib/api";
 
+export type UserRole = "owner" | "admin" | "support" | "client";
+
+export function isInternalRole(role: string | null | undefined): role is Exclude<UserRole, "client"> {
+  return role === "owner" || role === "admin" || role === "support";
+}
+
 export interface User {
   client_id: string;
   email: string;
   plan: string;
-  role: "admin" | "client";
+  role: UserRole;
 }
 
 interface AuthContextType {

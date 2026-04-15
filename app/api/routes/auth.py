@@ -32,6 +32,8 @@ from app.core.auth import (
     generate_secure_token,
     get_current_client,
     require_admin,
+    require_owner,
+    is_internal_staff_role,
 )
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -40,6 +42,7 @@ from app.models.models import AgentConfig, AgentTemplate, Client
 logger = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+INTERNAL_TEAM_ROLES = ("owner", "admin", "support")
 
 
 class SignupRequest(BaseModel):
@@ -116,11 +119,13 @@ class AdminUserCreateRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
+    role: Literal["admin", "support"] = "admin"
 
 
 class AdminUserInviteRequest(BaseModel):
     name: str
     email: EmailStr
+    role: Literal["admin", "support"] = "admin"
 
 
 class AdminUserStatusRequest(BaseModel):
@@ -161,6 +166,33 @@ def _serialize_admin_user(user: Client) -> dict:
         "invited_at": user.invited_at.isoformat() if user.invited_at else None,
         "invite_accepted_at": user.invite_accepted_at.isoformat() if user.invite_accepted_at else None,
     }
+
+
+async def _has_owner(db: AsyncSession) -> bool:
+    result = await db.execute(
+        select(Client.id).where(Client.role == "owner").limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _count_internal_users(db: AsyncSession) -> int:
+    result = await db.execute(
+        select(Client.id).where(Client.role.in_(INTERNAL_TEAM_ROLES))
+    )
+    return len(result.scalars().all())
+
+
+async def _ensure_owner_role(user: Client, db: AsyncSession) -> Client:
+    if user.role != "admin":
+        return user
+    if await _has_owner(db):
+        return user
+
+    user.role = "owner"
+    await db.commit()
+    await db.refresh(user)
+    logger.info(f"Promoted bootstrap internal user to owner: {user.email}")
+    return user
 
 
 async def _issue_password_reset(*, user: Client, db: AsyncSession) -> str:
@@ -290,10 +322,12 @@ async def login(
     if not verify_password(body.password, client.hashed_password):
         raise HTTPException(401, "Invalid email or password")
 
-    if body.portal == "admin" and client.role != "admin":
+    client = await _ensure_owner_role(client, db)
+
+    if body.portal == "admin" and not is_internal_staff_role(client.role):
         raise HTTPException(401, "Invalid email or password")
 
-    if body.portal == "client" and client.role == "admin":
+    if body.portal == "client" and is_internal_staff_role(client.role):
         raise HTTPException(401, "Use the admin sign-in portal for this account")
 
     token = create_access_token(
@@ -327,8 +361,8 @@ async def forgot_password(
     user = result.scalar_one_or_none()
 
     if user:
-        portal_matches = (body.portal == "admin" and user.role == "admin") or (
-            body.portal == "client" and user.role != "admin"
+        portal_matches = (body.portal == "admin" and is_internal_staff_role(user.role)) or (
+            body.portal == "client" and not is_internal_staff_role(user.role)
         )
         if portal_matches:
             token = await _issue_password_reset(user=user, db=db)
@@ -382,7 +416,10 @@ async def accept_invite(
         raise HTTPException(400, "Password must be at least 6 characters")
 
     result = await db.execute(
-        select(Client).where(Client.invite_token_hash == hash_token(body.token), Client.role == "admin")
+        select(Client).where(
+            Client.invite_token_hash == hash_token(body.token),
+            Client.role.in_(INTERNAL_TEAM_ROLES),
+        )
     )
     user = result.scalar_one_or_none()
     if not user or not user.invite_expires_at or user.invite_expires_at < _now():
@@ -397,19 +434,19 @@ async def accept_invite(
     user.is_active = True
     await db.commit()
 
-    logger.info(f"Invite accepted for admin user {user.email}")
+    logger.info(f"Invite accepted for internal user {user.email}")
     return {"ok": True, "message": "Invite accepted successfully"}
 
 
 @router.get("/admin/users", response_model=list[AdminUserResponse])
 async def list_admin_users(
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_owner),
     db: AsyncSession = Depends(get_session),
 ) -> list[dict]:
-    """List all admin/team users stored in the DB."""
+    """List all internal team users stored in the DB."""
     result = await db.execute(
         select(Client)
-        .where(Client.role == "admin")
+        .where(Client.role.in_(INTERNAL_TEAM_ROLES))
         .order_by(Client.created_at.asc())
     )
     users = result.scalars().all()
@@ -419,10 +456,10 @@ async def list_admin_users(
 @router.post("/admin/users/invite", response_model=AdminUserResponse, status_code=201)
 async def invite_admin_user(
     body: AdminUserInviteRequest,
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_owner),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Invite a new admin/team user by email and persist the invite in the DB."""
+    """Invite a new internal team user by email and persist the invite in the DB."""
     existing = await db.execute(select(Client).where(Client.email == body.email))
     if existing.scalar_one_or_none():
         raise HTTPException(409, "Email already registered")
@@ -431,7 +468,7 @@ async def invite_admin_user(
         name=body.name,
         email=body.email,
         hashed_password=None,
-        role="admin",
+        role=body.role,
         plan="pro",
         is_active=True,
     )
@@ -452,17 +489,17 @@ async def invite_admin_user(
         )
     )
 
-    logger.info(f"Admin invite sent by {admin['email']} to {user.email}")
+    logger.info(f"Internal invite sent by {admin['email']} to {user.email} ({user.role})")
     return _serialize_admin_user(user)
 
 
 @router.post("/admin/users", response_model=AdminUserResponse, status_code=201)
 async def create_admin_user(
     body: AdminUserCreateRequest,
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_owner),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Create a DB-backed admin/team login with email + password."""
+    """Create a DB-backed internal team login with email + password."""
     if len(body.password) < 6:
         raise HTTPException(400, "Password must be at least 6 characters")
 
@@ -474,7 +511,7 @@ async def create_admin_user(
         name=body.name,
         email=body.email,
         hashed_password=hash_password(body.password),
-        role="admin",
+        role=body.role,
         plan="pro",
         is_active=True,
         invite_accepted_at=_now(),
@@ -483,7 +520,7 @@ async def create_admin_user(
     await db.commit()
     await db.refresh(user)
 
-    logger.info(f"Admin team user created by {admin['email']}: {user.email}")
+    logger.info(f"Internal team user created by {admin['email']}: {user.email} ({user.role})")
 
     return _serialize_admin_user(user)
 
@@ -492,33 +529,35 @@ async def create_admin_user(
 async def set_admin_user_status(
     user_id: str,
     body: AdminUserStatusRequest,
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_owner),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Activate or deactivate an admin/team user."""
+    """Activate or deactivate an internal team user."""
     user = await db.get(Client, user_id)
-    if not user or user.role != "admin":
-        raise HTTPException(404, "Admin user not found")
+    if not user or user.role not in INTERNAL_TEAM_ROLES:
+        raise HTTPException(404, "Internal user not found")
     if str(user.id) == admin["client_id"] and not body.is_active:
         raise HTTPException(400, "You cannot deactivate your own account")
+    if user.role == "owner" and not body.is_active:
+        raise HTTPException(400, "The owner account cannot be deactivated")
 
     user.is_active = body.is_active
     await db.commit()
     await db.refresh(user)
-    logger.info(f"Admin user {user.email} active={user.is_active} updated by {admin['email']}")
+    logger.info(f"Internal user {user.email} active={user.is_active} updated by {admin['email']}")
     return _serialize_admin_user(user)
 
 
 @router.post("/admin/users/{user_id}/send-reset", response_model=AdminUserResponse)
 async def send_admin_reset(
     user_id: str,
-    admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_owner),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Send a reset link for an existing admin, or re-send invite if pending."""
+    """Send a reset link for an existing internal user, or re-send invite if pending."""
     user = await db.get(Client, user_id)
-    if not user or user.role != "admin":
-        raise HTTPException(404, "Admin user not found")
+    if not user or user.role not in INTERNAL_TEAM_ROLES:
+        raise HTTPException(404, "Internal user not found")
 
     import asyncio
     from app.services.email_service import send_password_reset_email, send_team_invite_email
@@ -533,7 +572,7 @@ async def send_admin_reset(
                 accept_url=_invite_url(token),
             )
         )
-        logger.info(f"Admin invite re-sent by {admin['email']} to {user.email}")
+        logger.info(f"Internal invite re-sent by {admin['email']} to {user.email}")
     else:
         token = await _issue_password_reset(user=user, db=db)
         asyncio.create_task(
@@ -543,7 +582,7 @@ async def send_admin_reset(
                 reset_url=_reset_url(token),
             )
         )
-        logger.info(f"Admin reset sent by {admin['email']} to {user.email}")
+        logger.info(f"Internal reset sent by {admin['email']} to {user.email}")
 
     await db.refresh(user)
     return _serialize_admin_user(user)
@@ -623,6 +662,8 @@ async def refresh_token(
     if not client:
         raise HTTPException(401, "Client not found")
 
+    client = await _ensure_owner_role(client, db)
+
     token = create_access_token(
         client_id=str(client.id),
         email=client.email,
@@ -674,6 +715,8 @@ async def get_profile(
     client = await db.get(Client, current_client["client_id"])
     if not client:
         raise HTTPException(404, "Client not found")
+
+    client = await _ensure_owner_role(client, db)
 
     # Get business name from agent config
     result = await db.execute(
@@ -788,7 +831,10 @@ async def admin_signup(
     body: AdminSignupRequest,
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Create a new admin account. Requires the admin signup code."""
+    """Bootstrap the very first owner account. Disabled after bootstrap."""
+    if await _count_internal_users(db) > 0:
+        raise HTTPException(403, "Internal account bootstrap is closed. Use an owner-issued invite.")
+
     if body.admin_code != settings.ADMIN_SIGNUP_CODE:
         raise HTTPException(403, "Invalid admin authorization code")
 
@@ -805,8 +851,8 @@ async def admin_signup(
         name=body.name,
         email=body.email,
         hashed_password=hash_password(body.password),
-        plan="admin",
-        role="admin",
+        plan="pro",
+        role="owner",
         is_active=True,
     )
     db.add(client)
@@ -820,7 +866,7 @@ async def admin_signup(
         role=client.role,
     )
 
-    logger.info(f"New admin signup: {client.email} ({client.id})")
+    logger.info(f"Owner bootstrap completed: {client.email} ({client.id})")
 
     return {
         "access_token": token,

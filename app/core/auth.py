@@ -45,9 +45,14 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 24
+INTERNAL_STAFF_ROLES = {"owner", "admin", "support"}
 
 # ── Clerk JWKS Client (cached, thread-safe) ──────────────────────────────────
 _clerk_jwks_client: Optional[PyJWKClient] = None
+
+
+def is_internal_staff_role(role: Optional[str]) -> bool:
+    return (role or "") in INTERNAL_STAFF_ROLES
 
 
 def _get_clerk_jwks_client() -> Optional[PyJWKClient]:
@@ -355,9 +360,18 @@ def require_plan(*allowed_plans: str):
 async def require_admin(
     client: dict = Depends(get_current_client),
 ) -> dict:
-    """Dependency that restricts access to admin users only."""
-    if client.get("role") != "admin":
-        raise HTTPException(403, "Admin access required")
+    """Dependency that restricts access to internal staff users."""
+    if not is_internal_staff_role(client.get("role")):
+        raise HTTPException(403, "Internal staff access required")
+    return client
+
+
+async def require_owner(
+    client: dict = Depends(get_current_client),
+) -> dict:
+    """Dependency that restricts access to the workspace owner."""
+    if client.get("role") != "owner":
+        raise HTTPException(403, "Owner access required")
     return client
 
 
@@ -390,7 +404,7 @@ async def require_active_subscription(
 
     Admins are always allowed. Usage within limits is allowed during trial.
     """
-    if client.get("role") == "admin":
+    if is_internal_staff_role(client.get("role")):
         return client
 
     from app.core.database import AsyncSessionLocal

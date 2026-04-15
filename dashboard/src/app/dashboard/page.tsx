@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
+import { isInternalRole, useAuth } from "@/lib/auth-context";
 import { ClientSidebar } from "@/components/client-sidebar";
 import { DashboardPage } from "@/components/pages/dashboard";
 import { CallsPage } from "@/components/pages/calls";
@@ -32,7 +32,7 @@ export default function ClientDashboard() {
     if (loading) return;
     if (!user) {
       router.replace("/login");
-    } else if (user.role === "admin") {
+    } else if (isInternalRole(user.role)) {
       router.replace("/admin");
     } else {
       setAuthChecked(true);

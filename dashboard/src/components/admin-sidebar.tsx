@@ -18,13 +18,13 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-const NAV_ITEMS: { id: AdminPageId; label: string; icon: React.ElementType }[] = [
+const NAV_ITEMS: { id: AdminPageId; label: string; icon: React.ElementType; ownerOnly?: boolean }[] = [
   { id: "overview", label: "Overview", icon: BarChart3 },
   { id: "agents", label: "Agents", icon: Bot },
   { id: "sessions", label: "Sessions", icon: MessageSquare },
   { id: "clients", label: "Clients", icon: Users },
   { id: "templates", label: "Templates", icon: FileText },
-  { id: "team", label: "Team", icon: UserCog },
+  { id: "team", label: "Team", icon: UserCog, ownerOnly: true },
 ];
 
 interface AdminSidebarProps {
@@ -35,6 +35,7 @@ interface AdminSidebarProps {
 export function AdminSidebar({ activePage, onNavigate }: AdminSidebarProps) {
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const navItems = NAV_ITEMS.filter((item) => !item.ownerOnly || user?.role === "owner");
 
   return (
     <aside
@@ -66,7 +67,7 @@ export function AdminSidebar({ activePage, onNavigate }: AdminSidebarProps) {
                 {user?.email}
               </div>
               <div className="text-[10px] text-primary font-medium">
-                Administrator
+                {user?.role === "owner" ? "Owner" : "Internal Staff"}
               </div>
             </div>
           </div>
@@ -75,7 +76,7 @@ export function AdminSidebar({ activePage, onNavigate }: AdminSidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-1 space-y-0.5">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive =
             activePage === item.id ||
             (item.id === "clients" && activePage === "client-detail");

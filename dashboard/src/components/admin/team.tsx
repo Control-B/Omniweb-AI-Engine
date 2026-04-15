@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth-context";
 import { AlertCircle, Loader2, Mail, RefreshCw, Shield, ShieldOff, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/api";
 
 export function AdminTeam() {
+  const { user } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -23,8 +25,10 @@ export function AdminTeam() {
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
-  const [inviteForm, setInviteForm] = useState({ name: "", email: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "admin" as "admin" | "support" });
+  const [inviteForm, setInviteForm] = useState({ name: "", email: "", role: "admin" as "admin" | "support" });
+
+  const isOwner = user?.role === "owner";
 
   function upsertUser(nextUser: AdminUser) {
     setUsers((prev) => {
@@ -59,7 +63,7 @@ export function AdminTeam() {
     try {
       const created = await createAdminUser(form);
       upsertUser(created);
-      setForm({ name: "", email: "", password: "" });
+      setForm({ name: "", email: "", password: "", role: "admin" });
       setSuccess(`Admin login created for ${created.email}`);
     } catch (err: any) {
       setError(err.message || "Failed to create admin user");
@@ -76,7 +80,7 @@ export function AdminTeam() {
     try {
       const invited = await inviteAdminUser(inviteForm);
       upsertUser(invited);
-      setInviteForm({ name: "", email: "" });
+      setInviteForm({ name: "", email: "", role: "admin" });
       setSuccess(`Invite sent to ${invited.email}`);
     } catch (err: any) {
       setError(err.message || "Failed to send invite");
@@ -124,9 +128,15 @@ export function AdminTeam() {
       <div>
         <h1 className="text-xl font-bold text-foreground">Admin Team</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Create separate email/password logins for internal admins and team members.
+          Owner-controlled access for internal team members only.
         </p>
       </div>
+
+      {!isOwner && (
+        <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+          Only the workspace owner can invite teammates or change internal access.
+        </div>
+      )}
 
       {(error || success) && (
         <div className="space-y-2">
@@ -150,7 +160,7 @@ export function AdminTeam() {
           <CardHeader>
             <CardTitle className="text-base">Add Team Login</CardTitle>
             <CardDescription>
-              Create a DB-backed admin account instantly with email and password.
+              Create an internal login instantly with email, password, and role.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -177,6 +187,18 @@ export function AdminTeam() {
                 />
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="team-role">Role</Label>
+                <select
+                  id="team-role"
+                  value={form.role}
+                  onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value as "admin" | "support" }))}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="support">Support</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="team-password">Temporary Password</Label>
                 <Input
                   id="team-password"
@@ -188,9 +210,9 @@ export function AdminTeam() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={saving}>
+              <Button type="submit" className="w-full" disabled={saving || !isOwner}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                {saving ? "Creating..." : "Create Admin Login"}
+                {saving ? "Creating..." : "Create Team Login"}
               </Button>
             </form>
           </CardContent>
@@ -200,7 +222,7 @@ export function AdminTeam() {
           <CardHeader>
             <CardTitle className="text-base">Invite Team Member</CardTitle>
             <CardDescription>
-              Email an invite link so a teammate can set their own password.
+              Email an invite link so a teammate can set their own password and join with the assigned role.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -216,6 +238,18 @@ export function AdminTeam() {
                 />
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="invite-role">Role</Label>
+                <select
+                  id="invite-role"
+                  value={inviteForm.role}
+                  onChange={(e) => setInviteForm((prev) => ({ ...prev, role: e.target.value as "admin" | "support" }))}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="support">Support</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="invite-email">Email</Label>
                 <Input
                   id="invite-email"
@@ -226,7 +260,7 @@ export function AdminTeam() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={inviting}>
+              <Button type="submit" className="w-full" disabled={inviting || !isOwner}>
                 {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
                 {inviting ? "Sending..." : "Send Invite"}
               </Button>
@@ -265,7 +299,7 @@ export function AdminTeam() {
                           <Badge variant={user.is_active ? "success" : "secondary"}>
                             {user.is_active ? "Active" : "Inactive"}
                           </Badge>
-                          <Badge variant="default">Admin</Badge>
+                          <Badge variant={user.role === "owner" ? "warning" : "default"}>{user.role}</Badge>
                           {!user.invite_accepted_at && (
                             <Badge variant="warning">Invite Pending</Badge>
                           )}
@@ -276,7 +310,7 @@ export function AdminTeam() {
                           size="sm"
                           variant="outline"
                           onClick={() => handleSendAccess(user)}
-                          disabled={busyUserId === user.id}
+                          disabled={busyUserId === user.id || !isOwner}
                         >
                           {busyUserId === user.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                           {user.invite_accepted_at ? "Send Reset" : "Resend Invite"}
@@ -286,7 +320,7 @@ export function AdminTeam() {
                             size="sm"
                             variant="outline"
                             onClick={() => handleStatus(user, false)}
-                            disabled={busyUserId === user.id}
+                            disabled={busyUserId === user.id || !isOwner || user.role === "owner"}
                           >
                             <ShieldOff className="h-3.5 w-3.5" />
                             Deactivate
@@ -295,7 +329,7 @@ export function AdminTeam() {
                           <Button
                             size="sm"
                             onClick={() => handleStatus(user, true)}
-                            disabled={busyUserId === user.id}
+                            disabled={busyUserId === user.id || !isOwner}
                           >
                             <Shield className="h-3.5 w-3.5" />
                             Reactivate

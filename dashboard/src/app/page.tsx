@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
+import { isInternalRole, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
 
 export default function Home() {
@@ -13,7 +13,7 @@ export default function Home() {
     if (loading) return;
     if (!user) {
       router.replace("/login");
-    } else if (user.role === "admin") {
+    } else if (isInternalRole(user.role)) {
       router.replace("/admin");
     } else {
       router.replace("/dashboard");

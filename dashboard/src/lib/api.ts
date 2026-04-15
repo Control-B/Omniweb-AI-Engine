@@ -220,6 +220,7 @@ export async function createAdminUser(body: {
   name: string;
   email: string;
   password: string;
+  role: "admin" | "support";
 }): Promise<AdminUser> {
   return apiFetch<AdminUser>("/auth/admin/users", {
     method: "POST",
@@ -230,6 +231,7 @@ export async function createAdminUser(body: {
 export async function inviteAdminUser(body: {
   name: string;
   email: string;
+  role: "admin" | "support";
 }): Promise<AdminUser> {
   return apiFetch<AdminUser>("/auth/admin/users/invite", {
     method: "POST",

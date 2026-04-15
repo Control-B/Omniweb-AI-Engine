@@ -35,12 +35,16 @@ load_dotenv(_project_root / ".env")
 
 from livekit import agents
 from livekit.agents import AgentServer, AgentSession, Agent, TurnHandlingOptions, llm
+from livekit.agents.inference.tts import TTS as InferenceTTS
 from livekit.agents.llm.tool_context import StopResponse
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
+from app.core.config import get_settings
+
 logger = logging.getLogger("omniweb-agent")
 logger.setLevel(logging.INFO)
+settings = get_settings()
 
 # ── Default prompt (used when no metadata is provided) ────────────────────────
 
@@ -157,6 +161,45 @@ DEEPGRAM_LANG_MAP: dict[str, str] = {
 AUTO_GREET_ON_CONNECT = os.getenv("LIVEKIT_AUTO_GREET", "true").lower() == "true"
 
 
+def _resolve_elevenlabs_voice_id(language: str) -> str | None:
+    voice_id = getattr(settings, f"ELEVENLABS_VOICE_ID_{language.upper()}", None)
+    return voice_id or settings.ELEVENLABS_DEFAULT_VOICE_ID or None
+
+
+def _build_tts(language: str) -> InferenceTTS:
+    extra_kwargs: dict[str, object] = {
+        "stability": 0.35,
+        "similarity_boost": 0.8,
+        "style": 0.28,
+        "speed": 1.0,
+        "use_speaker_boost": True,
+    }
+    if language:
+        extra_kwargs["language_code"] = language
+
+    tts_kwargs: dict[str, object] = {
+        "model": "elevenlabs/eleven_multilingual_v2",
+        "language": language,
+        "extra_kwargs": extra_kwargs,
+        "fallback": [
+            {
+                "model": "cartesia/sonic-3",
+                "voice": "",
+                "extra_kwargs": {
+                    "emotion": "positivity",
+                    "speed": "normal",
+                },
+            }
+        ],
+    }
+
+    voice_id = _resolve_elevenlabs_voice_id(language)
+    if voice_id:
+        tts_kwargs["voice"] = voice_id
+
+    return InferenceTTS(**tts_kwargs)
+
+
 # ── Dynamic Agent that accepts runtime instructions ───────────────────────────
 
 
@@ -245,7 +288,7 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
     session = AgentSession(
         stt=stt_model,
         llm="openai/gpt-4.1-mini",
-        tts="cartesia/sonic",
+        tts=_build_tts(language),
         vad=silero.VAD.load(
             min_silence_duration=0.9,   # require a clearer pause before end-of-turn
             min_speech_duration=0.4,    # ignore short bursts and clipped background phrases
@@ -261,6 +304,8 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
         "\n\n## Voice Conversation Rules\n"
         "- Keep every response to 1-3 SHORT sentences. You are in a real-time voice call — brevity is critical.\n"
         "- NEVER repeat yourself or restate what the user said unless asked to.\n"
+        "- Sound warm, fluid, and human — never stiff, monotone, translated, or robotic.\n"
+        "- Use natural pacing and idiomatic phrasing in the user's language.\n"
         "- Open the session with one concise welcome statement, then wait silently for the user.\n"
         "- Stay passive until the user clearly speaks to you. Do not take initiative unless directly addressed.\n"
         "- Brief greetings like 'hi', 'hello', or 'hey' count as directed speech and should receive a normal response.\n"
@@ -278,7 +323,11 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
     )
     # Add language instruction so the LLM responds in the correct language
     if language != "en":
-        system_prompt += f"\n## Language\nYou MUST respond in the language with code '{language}'. The user chose this language. Always respond in this language unless they explicitly switch."
+        system_prompt += (
+            f"\n## Language\nYou MUST respond in the language with code '{language}'. "
+            "The user chose this language. Always respond in this language unless they explicitly switch. "
+            "Use native, idiomatic phrasing in that language — not literal English translation."
+        )
 
     await session.start(
         room=ctx.room,

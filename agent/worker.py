@@ -22,6 +22,7 @@ Deployment:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -33,12 +34,11 @@ from dotenv import load_dotenv
 _project_root = Path(__file__).resolve().parent.parent
 load_dotenv(_project_root / ".env")
 
-from livekit import agents
+from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, Agent, TurnHandlingOptions, llm
 from livekit.agents.inference.tts import TTS as InferenceTTS
 from livekit.agents.llm.tool_context import StopResponse
 from livekit.plugins import silero
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 from app.core.config import get_settings
 
@@ -248,6 +248,29 @@ def _should_ignore_transcript(transcript: str) -> bool:
     return False
 
 
+def _extract_text_user_message(packet: rtc.DataPacket) -> str | None:
+    raw_payload = packet.data.decode("utf-8", errors="ignore").strip()
+    if not raw_payload:
+        return None
+
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        return raw_payload
+
+    message_type = payload.get("type")
+    if message_type and message_type != "user_message":
+        return None
+
+    text = str(payload.get("text") or "").strip()
+    return text or None
+
+
+async def _publish_text_response(room: rtc.Room, text: str) -> None:
+    payload = json.dumps({"type": "response", "text": text}, ensure_ascii=False)
+    await room.local_participant.publish_data(payload, reliable=True)
+
+
 # ── Agent Server & Entrypoint ─────────────────────────────────────────────────
 
 server = AgentServer()
@@ -297,7 +320,6 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
             activation_threshold=0.72,  # require stronger voice confidence before triggering
         ),
         turn_handling=TurnHandlingOptions(
-            turn_detection=MultilingualModel(),  # smarter turn detection — reduces false triggers
             endpointing={
                 "mode": "dynamic",
                 "min_delay": 0.35,
@@ -321,6 +343,15 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
         "- NEVER repeat yourself or restate what the user said unless asked to.\n"
         "- Sound warm, fluid, and human — never stiff, monotone, translated, or robotic.\n"
         "- Use natural pacing and idiomatic phrasing in the user's language.\n"
+                    "- Speak in short, interruptible chunks. Do not deliver long monologues or dense paragraphs out loud.\n"
+                    "- Sometimes use natural spoken connectors like 'so', 'but', 'and', 'right', or 'anyway' when they genuinely fit.\n"
+                    "- You may use a light filler like 'um', 'uh', 'yeah', or 'got it' OCCASIONALLY to sound natural, but never in every reply and never more than once in a short reply.\n"
+                    "- You may occasionally make one brief self-repair if it improves clarity, such as 'what I mean is...' or 'actually, the simpler way to put it is...' Do this sparingly.\n"
+                    "- Use brief pauses between ideas and slow down slightly for important details like names, times, prices, dates, links, and next steps.\n"
+                    "- If you need a moment to think, check something, or wait on a tool, briefly narrate that you are checking instead of going fully silent.\n"
+                    "- If there is a short hold or delay, keep the user oriented with one calm status line, then return with the answer. Do not over-narrate.\n"
+                    "- Default to calm, grounded delivery. If emotion is needed, make it subtle and reassuring rather than theatrical or over-acted.\n"
+                    "- In non-English languages, use native conversational transitions and fillers only when they sound natural in that language. Do not inject English discourse markers into another language.\n"
         "- Open the session with one concise welcome statement, then wait silently for the user.\n"
         "- Stay passive until the user clearly speaks to you. Do not take initiative unless directly addressed.\n"
         "- Brief greetings like 'hi', 'hello', or 'hey' count as directed speech and should receive a normal response.\n"
@@ -348,6 +379,51 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
         room=ctx.room,
         agent=OmniwebAgent(instructions=system_prompt),
     )
+
+    pending_text_replies = 0
+
+    async def _handle_text_message(packet: rtc.DataPacket) -> None:
+        nonlocal pending_text_replies
+
+        text = _extract_text_user_message(packet)
+        if not text:
+            return
+
+        logger.info("Received text chat message (len=%d)", len(text))
+        pending_text_replies += 1
+
+        try:
+            session.generate_reply(
+                user_input=text,
+                input_modality="text",
+                allow_interruptions=False,
+            )
+        except Exception:
+            pending_text_replies = max(0, pending_text_replies - 1)
+            logger.exception("Failed to generate text reply")
+            await _publish_text_response(
+                ctx.room,
+                "Sorry — I’m having trouble replying right now. Please try again.",
+            )
+
+    @ctx.room.on("data_received")
+    def _on_data_received(packet: rtc.DataPacket) -> None:
+        asyncio.create_task(_handle_text_message(packet))
+
+    @session.on("conversation_item_added")
+    def _on_conversation_item_added(event) -> None:
+        nonlocal pending_text_replies
+
+        item = event.item
+        if getattr(item, "role", None) != "assistant":
+            return
+
+        text = (item.text_content or "").strip()
+        if not text or pending_text_replies <= 0:
+            return
+
+        pending_text_replies -= 1
+        asyncio.create_task(_publish_text_response(ctx.room, text))
 
     # ── Optional first message (disabled by default to avoid over-eager starts)
     if AUTO_GREET_ON_CONNECT:

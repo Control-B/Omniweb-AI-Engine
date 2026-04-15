@@ -57,6 +57,20 @@ DEFAULT_FIRST_MESSAGE = (
     "I help businesses turn website visitors into customers using intelligent "
     "voice and text agents. What can I help you with today?"
 )
+BACKGROUND_NOISE_HINTS = (
+    "tv",
+    "television",
+    "radio",
+    "podcast",
+    "youtube",
+    "movie",
+    "commercial",
+    "episode",
+    "watching",
+    "luke",
+    "sensor",
+    "lithium",
+)
 
 # Map language codes → Deepgram STT model variants for best accuracy.
 # All use Nova-3; the suffix tells Deepgram which language to optimise for.
@@ -92,6 +106,8 @@ DEEPGRAM_LANG_MAP: dict[str, str] = {
     "bg": "deepgram/nova-3:bg",
     "ta": "deepgram/nova-3:ta",
 }
+
+AUTO_GREET_ON_CONNECT = os.getenv("LIVEKIT_AUTO_GREET", "false").lower() == "true"
 
 
 # ── Dynamic Agent that accepts runtime instructions ───────────────────────────
@@ -148,9 +164,9 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
         llm="openai/gpt-4.1-mini",
         tts="cartesia/sonic",
         vad=silero.VAD.load(
-            min_silence_duration=0.6,   # require 600ms silence before end-of-turn (reduces background noise triggers)
-            min_speech_duration=0.25,   # ignore very short bursts (< 250ms) — likely noise
-            activation_threshold=0.6,   # higher confidence needed to count as speech (default 0.5)
+            min_silence_duration=0.9,   # require a clearer pause before end-of-turn
+            min_speech_duration=0.4,    # ignore short bursts and clipped background phrases
+            activation_threshold=0.72,  # require stronger voice confidence before triggering
         ),
         turn_handling=TurnHandlingOptions(
             turn_detection=MultilingualModel(),  # smarter turn detection — reduces false triggers
@@ -162,13 +178,18 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
         "\n\n## Voice Conversation Rules\n"
         "- Keep every response to 1-3 SHORT sentences. You are in a real-time voice call — brevity is critical.\n"
         "- NEVER repeat yourself or restate what the user said unless asked to.\n"
-        "- If you hear unintelligible noise, fragments, or what sounds like a TV/radio/"
-        "background conversation, respond ONLY with a brief clarifier like "
-        "'Sorry, I didn\\'t catch that — could you say that again?' Do NOT attempt "
-        "to answer background noise as if it were directed at you.\n"
-        "- Wait for a clear, complete sentence from the user before responding.\n"
+        "- Stay passive until the user clearly speaks to you. Do not take initiative unless directly addressed.\n"
+        "- If speech sounds like background chatter, TV, radio, or a conversation not directed at you, IGNORE it and do not respond.\n"
+        "- If you only hear fragments, accidental noise, or an incomplete thought, stay silent instead of guessing.\n"
+        "- Only respond after a clear, complete sentence that sounds directed at you.\n"
+        "- If the user is clearly addressing you but the utterance is still unclear, ask one short clarifying question.\n"
     )
 
+    system_prompt += (
+        "\n## Ignore These As Background Noise\n"
+        + ", ".join(BACKGROUND_NOISE_HINTS)
+        + ".\nTreat these as likely ambient speech if they appear out of context."
+    )
     # Add language instruction so the LLM responds in the correct language
     if language != "en":
         system_prompt += f"\n## Language\nYou MUST respond in the language with code '{language}'. The user chose this language. Always respond in this language unless they explicitly switch."
@@ -178,17 +199,17 @@ async def omniweb_entrypoint(ctx: agents.JobContext):
         agent=OmniwebAgent(instructions=system_prompt),
     )
 
-    # ── Send the first message (greeting) ──────────────────────────────
-    if language != "en":
-        # Tell the LLM to deliver the greeting in the user's chosen language
-        greeting_instruction = (
-            f"Greet the user now in the language with code '{language}'. "
-            f"Translate and adapt this greeting naturally (do NOT speak English): "
-            f"{first_message}"
-        )
-        await session.generate_reply(instructions=greeting_instruction)
-    else:
-        await session.generate_reply(instructions=first_message)
+    # ── Optional first message (disabled by default to avoid over-eager starts)
+    if AUTO_GREET_ON_CONNECT:
+        if language != "en":
+            greeting_instruction = (
+                f"Greet the user now in the language with code '{language}'. "
+                f"Translate and adapt this greeting naturally (do NOT speak English): "
+                f"{first_message}"
+            )
+            await session.generate_reply(instructions=greeting_instruction)
+        else:
+            await session.generate_reply(instructions=first_message)
 
 
 # ── CLI entrypoint ────────────────────────────────────────────────────────────

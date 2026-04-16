@@ -1,7 +1,7 @@
 # Shopify App configuration — used by Shopify CLI (`shopify app deploy`, etc.)
 # Docs: https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = ""  # Set after creating app in Partner Dashboard
+client_id = "657b584fd66d2620ee7281cd1008597a"
 
 name = "Omniweb AI"
 application_url = "https://omniweb-engine-rs6fr.ondigitalocean.app"

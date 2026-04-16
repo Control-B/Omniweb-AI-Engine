@@ -96,7 +96,7 @@ services:
     envs:
       - key: NEXT_PUBLIC_API_URL
         scope: BUILD_TIME
-        value: "https://api.omniweb.ai"
+        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
 
 ingress:
   rules:

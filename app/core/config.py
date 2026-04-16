@@ -8,6 +8,9 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_ENGINE_BASE_URL = "https://omniweb-engine-rs6fr.ondigitalocean.app"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -20,10 +23,11 @@ class Settings(BaseSettings):
     APP_NAME: str = "Omniweb Agent Engine"
     ENVIRONMENT: str = "development"  # development | production
     APP_ENV: str = "development"  # legacy alias
-    APP_BASE_URL: str = "https://api.omniweb.ai"
-    ENGINE_BASE_URL: str = "https://api.omniweb.ai"
+    APP_BASE_URL: str = DEFAULT_ENGINE_BASE_URL
+    ENGINE_BASE_URL: str = DEFAULT_ENGINE_BASE_URL
     PLATFORM_URL: str = "https://omniweb.ai"
     NON_CANONICAL_ENGINE_HOSTS: list[str] = [
+        "api.omniweb.ai",
         "omniweb-engine-rs6fr.ondigitalocean.app",
     ]
     DEBUG: bool = False

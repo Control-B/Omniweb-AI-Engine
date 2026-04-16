@@ -1,4 +1,18 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const DEFAULT_PRODUCTION_API_BASE = "https://omniweb-engine-rs6fr.ondigitalocean.app";
+
+function normalizeApiBase(url: string): string {
+  return url.replace(/\/$/, "");
+}
+
+function resolveApiBase(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (configured) return normalizeApiBase(configured);
+  if (process.env.NODE_ENV === "development") return "http://localhost:8000";
+  if (typeof window !== "undefined") return normalizeApiBase(window.location.origin);
+  return DEFAULT_PRODUCTION_API_BASE;
+}
+
+const API_BASE = resolveApiBase();
 
 // All backend routes live under /api
 const API_PREFIX = "/api";

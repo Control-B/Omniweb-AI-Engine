@@ -456,13 +456,14 @@ def require_owner_or_admin(client_id_param: str = "client_id"):
     return _check
 
 
-    def require_permissions(*required_permissions: str):
-        async def _check(client: dict = Depends(require_admin)) -> dict:
-            missing = [permission for permission in required_permissions if not has_permission(client, permission)]
-            if missing:
-                raise HTTPException(403, f"Missing required permissions: {', '.join(missing)}")
-            return client
-        return _check
+def require_permissions(*required_permissions: str):
+    async def _check(client: dict = Depends(require_admin)) -> dict:
+        missing = [permission for permission in required_permissions if not has_permission(client, permission)]
+        if missing:
+            raise HTTPException(403, f"Missing required permissions: {', '.join(missing)}")
+        return client
+
+    return _check
 
 
 # ── Plan Limits & Trial Enforcement ──────────────────────────────────────────

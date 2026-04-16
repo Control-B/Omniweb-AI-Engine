@@ -32,11 +32,12 @@ class ShopifyWebhookService:
         """Verify the X-Shopify-Hmac-Sha256 header against the raw body."""
         if not hmac_header:
             raise ShopifyWebhookError("Missing X-Shopify-Hmac-Sha256 header")
-        if not settings.SHOPIFY_WEBHOOK_SECRET:
-            raise ShopifyWebhookError("SHOPIFY_WEBHOOK_SECRET is not configured")
+        secret = settings.SHOPIFY_WEBHOOK_SECRET or settings.SHOPIFY_API_SECRET
+        if not secret:
+            raise ShopifyWebhookError("SHOPIFY_WEBHOOK_SECRET or SHOPIFY_API_SECRET must be configured")
 
         digest = hmac.new(
-            settings.SHOPIFY_WEBHOOK_SECRET.encode(),
+            secret.encode(),
             body,
             hashlib.sha256,
         ).digest()

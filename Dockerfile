@@ -7,7 +7,7 @@ WORKDIR /app
 RUN pip install uv
 
 # Copy dependency files
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 
 # Install all deps into /app/.venv
 RUN uv sync --no-dev

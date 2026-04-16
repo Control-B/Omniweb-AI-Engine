@@ -33,8 +33,8 @@ COPY static/ ./static/
 
 EXPOSE 8000
 
-# Run database migrations then start the FastAPI server
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"]
+# Run database migrations (best-effort) then start the FastAPI server
+CMD ["sh", "-c", "alembic upgrade head || echo 'WARNING: alembic migration failed, starting anyway'; uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"]
 
 
 # ── Stage 3: Shopify microservice ────────────────────────────────────────────

@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "0012_add_internal_user_permissions"
-down_revision = "0011_add_site_template_instances"
+revision = "0012"
+down_revision = "0011"
 branch_labels = None
 depends_on = None
 

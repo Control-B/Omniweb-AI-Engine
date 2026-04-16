@@ -170,17 +170,17 @@ async def entrypoint(ctx: JobContext):
         )
 
     # ── STT model ────────────────────────────────────────────────────────
-    stt_model = DEEPGRAM_LANG_MAP.get(language, "deepgram/nova-3:multi")
+    stt_model = DEEPGRAM_LANG_MAP.get(language, "deepgram/nova-3-multi")
 
     # ── Session ──────────────────────────────────────────────────────────
     session = AgentSession(
         stt=inference.STT(model=stt_model, language=language),
         llm=inference.LLM(
-            model="openai/gpt-4.1-mini",
+            model="openai/gpt-4o-mini",
         ),
         tts=inference.TTS(
-            model="cartesia/sonic-3",
-            voice="4d2fd738-3b3d-4571-8c4f-0b0ea4c2a8d1",  # Warm female, natural pace
+            model="elevenlabs/eleven_multilingual_v2",
+            voice="cgSgspJ2msm6clMCkdW9",  # Sarah — warm, natural multilingual
             language=language,
         ),
         turn_handling=TurnHandlingOptions(turn_detection=MultilingualModel()),

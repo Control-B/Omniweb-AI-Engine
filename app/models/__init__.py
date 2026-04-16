@@ -10,6 +10,9 @@ from app.models.models import (
     OutreachSequence,
     AgentTemplate,
     ToolCallLog,
+    ShopifyStore,
+    ShopifyAssistantSession,
+    ShopifyDiscountApproval,
 )
 
 __all__ = [
@@ -24,4 +27,7 @@ __all__ = [
     "OutreachSequence",
     "AgentTemplate",
     "ToolCallLog",
+    "ShopifyStore",
+    "ShopifyAssistantSession",
+    "ShopifyDiscountApproval",
 ]

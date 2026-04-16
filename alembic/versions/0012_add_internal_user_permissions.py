@@ -1,7 +1,7 @@
 """add internal user permissions
 
-Revision ID: 0012_add_internal_user_permissions
-Revises: 0011_add_site_template_instances
+Revision ID: 0012
+Revises: 0011
 Create Date: 2026-04-15 00:00:00.000000
 """
 

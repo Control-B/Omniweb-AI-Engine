@@ -18,11 +18,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import get_settings
-from app.core.database import engine
+from app.core.database import AsyncSessionLocal, engine
 from app.core.logging import configure_logging, get_logger
 
 # Import all route modules
@@ -40,6 +41,8 @@ from app.api.routes import (
     leads,
     livekit,
     numbers,
+    shopify,
+    shopify_webhooks,
     site_templates,
     subscribe,
     templates,
@@ -55,6 +58,17 @@ logger = get_logger(__name__)
 
 
 import asyncio as _asyncio
+
+
+async def probe_database() -> tuple[bool, str | None]:
+    """Verify the application can reach Postgres."""
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+        return True, None
+    except Exception as exc:
+        logger.error(f"Database probe failed: {exc}")
+        return False, str(exc)
 
 
 async def _scheduled_tasks():
@@ -138,17 +152,31 @@ async def lifespan(app: FastAPI):
     logger.info(f"Twilio configured: {settings.twilio_configured}")
     logger.info(f"OpenAI configured: {settings.openai_configured}")
 
+    database_ok, database_error = await probe_database()
+    if not database_ok:
+        message = "FATAL: Database connectivity check failed during startup."
+        if settings.is_production:
+            raise RuntimeError(f"{message} {database_error or 'unknown database error'}")
+        logger.warning(f"{message} Continuing because ENVIRONMENT is not production.")
+    else:
+        logger.info("Database connectivity check passed")
+
     # Start background scheduler
-    scheduler_task = _asyncio.create_task(_scheduled_tasks())
-    logger.info("Background scheduler started (trial warnings + monthly reset)")
+    scheduler_task = None
+    if database_ok:
+        scheduler_task = _asyncio.create_task(_scheduled_tasks())
+        logger.info("Background scheduler started (trial warnings + monthly reset)")
+    else:
+        logger.warning("Background scheduler skipped because the database probe failed")
 
     yield
 
-    scheduler_task.cancel()
-    try:
-        await scheduler_task
-    except _asyncio.CancelledError:
-        pass
+    if scheduler_task is not None:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except _asyncio.CancelledError:
+            pass
     logger.info("Omniweb Agent Engine shutting down")
     await engine.dispose()
 
@@ -298,6 +326,8 @@ app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
 app.include_router(livekit.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
+app.include_router(shopify.router, prefix=API_PREFIX)
+app.include_router(shopify_webhooks.router, prefix=API_PREFIX)
 app.include_router(site_templates.router, prefix=API_PREFIX)
 app.include_router(embed.router, prefix=API_PREFIX)
 app.include_router(subscribe.router, prefix=API_PREFIX)
@@ -315,7 +345,7 @@ async def root_redirect():
 
 @app.get("/health")
 async def health() -> dict:
-    return {
+    payload = {
         "ok": True,
         "service": "omniweb-agent-engine",
         "version": "2.0.0",
@@ -323,7 +353,35 @@ async def health() -> dict:
         "livekit_configured": settings.livekit_configured,
         "twilio_configured": settings.twilio_configured,
         "openai_configured": settings.openai_configured,
+        "database_ok": False,
     }
+
+    database_ok, database_error = await probe_database()
+    if database_ok:
+        payload["database_ok"] = True
+        return payload
+
+    payload["database_error"] = database_error
+    payload["ok"] = False
+    return JSONResponse(status_code=503, content=payload)
+
+
+@app.get("/readyz")
+async def readiness() -> dict:
+    payload = {
+        "ok": True,
+        "service": "omniweb-agent-engine",
+        "database_ok": False,
+    }
+
+    database_ok, database_error = await probe_database()
+    if database_ok:
+        payload["database_ok"] = True
+        return payload
+
+    payload["ok"] = False
+    payload["database_error"] = database_error
+    return JSONResponse(status_code=503, content=payload)
 
 
 @app.post("/api/seed")
@@ -341,4 +399,13 @@ async def run_seed(x_api_key: str = Header(...)):
     # Import and run the seed function
     seed_module = importlib.import_module("seed")
     await seed_module.seed()
+
+
+# ── Static files (storefront widget JS) ──────────────────────────────────────
+import os as _os
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+
+_static_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "static")
+if _os.path.isdir(_static_dir):
+    app.mount("/static", _StaticFiles(directory=_static_dir), name="static")
     return {"ok": True, "message": "Seed complete"}

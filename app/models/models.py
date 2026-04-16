@@ -88,6 +88,9 @@ class Client(Base):
     outreach_sequences: Mapped[list["OutreachSequence"]] = relationship(back_populates="client")
     webhook_events: Mapped[list["WebhookEvent"]] = relationship(back_populates="client")
     site_template_instances: Mapped[list["SiteTemplateInstance"]] = relationship(back_populates="client")
+    shopify_store: Mapped["ShopifyStore | None"] = relationship(back_populates="client", uselist=False)
+    shopify_sessions: Mapped[list["ShopifyAssistantSession"]] = relationship(back_populates="client")
+    shopify_discount_requests: Mapped[list["ShopifyDiscountApproval"]] = relationship(back_populates="client")
 
     __table_args__ = (
         Index("ix_clients_email", "email"),
@@ -203,6 +206,135 @@ class AgentConfig(Base):
         Index("ix_agent_configs_client_id", "client_id"),
         Index("ix_agent_configs_elevenlabs_agent_id", "elevenlabs_agent_id"),
         Index("ix_agent_configs_industry", "industry"),
+    )
+
+
+# ── Shopify Commerce Assistant ──────────────────────────────────────────────
+
+class ShopifyStore(Base):
+    """Per-client Shopify store configuration for the commerce assistant."""
+    __tablename__ = "shopify_stores"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("clients.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+
+    shop_domain: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    shop_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    shop_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    shop_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    granted_scopes: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    storefront_access_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    admin_access_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    install_state_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    install_state_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    installed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    uninstalled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_install_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storefront_api_version: Mapped[str] = mapped_column(String(20), default="2026-07", nullable=False)
+    app_status: Mapped[str] = mapped_column(String(30), default="draft", nullable=False)
+    sales_channel_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    assistant_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    require_discount_approval: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    allow_discount_requests: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    allowed_discount_types: Mapped[list] = mapped_column(JSONB, default=lambda: ["code"], nullable=False)
+    support_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    support_policy: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    nav_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    checkout_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="shopify_store")
+    sessions: Mapped[list["ShopifyAssistantSession"]] = relationship(back_populates="store")
+    discount_requests: Mapped[list["ShopifyDiscountApproval"]] = relationship(back_populates="store")
+
+    __table_args__ = (
+        Index("ix_shopify_stores_client_id", "client_id"),
+        Index("ix_shopify_stores_shop_domain", "shop_domain"),
+        Index("ix_shopify_stores_shop_id", "shop_id"),
+        Index("ix_shopify_stores_assistant_enabled", "assistant_enabled"),
+    )
+
+
+class ShopifyAssistantSession(Base):
+    """Tracks a single storefront shopper's AI conversation context."""
+    __tablename__ = "shopify_assistant_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    store_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("shopify_stores.id", ondelete="CASCADE"), nullable=False)
+
+    storefront_session_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    shopper_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    shopper_locale: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="active", nullable=False)
+    last_intent: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    context: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    transcript: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    last_recommendations: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="shopify_sessions")
+    store: Mapped["ShopifyStore"] = relationship(back_populates="sessions")
+    discount_requests: Mapped[list["ShopifyDiscountApproval"]] = relationship(back_populates="session")
+
+    __table_args__ = (
+        Index("ix_shopify_assistant_sessions_client_id", "client_id"),
+        Index("ix_shopify_assistant_sessions_store_id", "store_id"),
+        Index("ix_shopify_assistant_sessions_status", "status"),
+        Index("ix_shopify_assistant_sessions_last_seen_at", "last_seen_at"),
+    )
+
+
+class ShopifyDiscountApproval(Base):
+    """Merchant-gated discount requests created by the AI assistant."""
+    __tablename__ = "shopify_discount_approvals"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    store_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("shopify_stores.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("shopify_assistant_sessions.id", ondelete="SET NULL"), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    discount_type: Mapped[str] = mapped_column(String(30), default="code", nullable=False)
+    value_type: Mapped[str] = mapped_column(String(30), default="percentage", nullable=False)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    shopper_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    merchant_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cart_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+    approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="shopify_discount_requests")
+    store: Mapped["ShopifyStore"] = relationship(back_populates="discount_requests")
+    session: Mapped["ShopifyAssistantSession | None"] = relationship(back_populates="discount_requests")
+
+    __table_args__ = (
+        Index("ix_shopify_discount_approvals_client_id", "client_id"),
+        Index("ix_shopify_discount_approvals_store_id", "store_id"),
+        Index("ix_shopify_discount_approvals_session_id", "session_id"),
+        Index("ix_shopify_discount_approvals_status", "status"),
+        Index("ix_shopify_discount_approvals_created_at", "created_at"),
     )
 
 

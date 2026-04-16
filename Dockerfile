@@ -29,8 +29,29 @@ COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY seed.py ./
+COPY static/ ./static/
 
 EXPOSE 8000
 
 # Run database migrations then start the FastAPI server
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"]
+
+
+# ── Stage 3: Shopify microservice ────────────────────────────────────────────
+FROM python:3.12-slim AS shopify
+
+WORKDIR /app
+
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH=/app
+
+COPY app/ ./app/
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
+COPY static/ ./static/
+
+EXPOSE 8001
+
+# No migrations here — the api container handles them
+CMD ["uvicorn", "app.shopify_main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]

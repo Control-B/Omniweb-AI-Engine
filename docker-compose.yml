@@ -63,5 +63,28 @@ services:
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
     restart: unless-stopped
 
+  # ── Shopify Service (isolated container) ───────────────────────────────────
+  shopify:
+    build:
+      context: .
+      target: shopify
+    ports:
+      - "8001:8001"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://omniweb:password@postgres:5432/omniweb_engine
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
 volumes:
   postgres_data:

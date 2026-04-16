@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     ]
 
     # ── Database ─────────────────────────────────────────────
-    DATABASE_URL: str = "postgresql+asyncpg://omniweb:password@localhost:5432/omniweb"
+    DATABASE_URL: str = "postgresql+asyncpg://omniweb:password@localhost:5432/omniweb_engine"
 
     # ── Redis ────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -127,6 +127,17 @@ class Settings(BaseSettings):
     CLERK_PUBLISHABLE_KEY: str = ""
     CLERK_JWKS_URL: str = ""  # auto-derived if empty
 
+    # ── Shopify App / Commerce Assistant ────────────────────
+    SHOPIFY_API_KEY: str = ""
+    SHOPIFY_API_SECRET: str = ""
+    SHOPIFY_APP_URL: str = ""
+    SHOPIFY_WEBHOOK_SECRET: str = ""
+    SHOPIFY_API_VERSION: str = "2026-07"
+    SHOPIFY_SCOPES: str = (
+        "read_products,read_discounts,write_discounts,read_orders,"
+        "read_customers,read_themes,write_script_tags"
+    )
+
     # ── Telephony limits ─────────────────────────────────────
     MAX_CALL_DURATION_SECONDS: int = 1800  # 30 min hard stop
 
@@ -161,6 +172,10 @@ class Settings(BaseSettings):
     @property
     def calcom_configured(self) -> bool:
         return bool(self.CALCOM_API_KEY)
+
+    @property
+    def shopify_configured(self) -> bool:
+        return bool(self.SHOPIFY_API_KEY and self.SHOPIFY_API_SECRET and self.SHOPIFY_APP_URL)
 
 
 @lru_cache

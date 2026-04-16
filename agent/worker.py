@@ -276,7 +276,7 @@ async def _publish_text_response(room: rtc.Room, text: str) -> None:
 server = AgentServer()
 
 
-@server.rtc_session(agent_name="omniweb-agent")
+@server.rtc_session(agent_name="BanjahMac")
 async def omniweb_entrypoint(ctx: agents.JobContext):
     """Entrypoint called by LiveKit for each dispatched session.
 

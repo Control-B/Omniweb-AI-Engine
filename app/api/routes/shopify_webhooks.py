@@ -74,3 +74,15 @@ async def webhook_shop_redact(
     payload = await _verified_webhook_body(request, x_shopify_hmac_sha256)
     result = await ShopifyWebhookService.handle_shop_redact(db, payload)
     return result
+
+
+@router.post("/app-subscriptions-update")
+async def webhook_app_subscriptions_update(
+    request: Request,
+    x_shopify_hmac_sha256: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+):
+    """Handle app_subscriptions/update — Shopify sends this when billing status changes."""
+    payload = await _verified_webhook_body(request, x_shopify_hmac_sha256)
+    result = await ShopifyWebhookService.handle_subscription_update(db, payload)
+    return result

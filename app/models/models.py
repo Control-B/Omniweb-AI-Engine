@@ -248,6 +248,12 @@ class ShopifyStore(Base):
     nav_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     checkout_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
+    # Shopify Billing
+    shopify_subscription_gid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    shopify_plan: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    shopify_subscription_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    shopify_billing_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 

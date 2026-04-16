@@ -14,6 +14,7 @@ from app.api.deps import get_session
 from app.core.auth import get_current_client, is_internal_staff_role
 from app.models.models import AgentConfig, ShopifyAssistantSession, ShopifyDiscountApproval, ShopifyStore
 from app.services.shopify_api_service import ShopifyAPIError, ShopifyAPIService
+from app.services.shopify_billing_service import ShopifyBillingError, ShopifyBillingService
 from app.services.shopify_crypto_service import ShopifyCryptoService
 from app.services.shopify_oauth_service import ShopifyOAuthError, ShopifyOAuthService
 from app.services.shopify_product_service import ShopifyProductService
@@ -724,3 +725,93 @@ def _serialize_discount_request(approval: ShopifyDiscountApproval) -> dict[str, 
         "expires_at": approval.expires_at.isoformat() if approval.expires_at else None,
         "created_at": approval.created_at.isoformat() if approval.created_at else None,
     }
+
+
+# ── Billing ──────────────────────────────────────────────────────────────────
+
+
+class SubscribeRequest(BaseModel):
+    plan: str = Field(..., description="Plan key: 'starter' or 'pro'")
+
+
+@router.post("/billing/subscribe")
+async def billing_subscribe(
+    body: SubscribeRequest,
+    client=Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+):
+    """Create a Shopify app subscription and return the confirmation URL."""
+    store = await _get_store(client.id, db)
+    if not store or not store.admin_access_token:
+        raise HTTPException(404, "Shopify store not connected")
+
+    try:
+        result = await ShopifyBillingService.create_subscription(store, body.plan)
+    except ShopifyBillingError as exc:
+        raise HTTPException(400, str(exc))
+
+    # Persist pending subscription info
+    store.shopify_subscription_gid = result.get("subscription_gid")
+    store.shopify_plan = body.plan
+    store.shopify_subscription_status = "pending"
+    store.shopify_billing_updated_at = utcnow()
+    await db.commit()
+
+    return {"confirmation_url": result["confirmation_url"], "subscription_gid": result.get("subscription_gid")}
+
+
+@router.get("/billing/status")
+async def billing_status(
+    client=Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return current Shopify subscription status."""
+    store = await _get_store(client.id, db)
+    if not store or not store.admin_access_token:
+        raise HTTPException(404, "Shopify store not connected")
+
+    try:
+        sub = await ShopifyBillingService.get_active_subscription(store)
+    except ShopifyBillingError:
+        sub = None
+
+    # Sync DB with live status
+    if sub:
+        store.shopify_subscription_gid = sub.get("id")
+        store.shopify_plan = sub.get("plan")
+        store.shopify_subscription_status = sub.get("status")
+        store.shopify_billing_updated_at = utcnow()
+        await db.commit()
+
+    return {
+        "plan": store.shopify_plan,
+        "status": store.shopify_subscription_status,
+        "subscription_gid": store.shopify_subscription_gid,
+    }
+
+
+@router.post("/billing/cancel")
+async def billing_cancel(
+    client=Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+):
+    """Cancel the active Shopify app subscription."""
+    store = await _get_store(client.id, db)
+    if not store or not store.shopify_subscription_gid:
+        raise HTTPException(404, "No active subscription")
+
+    try:
+        await ShopifyBillingService.cancel_subscription(store, store.shopify_subscription_gid)
+    except ShopifyBillingError as exc:
+        raise HTTPException(400, str(exc))
+
+    store.shopify_subscription_status = "cancelled"
+    store.shopify_billing_updated_at = utcnow()
+    await db.commit()
+
+    return {"status": "cancelled"}
+
+
+async def _get_store(client_id: uuid.UUID, db: AsyncSession) -> ShopifyStore | None:
+    result = await db.execute(select(ShopifyStore).where(ShopifyStore.client_id == client_id))
+    return result.scalar_one_or_none()

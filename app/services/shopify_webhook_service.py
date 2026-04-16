@@ -299,3 +299,48 @@ class ShopifyWebhookService:
                 results.append({"topic": topic, "ok": False, "error": str(exc)})
 
         return results
+
+    # ── app_subscriptions/update ─────────────────────────────────────────────
+
+    @staticmethod
+    async def handle_subscription_update(db: AsyncSession, payload: dict[str, Any]) -> dict:
+        """Handle app_subscriptions/update webhook — sync billing status to DB."""
+        sub = payload.get("app_subscription", payload)
+        admin_graphql_api_id = sub.get("admin_graphql_api_id", "")
+        status = sub.get("status", "").lower()
+        name = sub.get("name", "")
+
+        # Map Shopify status to our internal status
+        status_map = {
+            "active": "active",
+            "declined": "declined",
+            "expired": "expired",
+            "frozen": "frozen",
+            "pending": "pending",
+        }
+        mapped_status = status_map.get(status, status)
+
+        # Find the store by subscription GID
+        if admin_graphql_api_id:
+            result = await db.execute(
+                select(ShopifyStore).where(ShopifyStore.shopify_subscription_gid == admin_graphql_api_id)
+            )
+            store = result.scalar_one_or_none()
+        else:
+            store = None
+
+        if not store:
+            logger.warning(f"Subscription update for unknown GID: {admin_graphql_api_id}")
+            return {"status": "ignored", "reason": "store_not_found"}
+
+        store.shopify_subscription_status = mapped_status
+        store.shopify_billing_updated_at = utcnow()
+
+        # If declined/expired, clear the plan
+        if mapped_status in ("declined", "expired"):
+            store.shopify_plan = None
+            store.shopify_subscription_gid = None
+
+        await db.commit()
+        logger.info(f"Subscription {admin_graphql_api_id} updated to {mapped_status} for store {store.shop_domain}")
+        return {"status": "ok", "subscription_status": mapped_status}

@@ -1,0 +1,37 @@
+{% comment %}
+  Omniweb — AI Shopping Assistant
+  ─────────────────────────────────────
+  This app embed block injects the Omniweb chat widget on every storefront page.
+
+  To activate:
+    Shopify Admin → Online Store → Themes → Customize →
+    App Embeds → toggle "Omniweb Widget" on → Save
+{% endcomment %}
+
+{% if block.settings.api_url != blank %}
+  <script
+    src="{{ block.settings.api_url }}/static/omniweb-shopify-widget.js"
+    data-engine="{{ block.settings.api_url }}"
+    data-shop="{{ shop.permanent_domain }}"
+    defer
+  ></script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Omniweb Widget",
+  "target": "body",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Paste your **Omniweb Engine URL** below then save. The AI shopping assistant will appear on all storefront pages."
+    },
+    {
+      "type": "text",
+      "id": "api_url",
+      "label": "API URL",
+      "info": "e.g. https://your-app.replit.app — find it in Omniweb Dashboard → Install"
+    }
+  ]
+}
+{% endschema %}

@@ -408,4 +408,3 @@ from fastapi.staticfiles import StaticFiles as _StaticFiles
 _static_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "static")
 if _os.path.isdir(_static_dir):
     app.mount("/static", _StaticFiles(directory=_static_dir), name="static")
-    return {"ok": True, "message": "Seed complete"}

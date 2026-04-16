@@ -63,6 +63,7 @@ class AgentConfigUpdate(BaseModel):
     handoff_phone: Optional[str] = None
     handoff_email: Optional[str] = None
     handoff_message: Optional[str] = None
+    website_domain: Optional[str] = None
 
 
 @router.get("/{client_id}")
@@ -107,6 +108,23 @@ async def upsert_config(
         db.add(config)
 
     for field, value in body.model_dump(exclude_none=True).items():
+        if field == "website_domain" and value:
+            # Normalize domain
+            domain = value.strip().lower()
+            for prefix in ("https://", "http://", "www."):
+                if domain.startswith(prefix):
+                    domain = domain[len(prefix):]
+            domain = domain.rstrip("/")
+            # Check uniqueness (excluding this config)
+            dup = await db.execute(
+                select(AgentConfig).where(
+                    AgentConfig.website_domain == domain,
+                    AgentConfig.client_id != config.client_id,
+                )
+            )
+            if dup.scalar_one_or_none():
+                raise HTTPException(409, "An agent already exists for this domain")
+            value = domain
         setattr(config, field, value)
 
     await db.flush()

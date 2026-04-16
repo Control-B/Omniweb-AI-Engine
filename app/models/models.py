@@ -133,6 +133,7 @@ class AgentConfig(Base):
     # Business context
     business_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     business_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    website_domain: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
     timezone: Mapped[str] = mapped_column(String(50), default="America/New_York", nullable=False)
     booking_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 

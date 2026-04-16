@@ -131,6 +131,7 @@ export async function signup(body: {
   password: string;
   business_name?: string;
   business_type?: string;
+  website_domain?: string;
   template_id?: string;
 }): Promise<AuthResponse> {
   const data = await apiFetch<AuthResponse>("/auth/signup", {
@@ -151,7 +152,17 @@ export async function demoLogin(): Promise<AuthResponse> {
 
 export function logout() {
   clearToken();
-  if (typeof window !== "undefined") window.location.href = "/login";
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("omniweb_setup_complete");
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    window.location.replace("/login");
+  }
+}
+
+export async function deleteAccount() {
+  return apiFetch<{ ok: boolean; message: string }>("/auth/account", {
+    method: "DELETE",
+  });
 }
 
 // ── Profile ──────────────────────────────────────────────────────────────────

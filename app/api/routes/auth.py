@@ -55,6 +55,7 @@ class SignupRequest(BaseModel):
     password: str
     business_name: Optional[str] = None
     business_type: Optional[str] = None
+    website_domain: Optional[str] = None
     template_id: Optional[str] = None  # UUID of template to apply
 
 
@@ -242,6 +243,24 @@ async def signup(
     if result.scalar_one_or_none():
         raise HTTPException(409, "Email already registered")
 
+    # Normalize and validate domain
+    domain = None
+    if body.website_domain:
+        domain = body.website_domain.strip().lower()
+        # Strip protocol and trailing slashes
+        for prefix in ("https://", "http://", "www."):
+            if domain.startswith(prefix):
+                domain = domain[len(prefix):]
+        domain = domain.rstrip("/")
+        if not domain or "." not in domain:
+            raise HTTPException(400, "Please enter a valid domain (e.g. mybusiness.com)")
+        # Check domain uniqueness
+        existing_domain = await db.execute(
+            select(AgentConfig).where(AgentConfig.website_domain == domain)
+        )
+        if existing_domain.scalar_one_or_none():
+            raise HTTPException(409, "An agent already exists for this domain")
+
     # Create client
     from datetime import timedelta
     client = Client(
@@ -289,6 +308,7 @@ async def signup(
         widget_config=template.widget_config if template else {},
         business_name=body.business_name or body.name,
         business_type=body.business_type or (template.industry if template else None),
+        website_domain=domain,
     )
     db.add(agent_config)
     await db.commit()
@@ -963,3 +983,32 @@ async def clerk_session(
         "plan": client["plan"],
         "role": client.get("role", "client"),
     }
+
+
+# ── Account deletion ────────────────────────────────────────────────────────
+
+@router.delete("/account")
+async def delete_account(
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Permanently delete the authenticated client's account and all associated data.
+
+    Cascades to agent_config, calls, leads, phone numbers, etc.
+    Internal staff (owner/admin/support) cannot self-delete via this endpoint.
+    """
+    client = await db.get(Client, current_client["client_id"])
+    if not client:
+        raise HTTPException(404, "Account not found")
+
+    if is_internal_staff_role(client.role):
+        raise HTTPException(400, "Internal staff accounts cannot be deleted via this endpoint")
+
+    email = client.email
+    client_id = str(client.id)
+
+    await db.delete(client)
+    await db.commit()
+
+    logger.info(f"Account deleted: {email} ({client_id})")
+    return {"ok": True, "message": "Account and all associated data have been permanently deleted"}

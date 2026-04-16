@@ -11,11 +11,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.models.models import AgentConfig
 from app.services import livekit_service
 from app.services.prompt_engine import compose_system_prompt, compose_greeting
 
@@ -89,12 +93,15 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/token", response_model=TokenResponse)
-async def create_session_token(req: TokenRequest):
+async def create_session_token(
+    req: TokenRequest,
+    db: AsyncSession = Depends(get_session),
+):
     """Generate a LiveKit access token and dispatch the agent with a prompt.
 
     For the landing page (no client_id), uses the Omniweb default prompt.
-    For tenant embed widgets (client_id provided), will look up the
-    tenant's AgentConfig and compose a per-tenant prompt.
+    For tenant embed widgets (client_id provided), looks up the tenant's
+    AgentConfig and composes a per-tenant prompt via the prompt engine.
     """
     if not settings.livekit_configured:
         raise HTTPException(status_code=503, detail="LiveKit not configured")
@@ -117,12 +124,55 @@ async def create_session_token(req: TokenRequest):
     )
 
     # ── Compose the system prompt ────────────────────────────────────────
-    # TODO: When client_id is provided, look up AgentConfig from DB and
-    #       compose a tenant-specific prompt. For now, use the Omniweb default.
     system_prompt = OMNIWEB_SYSTEM_PROMPT
     first_message = OMNIWEB_GREETING
 
-    # Dispatch the self-hosted agent with the prompt as metadata
+    if req.client_id:
+        # Look up tenant's AgentConfig
+        result = await db.execute(
+            select(AgentConfig).where(AgentConfig.client_id == req.client_id)
+        )
+        config = result.scalar_one_or_none()
+
+        if config:
+            if config.use_prompt_engine:
+                # Compose prompt from structured config via the prompt engine
+                system_prompt = compose_system_prompt(
+                    agent_name=config.agent_name,
+                    business_name=config.business_name,
+                    industry_slug=config.industry,
+                    agent_mode=config.agent_mode,
+                    business_type=config.business_type or "",
+                    services=config.services or [],
+                    timezone=config.timezone,
+                    booking_url=config.booking_url or "",
+                    after_hours_message=config.after_hours_message,
+                    custom_prompt=config.custom_context or "",
+                    business_hours=config.business_hours or {},
+                    custom_guardrails=config.custom_guardrails or [],
+                    custom_escalation_triggers=config.custom_escalation_triggers or [],
+                )
+            elif config.system_prompt:
+                # Use raw system_prompt (tenant wrote their own)
+                system_prompt = config.system_prompt
+
+            first_message = compose_greeting(
+                agent_name=config.agent_name,
+                business_name=config.business_name,
+                custom_greeting=config.agent_greeting,
+                industry_slug=config.industry or "general",
+                agent_mode=config.agent_mode,
+            )
+
+            logger.info(
+                "Per-tenant prompt composed",
+                client_id=req.client_id,
+                agent_name=config.agent_name,
+                industry=config.industry,
+                prompt_len=len(system_prompt),
+            )
+
+    # Dispatch the agent with the prompt as metadata
     await livekit_service.dispatch_agent(
         room_name,
         system_prompt=system_prompt,

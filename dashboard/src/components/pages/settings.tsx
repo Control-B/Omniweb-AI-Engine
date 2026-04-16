@@ -14,6 +14,7 @@ import {
   Loader2,
   Lock,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,8 @@ import {
   generateApiKey,
   parseJwt,
   getToken,
+  deleteAccount,
+  logout,
   type Profile,
 } from "@/lib/api";
 
@@ -301,7 +304,95 @@ function ProfileSettings() {
           </Button>
         </CardContent>
       </Card>
+
+      <DangerZone />
     </div>
+  );
+}
+
+function DangerZone() {
+  const [confirming, setConfirming] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteAccount();
+      logout();
+    } catch (err: any) {
+      setError(err.message || "Failed to delete account");
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Card className="border-destructive/30">
+      <CardHeader>
+        <CardTitle className="text-destructive flex items-center gap-2">
+          <Trash2 className="w-4 h-4" />
+          Delete Account
+        </CardTitle>
+        <CardDescription>
+          Permanently delete your account and all data including your AI agent,
+          calls, leads, and phone numbers. This cannot be undone.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!confirming ? (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setConfirming(true)}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete My Account
+          </Button>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <p>
+                This will permanently delete your account, AI agent, all call
+                records, leads, and phone numbers. Type{" "}
+                <strong>delete my account</strong> to confirm.
+              </p>
+            </div>
+            <Input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="Type: delete my account"
+            />
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={confirmText !== "delete my account" || deleting}
+                onClick={handleDelete}
+              >
+                {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {deleting ? "Deleting..." : "Permanently Delete"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setConfirming(false);
+                  setConfirmText("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

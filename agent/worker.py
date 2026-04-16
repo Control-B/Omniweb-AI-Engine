@@ -35,7 +35,7 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 _project_root = Path(__file__).resolve().parent.parent
 load_dotenv(_project_root / ".env")
 
-logger = logging.getLogger("BanjahMac")
+logger = logging.getLogger("Kai-d15")
 logger.setLevel(logging.INFO)
 
 
@@ -147,7 +147,7 @@ def prewarm(proc: JobProcess):
 server.setup_fnc = prewarm
 
 
-@server.rtc_session(agent_name="BanjahMac")
+@server.rtc_session(agent_name="Kai-d15")
 async def entrypoint(ctx: JobContext):
     """Entrypoint called by LiveKit for each dispatched session.
 

@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     LIVEKIT_URL: str = ""          # wss://xxx.livekit.cloud
     LIVEKIT_API_KEY: str = ""      # APIxxxxxxxxx
     LIVEKIT_API_SECRET: str = ""   # secret paired with key
-    LIVEKIT_AGENT_NAME: str = "BanjahMac"  # LiveKit Cloud agent name (matches @server.rtc_session)
+    LIVEKIT_AGENT_NAME: str = "Kai-d15"  # LiveKit Cloud agent name (matches deployed agent)
 
     # ── Cal.com (Appointment Booking) ────────────────────────
     CALCOM_API_KEY: str = ""

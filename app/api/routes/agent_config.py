@@ -66,27 +66,6 @@ class AgentConfigUpdate(BaseModel):
     website_domain: Optional[str] = None
 
 
-@router.get("/{client_id}")
-async def get_config(
-    client_id: str,
-    current_client: dict = Depends(get_current_client),
-    db: AsyncSession = Depends(get_session),
-) -> dict:
-    # Tenant isolation: non-admin can only see own config
-    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
-        raise HTTPException(403, "Access denied")
-    result = await db.execute(
-        select(AgentConfig).where(AgentConfig.client_id == client_id)
-    )
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(404, f"No agent config for client {client_id}")
-    data = {f: getattr(config, f) for f in AgentConfig.__table__.columns.keys()}
-    # Flag indicating all required fields are present
-    data["setup_complete"] = bool(config.business_name and config.website_domain)
-    return data
-
-
 @router.get("/setup-status/{client_id}")
 async def setup_status(
     client_id: str,
@@ -125,6 +104,27 @@ async def setup_status(
         "website_domain": config.website_domain,
         "industry": config.industry,
     }
+
+
+@router.get("/{client_id}")
+async def get_config(
+    client_id: str,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    # Tenant isolation: non-admin can only see own config
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
+        raise HTTPException(403, "Access denied")
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client_id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(404, f"No agent config for client {client_id}")
+    data = {f: getattr(config, f) for f in AgentConfig.__table__.columns.keys()}
+    # Flag indicating all required fields are present
+    data["setup_complete"] = bool(config.business_name and config.website_domain)
+    return data
 
 
 @router.put("/{client_id}")

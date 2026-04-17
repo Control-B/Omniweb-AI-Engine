@@ -1007,7 +1007,10 @@ async def delete_account(
     email = client.email
     client_id = str(client.id)
 
-    await db.delete(client)
+    # Use raw SQL DELETE so the DB-level ON DELETE CASCADE handles all child rows.
+    # ORM db.delete() doesn't trigger DB cascades and fails on NOT NULL FKs.
+    from sqlalchemy import text
+    await db.execute(text("DELETE FROM clients WHERE id = :cid"), {"cid": client.id})
     await db.commit()
 
     logger.info(f"Account deleted: {email} ({client_id})")

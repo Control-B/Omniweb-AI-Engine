@@ -72,11 +72,26 @@ async def generate_embed_code(
     if not client.is_active:
         raise HTTPException(403, "Account is not active")
 
+    # Require website_domain on agent config before generating embed
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client.id)
+    )
+    agent_config = result.scalar_one_or_none()
+    if not agent_config or not agent_config.website_domain:
+        raise HTTPException(
+            400,
+            "Website domain is required before generating embed code. "
+            "Complete your agent setup first.",
+        )
+
+    # Use agent config domain as the authoritative domain lock
+    domain = body.domain or agent_config.website_domain
+
     # Generate new embed code
     code = _generate_embed_code()
     client.embed_code = code
     client.embed_phone = body.phone
-    client.embed_domain = body.domain
+    client.embed_domain = domain
 
     # Set expiry based on subscription status
     if client.stripe_subscription_id:

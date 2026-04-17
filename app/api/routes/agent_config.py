@@ -81,7 +81,50 @@ async def get_config(
     config = result.scalar_one_or_none()
     if not config:
         raise HTTPException(404, f"No agent config for client {client_id}")
-    return {f: getattr(config, f) for f in AgentConfig.__table__.columns.keys()}
+    data = {f: getattr(config, f) for f in AgentConfig.__table__.columns.keys()}
+    # Flag indicating all required fields are present
+    data["setup_complete"] = bool(config.business_name and config.website_domain)
+    return data
+
+
+@router.get("/setup-status/{client_id}")
+async def setup_status(
+    client_id: str,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Check whether the client has completed required onboarding fields.
+
+    Returns setup_complete=True only when business_name and website_domain are set.
+    Any frontend can call this to decide whether to show onboarding.
+    """
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
+        raise HTTPException(403, "Access denied")
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client_id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        return {
+            "setup_complete": False,
+            "missing": ["business_name", "website_domain", "industry"],
+            "has_config": False,
+        }
+    missing = []
+    if not config.business_name:
+        missing.append("business_name")
+    if not config.website_domain:
+        missing.append("website_domain")
+    if not config.industry:
+        missing.append("industry")
+    return {
+        "setup_complete": len(missing) == 0,
+        "missing": missing,
+        "has_config": True,
+        "business_name": config.business_name,
+        "website_domain": config.website_domain,
+        "industry": config.industry,
+    }
 
 
 @router.put("/{client_id}")

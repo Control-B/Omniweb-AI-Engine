@@ -932,7 +932,7 @@ async def admin_bootstrap_status(
     internal_user_count = await _count_internal_users(db)
     has_owner = await _has_owner(db)
     return {
-        "bootstrap_open": internal_user_count == 0,
+        "bootstrap_open": not has_owner,
         "has_owner": has_owner,
         "internal_user_count": internal_user_count,
     }
@@ -944,7 +944,7 @@ async def admin_signup(
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Bootstrap the very first owner account. Disabled after bootstrap."""
-    if await _count_internal_users(db) > 0:
+    if await _has_owner(db):
         raise HTTPException(403, "Internal account bootstrap is closed. Use an owner-issued invite.")
 
     if len(body.password) < 6:

@@ -4,6 +4,8 @@ When config is updated, the changes are synced to the ElevenLabs agent.
 The prompt engine automatically composes the system prompt from the
 tenant's industry, agent mode, business context, and custom instructions.
 """
+import secrets
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,8 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.core.auth import get_current_client
+from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.models import AgentConfig
+from app.models.models import AgentConfig, Client
 from app.services import elevenlabs_service
 from app.services.prompt_engine import compose_system_prompt, compose_greeting
 from app.services.industry_config import (
@@ -27,6 +30,26 @@ from app.services.industry_config import (
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/agent-config", tags=["agent-config"])
+settings = get_settings()
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _build_loader_snippet(*, embed_code: str, client_id: str) -> tuple[str, str]:
+    platform_url = settings.PLATFORM_URL.rstrip("/")
+    engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL).rstrip("/")
+    widget_url = f"{platform_url}/widget/{client_id}"
+    snippet = f"""<!-- Omniweb AI Widget -->
+<script
+  src="{platform_url}/widget/loader.js"
+  data-embed-code="{embed_code}"
+  data-agent-id="{client_id}"
+  data-engine-url="{engine_url}"
+  async
+></script>"""
+    return snippet, widget_url
 
 
 class AgentConfigUpdate(BaseModel):
@@ -263,27 +286,59 @@ async def upsert_config(
 @router.get("/{client_id}/widget")
 async def get_widget_embed(
     client_id: str,
+    current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Get the embeddable chat widget code for the client's agent.
+    """Get the embeddable widget code for the authenticated client's site."""
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
+        raise HTTPException(403, "Access denied")
 
-    Public endpoint — no auth required (used by client websites).
-    """
+    client = await db.get(Client, client_id)
+    if not client:
+        raise HTTPException(404, "Client not found")
+
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client_id)
     )
     config = result.scalar_one_or_none()
-    if not config or not config.elevenlabs_agent_id:
-        raise HTTPException(404, "No ElevenLabs agent configured")
+    if not config:
+        raise HTTPException(404, "No agent configuration found")
 
-    embed_data = elevenlabs_service.get_widget_embed_code(config.elevenlabs_agent_id)
+    if not client.embed_code:
+        client.embed_code = secrets.token_hex(16)
+        if config.website_domain and not client.embed_domain:
+            client.embed_domain = config.website_domain
+
+        if client.stripe_subscription_id:
+            client.embed_expires_at = None
+        elif client.trial_ends_at:
+            client.embed_expires_at = client.trial_ends_at
+        else:
+            client.embed_expires_at = _utcnow() + timedelta(days=14)
+
+        await db.commit()
+        await db.refresh(client)
+
+    embed_snippet, widget_url = _build_loader_snippet(
+        embed_code=client.embed_code,
+        client_id=str(client.id),
+    )
+
+    legacy_embed_code = None
+    talk_url = None
+    if config.elevenlabs_agent_id:
+        embed_data = elevenlabs_service.get_widget_embed_code(config.elevenlabs_agent_id)
+        legacy_embed_code = embed_data["legacy"]
+        talk_url = f"https://elevenlabs.io/app/talk-to/{config.elevenlabs_agent_id}"
 
     return {
-        "agent_id": config.elevenlabs_agent_id,
-        "embed_code": embed_data["iframe"],
-        "legacy_embed_code": embed_data["legacy"],
-        "widget_url": embed_data["widget_url"],
-        "talk_url": f"https://elevenlabs.io/app/talk-to/{config.elevenlabs_agent_id}",
+        "agent_id": str(client.id),
+        "embed_code": embed_snippet,
+        "legacy_embed_code": legacy_embed_code,
+        "widget_url": widget_url,
+        "talk_url": talk_url,
+        "embed_domain": client.embed_domain,
+        "embed_expires_at": client.embed_expires_at.isoformat() if client.embed_expires_at else None,
     }
 
 

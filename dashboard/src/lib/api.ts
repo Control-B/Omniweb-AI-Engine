@@ -382,7 +382,11 @@ export async function getWidgetEmbed(clientId: string) {
   return apiFetch<{
     agent_id: string;
     embed_code: string;
-    talk_url: string;
+    legacy_embed_code?: string | null;
+    widget_url?: string | null;
+    talk_url?: string | null;
+    embed_domain?: string | null;
+    embed_expires_at?: string | null;
   }>(`/agent-config/${clientId}/widget`);
 }
 

@@ -169,7 +169,8 @@ async def validate_embed_code(
     return {
         "valid": True,
         "client_id": str(client.id),
-        "agent_id": elevenlabs_agent_id,
+        "agent_id": str(client.id),
+        "legacy_agent_id": elevenlabs_agent_id,
         "widget_config": widget_config,
         "plan": client.plan,
     }
@@ -188,32 +189,33 @@ async def get_embed_snippet(
     if not client.embed_code:
         raise HTTPException(404, "No embed code generated yet. Generate one first.")
 
-    # Get agent config for agent_id
+    # External widget now targets the client_id-backed LiveKit widget route.
+    widget_target_id = str(client.id)
+
+    # Keep the legacy ElevenLabs agent ID available for fallback/debugging.
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client.id)
     )
     agent_config = result.scalar_one_or_none()
-    agent_id = agent_config.elevenlabs_agent_id if agent_config else "YOUR_AGENT_ID"
+    legacy_agent_id = agent_config.elevenlabs_agent_id if agent_config else None
 
     platform_url = getattr(settings, "PLATFORM_URL", "https://omniweb.ai")
     engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL)
 
     snippet = f"""<!-- Omniweb AI Widget -->
-<script>
-(function(){{
-  var d=document,s=d.createElement('script');
-  s.src='{platform_url}/widget/loader.js';
-  s.async=true;
-  s.dataset.embedCode='{client.embed_code}';
-  s.dataset.agentId='{agent_id}';
-  s.dataset.engineUrl='{engine_url}';
-  d.head.appendChild(s);
-}})();
-</script>"""
+<script
+  src="{platform_url}/widget/loader.js"
+  data-embed-code="{client.embed_code}"
+  data-agent-id="{widget_target_id}"
+  data-engine-url="{engine_url}"
+  async
+></script>"""
 
     return {
         "embed_code": client.embed_code,
         "snippet": snippet,
+        "widget_target_id": widget_target_id,
+        "legacy_agent_id": legacy_agent_id,
         "domain": client.embed_domain,
         "expires_at": client.embed_expires_at.isoformat() if client.embed_expires_at else None,
     }

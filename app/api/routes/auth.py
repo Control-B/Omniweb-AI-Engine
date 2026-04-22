@@ -150,6 +150,16 @@ class AdminUserResponse(BaseModel):
     created_at: str | None = None
     invited_at: str | None = None
     invite_accepted_at: str | None = None
+    invite_url: str | None = None
+    invite_code: str | None = None
+    reset_url: str | None = None
+    reset_code: str | None = None
+
+
+class AdminBootstrapStatusResponse(BaseModel):
+    bootstrap_open: bool
+    has_owner: bool
+    internal_user_count: int
 
 
 class AdminUserUpdateRequest(BaseModel):
@@ -169,7 +179,14 @@ def _invite_url(token: str) -> str:
     return f"{settings.PLATFORM_URL}/reset-password?token={token}&mode=invite"
 
 
-def _serialize_admin_user(user: Client) -> dict:
+def _serialize_admin_user(
+    user: Client,
+    *,
+    invite_url: str | None = None,
+    invite_code: str | None = None,
+    reset_url: str | None = None,
+    reset_code: str | None = None,
+) -> dict:
     return {
         "id": str(user.id),
         "name": user.name,
@@ -180,6 +197,10 @@ def _serialize_admin_user(user: Client) -> dict:
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "invited_at": user.invited_at.isoformat() if user.invited_at else None,
         "invite_accepted_at": user.invite_accepted_at.isoformat() if user.invite_accepted_at else None,
+        "invite_url": invite_url,
+        "invite_code": invite_code,
+        "reset_url": reset_url,
+        "reset_code": reset_code,
     }
 
 
@@ -514,6 +535,7 @@ async def invite_admin_user(
     await db.flush()
     token = await _issue_invite(user=user, db=db)
     await db.refresh(user)
+    invite_url = _invite_url(token)
 
     import asyncio
     from app.services.email_service import send_team_invite_email
@@ -523,12 +545,12 @@ async def invite_admin_user(
             to=user.email,
             name=user.name,
             invited_by=admin["email"],
-            accept_url=_invite_url(token),
+            accept_url=invite_url,
         )
     )
 
     logger.info(f"Internal invite sent by {admin['email']} to {user.email} ({user.role})")
-    return _serialize_admin_user(user)
+    return _serialize_admin_user(user, invite_url=invite_url, invite_code=token)
 
 
 @router.post("/admin/users", response_model=AdminUserResponse, status_code=201)
@@ -634,28 +656,31 @@ async def send_admin_reset(
 
     if not user.hashed_password or not user.invite_accepted_at:
         token = await _issue_invite(user=user, db=db)
+        invite_url = _invite_url(token)
         asyncio.create_task(
             send_team_invite_email(
                 to=user.email,
                 name=user.name,
                 invited_by=admin["email"],
-                accept_url=_invite_url(token),
+                accept_url=invite_url,
             )
         )
         logger.info(f"Internal invite re-sent by {admin['email']} to {user.email}")
+        await db.refresh(user)
+        return _serialize_admin_user(user, invite_url=invite_url, invite_code=token)
     else:
         token = await _issue_password_reset(user=user, db=db)
+        reset_url = _reset_url(token)
         asyncio.create_task(
             send_password_reset_email(
                 to=user.email,
                 name=user.name,
-                reset_url=_reset_url(token),
+                reset_url=reset_url,
             )
         )
         logger.info(f"Internal reset sent by {admin['email']} to {user.email}")
-
-    await db.refresh(user)
-    return _serialize_admin_user(user)
+        await db.refresh(user)
+        return _serialize_admin_user(user, reset_url=reset_url, reset_code=token)
 
 
 @router.post("/demo-token", response_model=TokenResponse)
@@ -897,7 +922,20 @@ class AdminSignupRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
-    admin_code: str
+    admin_code: str | None = None
+
+
+@router.get("/admin-bootstrap-status", response_model=AdminBootstrapStatusResponse)
+async def admin_bootstrap_status(
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    internal_user_count = await _count_internal_users(db)
+    has_owner = await _has_owner(db)
+    return {
+        "bootstrap_open": internal_user_count == 0,
+        "has_owner": has_owner,
+        "internal_user_count": internal_user_count,
+    }
 
 
 @router.post("/admin-signup", response_model=TokenResponse, status_code=201)
@@ -908,9 +946,6 @@ async def admin_signup(
     """Bootstrap the very first owner account. Disabled after bootstrap."""
     if await _count_internal_users(db) > 0:
         raise HTTPException(403, "Internal account bootstrap is closed. Use an owner-issued invite.")
-
-    if body.admin_code != settings.ADMIN_SIGNUP_CODE:
-        raise HTTPException(403, "Invalid admin authorization code")
 
     if len(body.password) < 6:
         raise HTTPException(400, "Password must be at least 6 characters")

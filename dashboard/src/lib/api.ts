@@ -213,6 +213,16 @@ export interface AdminUser {
   created_at: string | null;
   invited_at: string | null;
   invite_accepted_at: string | null;
+  invite_url?: string | null;
+  invite_code?: string | null;
+  reset_url?: string | null;
+  reset_code?: string | null;
+}
+
+export interface AdminBootstrapStatus {
+  bootstrap_open: boolean;
+  has_owner: boolean;
+  internal_user_count: number;
 }
 
 export async function requestPasswordReset(body: {
@@ -237,6 +247,24 @@ export async function acceptInvite(token: string, password: string, name?: strin
     method: "POST",
     body: JSON.stringify({ token, password, name }),
   });
+}
+
+export async function getAdminBootstrapStatus(): Promise<AdminBootstrapStatus> {
+  return apiFetch<AdminBootstrapStatus>("/auth/admin-bootstrap-status");
+}
+
+export async function adminSignup(body: {
+  name: string;
+  email: string;
+  password: string;
+  admin_code?: string;
+}): Promise<AuthResponse> {
+  const data = await apiFetch<AuthResponse>("/auth/admin-signup", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  setToken(data.access_token);
+  return data;
 }
 
 export async function getAdminUsers(): Promise<AdminUser[]> {

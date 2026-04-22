@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Zap, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
-import { login, requestPasswordReset } from "@/lib/api";
+import { getAdminBootstrapStatus, login, requestPasswordReset, type AdminBootstrapStatus } from "@/lib/api";
 import { isInternalRole } from "@/lib/auth-context";
 
 export default function LoginPage() {
@@ -14,6 +14,29 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [bootstrapStatus, setBootstrapStatus] = useState<AdminBootstrapStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBootstrapStatus() {
+      try {
+        const data = await getAdminBootstrapStatus();
+        if (!cancelled) {
+          setBootstrapStatus(data);
+        }
+      } catch {
+        if (!cancelled) {
+          setBootstrapStatus(null);
+        }
+      }
+    }
+
+    void loadBootstrapStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -159,9 +182,28 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-muted-foreground">
           {portal === "admin"
-            ? "Admin accounts are created by the workspace owner and stored internally."
+            ? bootstrapStatus?.bootstrap_open
+              ? "Create the first owner account to unlock the admin workspace."
+              : "Admin accounts are created by the workspace owner from Admin → Team."
             : "Need an account? Contact Omniweb to be provisioned or receive an invite."}
         </p>
+
+        {portal === "admin" && (
+          <div className="flex items-center justify-center">
+            {bootstrapStatus?.bootstrap_open ? (
+              <a
+                href="/admin/setup"
+                className="text-sm text-primary hover:underline font-medium"
+              >
+                Create Owner Account →
+              </a>
+            ) : (
+              <p className="text-center text-xs text-muted-foreground/80 max-w-xs">
+                Need access? Ask the owner to send you an invite from the Team section.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Demo shortcut */}
         <div className="flex items-center justify-center">
@@ -170,6 +212,24 @@ export default function LoginPage() {
             className="text-sm text-primary hover:underline font-medium"
           >
             Try Demo Dashboard →
+          </a>
+        </div>
+
+        <div className="flex items-center justify-center">
+          <a
+            href="/reset-password"
+            className="text-sm text-primary hover:underline font-medium"
+          >
+            Use Invite / Recovery Code →
+          </a>
+        </div>
+
+        <div className="flex items-center justify-center">
+          <a
+            href="/widget-demo"
+            className="text-sm text-primary hover:underline font-medium"
+          >
+            Open Demo Website →
           </a>
         </div>
 

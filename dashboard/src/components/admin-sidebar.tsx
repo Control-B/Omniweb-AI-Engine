@@ -24,7 +24,7 @@ const NAV_ITEMS: { id: AdminPageId; label: string; icon: React.ElementType; perm
   { id: "sessions", label: "Sessions", icon: MessageSquare, permission: "conversations.read" },
   { id: "clients", label: "Clients", icon: Users, permission: "clients.read" },
   { id: "templates", label: "Templates", icon: FileText, permission: "templates.read" },
-  { id: "team", label: "Team", icon: UserCog, permission: "team.read" },
+  { id: "team", label: "Super Admin", icon: UserCog, permission: "team.read" },
 ];
 
 interface AdminSidebarProps {

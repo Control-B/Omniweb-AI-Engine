@@ -40,7 +40,7 @@ export interface PhoneNumberRecord {
   phone_number: string;
   friendly_name: string;
   is_active: boolean;
-  livekit_sip_trunk_id: string | null;
+  retell_binding_hint: string | null;
   monthly_rate: number;
   total_calls: number;
 }
@@ -202,11 +202,11 @@ export const MOCK_LEADS: LeadRecord[] = [
 export const MOCK_NUMBERS: PhoneNumberRecord[] = [
   {
     id: "n001", phone_number: "+12125559001", friendly_name: "Bob's Plumbing Main Line",
-    is_active: true, livekit_sip_trunk_id: "ST_abc123", monthly_rate: 1.0, total_calls: 892,
+    is_active: true, retell_binding_hint: "Connect in Retell", monthly_rate: 1.0, total_calls: 892,
   },
   {
     id: "n002", phone_number: "+17185559002", friendly_name: "Brooklyn Service Line",
-    is_active: true, livekit_sip_trunk_id: "ST_def456", monthly_rate: 1.0, total_calls: 355,
+    is_active: true, retell_binding_hint: null, monthly_rate: 1.0, total_calls: 355,
   },
 ];
 

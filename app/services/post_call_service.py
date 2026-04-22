@@ -1,6 +1,6 @@
 """Post-call processing service.
 
-After a call ends (ElevenLabs post-conversation webhook), this service:
+After a call ends (Retell / internal post-call pipeline), this service:
 1. Saves the full transcript to the DB
 2. Runs the transcript through the LLM to extract a lead
 3. Calculates lead score and urgency

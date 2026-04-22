@@ -1,8 +1,7 @@
-"""Tool Registry — abstraction layer for ElevenLabs agent tools.
+"""Tool Registry — maps logical tool names to Retell-compatible webhook tools.
 
-Maps tool names to their schemas and webhook endpoints.
-Industry configs reference tool names; this registry resolves them
-to the actual ElevenLabs tool definition format.
+Industry configs reference tool names; this registry resolves them to HTTP
+tool definitions (URL, schema, shared secret header).
 
 When a tenant's agent is created/updated, the prompt engine + tool registry
 together determine which tools the agent should have access to.
@@ -23,7 +22,7 @@ def _base_url() -> str:
     return settings.APP_BASE_URL.rstrip("/")
 
 
-# Each tool definition follows the ElevenLabs custom tool format:
+# Each tool definition follows a JSON-schema style compatible with Retell custom tools:
 # {
 #   "type": "webhook",
 #   "name": "tool_name",
@@ -179,12 +178,12 @@ def get_tool_definitions(
     base_url: str | None = None,
     tool_secret: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Return resolved ElevenLabs tool definitions for the given tool names.
+    """Return resolved custom tool definitions for the given tool names.
 
     Substitutes {base_url} and {tool_secret} placeholders in URLs and headers.
     """
     resolved_base = base_url or _base_url()
-    resolved_secret = tool_secret or settings.ELEVENLABS_TOOL_SECRET
+    resolved_secret = tool_secret or settings.TOOL_WEBHOOK_SECRET
 
     tools: list[dict[str, Any]] = []
     for name in tool_names:

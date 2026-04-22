@@ -1,6 +1,6 @@
 """Prompt Composition Engine.
 
-Assembles the final system prompt sent to the ElevenLabs / LLM agent by
+Assembles the final system prompt sent to the Retell / LLM agent by
 composing modular blocks based on the tenant's configuration:
 
   ┌─────────────────────────────────────────────────────────┐

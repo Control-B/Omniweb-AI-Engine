@@ -108,7 +108,9 @@ class AgentConfig(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, unique=True)
 
-    # ElevenLabs agent linkage
+    # Retell agent linkage (voice + telephony orchestration)
+    retell_agent_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    # Legacy ElevenLabs columns (kept for DB compatibility; unused)
     elevenlabs_agent_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     elevenlabs_kb_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
@@ -166,7 +168,7 @@ class AgentConfig(Base):
         JSONB,
         default=dict,
         nullable=False,
-        doc="ElevenLabs language_presets config (keyed by language code)",
+        doc="Per-language voice/preset hints (Retell/ElevenLabs-era legacy shape)",
     )
 
     # Widget configuration
@@ -206,6 +208,7 @@ class AgentConfig(Base):
     __table_args__ = (
         Index("ix_agent_configs_client_id", "client_id"),
         Index("ix_agent_configs_elevenlabs_agent_id", "elevenlabs_agent_id"),
+        Index("ix_agent_configs_retell_agent_id", "retell_agent_id"),
         Index("ix_agent_configs_industry", "industry"),
     )
 
@@ -399,7 +402,8 @@ class Call(Base):
     channel: Mapped[str] = mapped_column(String(20), nullable=False, default="voice")  # voice | text | whatsapp
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="queued")
 
-    # ElevenLabs
+    # Retell / legacy voice session ids
+    retell_call_id: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True)
     elevenlabs_conversation_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
 
     # Twilio (for SMS follow-ups or outbound)
@@ -433,6 +437,7 @@ class Call(Base):
         Index("ix_calls_started_at", "started_at"),
         Index("ix_calls_channel", "channel"),
         Index("ix_calls_elevenlabs_conversation_id", "elevenlabs_conversation_id"),
+        Index("ix_calls_retell_call_id", "retell_call_id"),
     )
 
 

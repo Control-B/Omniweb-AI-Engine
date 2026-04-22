@@ -7,7 +7,6 @@ import {
   Brain,
   MessageSquare,
   Code,
-  ExternalLink,
   Copy,
   Check,
   Loader2,
@@ -39,6 +38,7 @@ import {
   createKbFromUrl,
   uploadKbFile,
   deleteKbDocument,
+  type WidgetEmbedResponse,
 } from "@/lib/api";
 
 const VOICE_OPTIONS = [
@@ -80,23 +80,15 @@ interface AgentConfig {
   temperature: number;
   business_name: string;
   business_type: string;
-  elevenlabs_agent_id: string | null;
+  retell_agent_id: string | null;
   supported_languages: string[];
   [key: string]: any;
-}
-
-interface WidgetInfo {
-  agent_id: string;
-  embed_code: string;
-  legacy_embed_code?: string;
-  widget_url?: string;
-  talk_url: string;
 }
 
 export function AgentConfigPage() {
   const { user } = useAuth();
   const [config, setConfig] = useState<AgentConfig | null>(null);
-  const [widget, setWidget] = useState<WidgetInfo | null>(null);
+  const [widget, setWidget] = useState<WidgetEmbedResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -310,7 +302,7 @@ export function AgentConfigPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {config.elevenlabs_agent_id ? (
+          {config.retell_agent_id ? (
             <Badge variant="success" className="gap-1">
               <Zap className="w-3 h-3" />
               Agent Live
@@ -748,21 +740,21 @@ export function AgentConfigPage() {
             <CardHeader>
               <CardTitle>Agent Status</CardTitle>
               <CardDescription>
-                {config.elevenlabs_agent_id ? "Your AI agent is live and ready" : "Save your config to create your agent"}
+                {config.retell_agent_id ? "Your AI agent is live and ready" : "Add your Retell agent ID in Brain settings to go live"}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {config.elevenlabs_agent_id ? (
+              {config.retell_agent_id ? (
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                   <span className="text-sm font-medium text-green-500">Active</span>
-                  <span className="text-xs text-muted-foreground ml-2 font-mono">{config.elevenlabs_agent_id}</span>
+                  <span className="text-xs text-muted-foreground ml-2 font-mono">{config.retell_agent_id}</span>
                   {/* Agent ID shown for debugging — brand name hidden */}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <AlertCircle className="w-4 h-4" />
-                  <span className="text-sm">Click &quot;Save &amp; Deploy&quot; to create your agent</span>
+                  <span className="text-sm">Add your Retell agent ID, save, then embed the script below</span>
                 </div>
               )}
             </CardContent>
@@ -786,23 +778,6 @@ export function AgentConfigPage() {
                 </CardContent>
               </Card>
 
-              {widget.legacy_embed_code && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Legacy Embed (ElevenLabs)</CardTitle>
-                    <CardDescription>Alternative embed using the ElevenLabs widget directly</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="relative">
-                      <pre className="bg-secondary p-4 rounded-lg text-xs overflow-x-auto font-mono whitespace-pre-wrap">{widget.legacy_embed_code}</pre>
-                      <Button size="sm" variant="outline" className="absolute top-2 right-2" onClick={() => copyToClipboard(widget.legacy_embed_code!, "legacy")}>
-                        {copied === "legacy" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
               <Card>
                 <CardHeader>
                   <CardTitle>Test Your Agent</CardTitle>
@@ -811,15 +786,11 @@ export function AgentConfigPage() {
                 <CardContent className="space-y-3">
                   <div className="flex gap-2 flex-wrap">
                     {widget.widget_url && (
-                      <Button size="sm" onClick={() => window.open(widget.widget_url, "_blank")}>
+                      <Button size="sm" onClick={() => window.open(widget.widget_url!, "_blank")}>
                         <Mic className="w-3.5 h-3.5" />
                         Test Voice Widget
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" onClick={() => window.open(widget.talk_url, "_blank")}>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      ElevenLabs Test Page
-                    </Button>
                     {widget.widget_url && (
                       <Button variant="outline" size="sm" onClick={() => copyToClipboard(widget.widget_url!, "url")}>
                         {copied === "url" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -835,7 +806,7 @@ export function AgentConfigPage() {
             </>
           )}
 
-          {!widget && !config.elevenlabs_agent_id && (
+          {!widget && !config.retell_agent_id && (
             <Card>
               <CardContent className="p-8 text-center">
                 <Bot className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />

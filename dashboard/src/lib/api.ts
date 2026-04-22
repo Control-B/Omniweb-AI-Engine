@@ -5,10 +5,13 @@ function normalizeApiBase(url: string): string {
 }
 
 function resolveApiBase(): string {
-  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+  // Prefer explicit engine URL (same as widget) so admin API calls never infer
+  // from the dashboard origin — the Next app and FastAPI are usually different hosts.
+  const configured =
+    process.env.NEXT_PUBLIC_API_URL?.trim() ||
+    process.env.NEXT_PUBLIC_ENGINE_URL?.trim();
   if (configured) return normalizeApiBase(configured);
   if (process.env.NODE_ENV === "development") return "http://localhost:8000";
-  if (typeof window !== "undefined") return normalizeApiBase(window.location.origin);
   return DEFAULT_PRODUCTION_API_BASE;
 }
 
@@ -86,7 +89,12 @@ async function apiFetch<T = any>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const message = body.detail || `API error ${res.status}`;
+    const rawDetail = body.detail;
+    const message = Array.isArray(rawDetail)
+      ? rawDetail.map((d: unknown) => (typeof d === "object" && d && "msg" in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d))).join("; ")
+      : rawDetail
+        ? String(rawDetail)
+        : `API error ${res.status}`;
 
     // For 401 on non-auth endpoints, clear token and redirect to login
     if (res.status === 401 && !path.startsWith("/auth/")) {
@@ -406,16 +414,20 @@ export async function updateAgentConfig(clientId: string, body: Record<string, a
   });
 }
 
+export interface WidgetEmbedResponse {
+  agent_id: string;
+  embed_code: string;
+  // Keep legacy fields nullable so older API payloads/types do not break dashboard builds.
+  legacy_embed_code?: string | null;
+  talk_url?: string | null;
+  widget_url?: string | null;
+  retell_agent_id?: string | null;
+  embed_domain?: string | null;
+  embed_expires_at?: string | null;
+}
+
 export async function getWidgetEmbed(clientId: string) {
-  return apiFetch<{
-    agent_id: string;
-    embed_code: string;
-    legacy_embed_code?: string | null;
-    widget_url?: string | null;
-    talk_url?: string | null;
-    embed_domain?: string | null;
-    embed_expires_at?: string | null;
-  }>(`/agent-config/${clientId}/widget`);
+  return apiFetch<WidgetEmbedResponse>(`/agent-config/${clientId}/widget`);
 }
 
 export async function getNumbers(clientId?: string) {

@@ -160,17 +160,17 @@ async def validate_embed_code(
     )
     agent_config = result.scalar_one_or_none()
 
-    elevenlabs_agent_id = None
+    retell_agent_id = None
     widget_config = {}
     if agent_config:
-        elevenlabs_agent_id = agent_config.elevenlabs_agent_id
+        retell_agent_id = agent_config.retell_agent_id
         widget_config = agent_config.widget_config or {}
 
     return {
         "valid": True,
         "client_id": str(client.id),
         "agent_id": str(client.id),
-        "legacy_agent_id": elevenlabs_agent_id,
+        "retell_agent_id": retell_agent_id,
         "widget_config": widget_config,
         "plan": client.plan,
     }
@@ -189,15 +189,14 @@ async def get_embed_snippet(
     if not client.embed_code:
         raise HTTPException(404, "No embed code generated yet. Generate one first.")
 
-    # External widget now targets the client_id-backed LiveKit widget route.
+    # External widget targets the client_id-backed Retell web-call flow.
     widget_target_id = str(client.id)
 
-    # Keep the legacy ElevenLabs agent ID available for fallback/debugging.
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client.id)
     )
     agent_config = result.scalar_one_or_none()
-    legacy_agent_id = agent_config.elevenlabs_agent_id if agent_config else None
+    retell_agent_id = agent_config.retell_agent_id if agent_config else None
 
     platform_url = getattr(settings, "PLATFORM_URL", "https://omniweb.ai")
     engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL)
@@ -215,7 +214,7 @@ async def get_embed_snippet(
         "embed_code": client.embed_code,
         "snippet": snippet,
         "widget_target_id": widget_target_id,
-        "legacy_agent_id": legacy_agent_id,
+        "retell_agent_id": retell_agent_id,
         "domain": client.embed_domain,
         "expires_at": client.embed_expires_at.isoformat() if client.embed_expires_at else None,
     }

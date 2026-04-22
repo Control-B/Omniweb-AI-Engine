@@ -123,7 +123,7 @@ async def get_client(
         "updated_at": client.updated_at.isoformat() if client.updated_at else None,
         "agent_config": {
             "agent_name": config.agent_name if config else None,
-            "elevenlabs_agent_id": config.elevenlabs_agent_id if config else None,
+            "retell_agent_id": config.retell_agent_id if config else None,
             "business_name": config.business_name if config else None,
         } if config else None,
         "stats": {
@@ -413,7 +413,7 @@ async def list_agents(
             "plan": client.plan,
             "is_active": client.is_active,
             "agent_name": config.agent_name,
-            "elevenlabs_agent_id": config.elevenlabs_agent_id,
+            "retell_agent_id": config.retell_agent_id,
             "language": (config.supported_languages or ["en"])[0],
             "supported_languages": config.supported_languages or [],
             "greeting": config.agent_greeting,
@@ -475,6 +475,7 @@ async def list_conversations(
             "started_at": call.started_at.isoformat() if call.started_at else None,
             "ended_at": call.ended_at.isoformat() if call.ended_at else None,
             "post_call_processed": call.post_call_processed,
+            "retell_call_id": call.retell_call_id,
             "elevenlabs_conversation_id": call.elevenlabs_conversation_id,
         })
 

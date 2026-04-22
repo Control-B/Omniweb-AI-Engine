@@ -10,9 +10,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY dashboard/ ./
 
-# Build arg for API URL (baked into client bundle at build time)
+# Baked into the client bundle at build time (set on the dashboard component in DO).
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_ENGINE_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_ENGINE_URL=$NEXT_PUBLIC_ENGINE_URL
 
 RUN npm run build
 

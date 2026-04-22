@@ -3,16 +3,13 @@
 This is the DATA PLANE. It:
   - Manages multi-tenant client accounts and auth
   - Composes per-tenant system prompts (prompt engine)
-  - Generates LiveKit tokens & dispatches the agent worker with prompt metadata
-  - Receives post-conversation webhooks
+  - Mints Retell web-call tokens for the browser voice widget
+  - Receives Retell webhooks (call ended / analyzed) and tool webhooks
   - Serves call history, transcripts, leads to the dashboard
   - Handles Stripe billing webhooks
-  - Manages phone numbers (buy via Twilio, import)
+  - Manages phone numbers (Twilio purchase; Retell binds in dashboard)
   - Sends SMS via Twilio
-  - Provides text chat widget configuration
-
-Real-time voice AI is handled by the self-hosted LiveKit agent worker
-(agent/worker.py) which receives per-tenant prompts via dispatch metadata.
+  - Provides widget configuration for voice + text surfaces
 """
 from contextlib import asynccontextmanager
 
@@ -39,15 +36,15 @@ from app.api.routes import (
     industry,
     knowledge_base,
     leads,
-    livekit,
     numbers,
+    retell,
     shopify,
     shopify_webhooks,
     site_templates,
     subscribe,
     templates,
     webhooks,
-    webhooks_elevenlabs,
+    webhooks_retell,
     webhooks_stripe,
     webhooks_tools,
 )
@@ -147,8 +144,7 @@ async def lifespan(app: FastAPI):
         )
 
     logger.info("Omniweb Agent Engine starting up")
-    logger.info(f"ElevenLabs configured: {settings.elevenlabs_configured}")
-    logger.info(f"LiveKit configured: {settings.livekit_configured}")
+    logger.info(f"Retell configured: {settings.retell_configured}")
     logger.info(f"Twilio configured: {settings.twilio_configured}")
     logger.info(f"OpenAI configured: {settings.openai_configured}")
 
@@ -310,8 +306,8 @@ API_PREFIX = "/api"
 # Auth
 app.include_router(auth.router, prefix=API_PREFIX)
 
-# Webhooks (no auth — URLs configured in ElevenLabs/Stripe dashboards)
-app.include_router(webhooks_elevenlabs.router, prefix=API_PREFIX)
+# Webhooks (no auth — URLs configured in Retell / Stripe dashboards)
+app.include_router(webhooks_retell.router, prefix=API_PREFIX)
 app.include_router(webhooks_stripe.router, prefix=API_PREFIX)
 app.include_router(webhooks_tools.router, prefix=API_PREFIX)
 
@@ -325,7 +321,7 @@ app.include_router(automations.router, prefix=API_PREFIX)
 app.include_router(chat.router, prefix=API_PREFIX)
 app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
-app.include_router(livekit.router, prefix=API_PREFIX)
+app.include_router(retell.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
 app.include_router(shopify.router, prefix=API_PREFIX)
 app.include_router(shopify_webhooks.router, prefix=API_PREFIX)
@@ -350,8 +346,7 @@ async def health() -> dict:
         "ok": True,
         "service": "omniweb-agent-engine",
         "version": "2.0.0",
-        "elevenlabs_configured": settings.elevenlabs_configured,
-        "livekit_configured": settings.livekit_configured,
+        "retell_configured": settings.retell_configured,
         "twilio_configured": settings.twilio_configured,
         "openai_configured": settings.openai_configured,
         "database_ok": False,

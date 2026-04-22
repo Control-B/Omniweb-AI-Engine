@@ -1,98 +1,138 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { useConversation } from "@elevenlabs/react";
+import { RetellWebClient } from "retell-client-js-sdk";
 import { Mic, MicOff, PhoneOff, Loader2, Volume2 } from "lucide-react";
 
 /**
- * Voice-first widget page.
+ * Voice widget — Retell WebRTC via ``retell-client-js-sdk``.
  *
- * Renders a compact, brand-free voice UI that connects to an ElevenLabs
- * Conversational AI agent via WebRTC.  No text input, no chat bubbles,
- * no expandable panels — just a mic orb and status text.
+ * URL: /widget/{clientId}
  *
- * URL: /widget/{agentId}
- *
- * Can be embedded in an iframe on any client website:
- *   <iframe src="https://engine.omniweb.ai/widget/{agentId}" ...>
+ * ``agentId`` route param is the Omniweb ``client_id`` (UUID). The engine
+ * resolves the Retell agent and returns a short-lived ``access_token``.
  */
 
 type ConvStatus = "idle" | "connecting" | "connected" | "error";
+
+function engineBaseUrl(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_ENGINE_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:8000";
+  return raw.replace(/\/$/, "");
+}
 
 export default function VoiceWidgetPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const [convStatus, setConvStatus] = useState<ConvStatus>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [micMuted, setMicMuted] = useState(false);
-  const [volume] = useState(1);
-  const pulseRef = useRef<HTMLDivElement>(null);
+  const [agentSpeaking, setAgentSpeaking] = useState(false);
+  const clientRef = useRef<RetellWebClient | null>(null);
 
-  const conversation = useConversation({
-    onConnect: () => {
+  useEffect(() => {
+    const c = new RetellWebClient();
+    clientRef.current = c;
+
+    const onStarted = () => {
       setConvStatus("connected");
       setErrorMsg("");
-    },
-    onDisconnect: () => {
+    };
+    const onEnded = () => {
       setConvStatus("idle");
-    },
-    onError: (error: any) => {
-      console.error("ElevenLabs error:", error);
-      setErrorMsg(typeof error === "string" ? error : error?.message || "Connection failed");
+      setAgentSpeaking(false);
+    };
+    const onError = (e: unknown) => {
+      console.error("Retell error:", e);
+      const msg =
+        typeof e === "string"
+          ? e
+          : e && typeof e === "object" && "message" in e
+            ? String((e as { message?: string }).message)
+            : "Connection failed";
+      setErrorMsg(msg);
       setConvStatus("error");
-    },
-  });
+    };
 
-  const { status, isSpeaking } = conversation;
+    c.on("call_started", onStarted);
+    c.on("call_ended", onEnded);
+    c.on("error", onError);
+    c.on("agent_start_talking", () => setAgentSpeaking(true));
+    c.on("agent_stop_talking", () => setAgentSpeaking(false));
 
-  // Start the voice session
+    return () => {
+      try {
+        c.stopCall();
+      } catch {
+        /* ignore */
+      }
+      clientRef.current = null;
+    };
+  }, []);
+
   const startSession = useCallback(async () => {
     if (!agentId) return;
     setConvStatus("connecting");
     setErrorMsg("");
 
     try {
-      // Request mic permission first
       await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      await conversation.startSession({
-        agentId,
+      const res = await fetch(`${engineBaseUrl()}/api/retell/web-call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: agentId }),
       });
-    } catch (err: any) {
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `HTTP ${res.status}`);
+      }
+
+      const data = (await res.json()) as { access_token: string };
+      if (!data.access_token) {
+        throw new Error("Missing access_token from engine");
+      }
+
+      const client = clientRef.current;
+      if (!client) throw new Error("Retell client not ready");
+
+      await client.startCall({ accessToken: data.access_token });
+    } catch (err: unknown) {
       console.error("Failed to start session:", err);
-      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+      const e = err as { name?: string; message?: string };
+      if (e?.name === "NotAllowedError" || e?.name === "PermissionDeniedError") {
         setErrorMsg("Microphone access is required. Please allow microphone access and try again.");
       } else {
-        setErrorMsg(err.message || "Failed to connect. Please try again.");
+        setErrorMsg(e?.message || "Failed to connect. Please try again.");
       }
       setConvStatus("error");
     }
-  }, [agentId, conversation]);
+  }, [agentId]);
 
-  // End the voice session
   const endSession = useCallback(async () => {
     try {
-      await conversation.endSession();
+      await clientRef.current?.stopCall();
     } catch {
-      // ignore
+      /* ignore */
     }
     setConvStatus("idle");
-  }, [conversation]);
+    setAgentSpeaking(false);
+  }, []);
 
-  // Toggle mic mute
   const toggleMic = useCallback(() => {
     setMicMuted((prev) => !prev);
   }, []);
 
-  // Determine the visual state
   const isActive = convStatus === "connected";
   const isConnecting = convStatus === "connecting";
+  const isSpeaking = isActive && agentSpeaking;
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center p-4 select-none">
-      {/* Orb */}
       <div className="relative flex items-center justify-center mb-8">
-        {/* Outer pulse rings */}
         {isActive && isSpeaking && (
           <>
             <div className="absolute w-40 h-40 rounded-full bg-blue-500/10 animate-ping" style={{ animationDuration: "2s" }} />
@@ -103,7 +143,6 @@ export default function VoiceWidgetPage() {
           <div className="absolute w-28 h-28 rounded-full bg-blue-500/10 animate-pulse" style={{ animationDuration: "3s" }} />
         )}
 
-        {/* Main orb button */}
         <button
           onClick={isActive ? endSession : startSession}
           disabled={isConnecting}
@@ -136,7 +175,6 @@ export default function VoiceWidgetPage() {
         </button>
       </div>
 
-      {/* Status text */}
       <div className="text-center mb-6 min-h-[3rem]">
         {convStatus === "idle" && (
           <p className="text-white/80 text-sm font-medium">Tap to start talking</p>
@@ -154,6 +192,7 @@ export default function VoiceWidgetPage() {
           <div className="space-y-2">
             <p className="text-red-400 text-sm">{errorMsg}</p>
             <button
+              type="button"
               onClick={startSession}
               className="text-xs text-blue-400 hover:text-blue-300 underline"
             >
@@ -163,10 +202,10 @@ export default function VoiceWidgetPage() {
         )}
       </div>
 
-      {/* Controls (only shown when active) */}
       {isActive && (
         <div className="flex items-center gap-4">
           <button
+            type="button"
             onClick={toggleMic}
             className={`
               w-12 h-12 rounded-full flex items-center justify-center transition-all
@@ -181,6 +220,7 @@ export default function VoiceWidgetPage() {
           </button>
 
           <button
+            type="button"
             onClick={endSession}
             className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 flex items-center justify-center transition-all"
             aria-label="End call"
@@ -190,9 +230,8 @@ export default function VoiceWidgetPage() {
         </div>
       )}
 
-      {/* Powered by */}
       <div className="absolute bottom-4 text-[10px] text-white/20">
-        Powered by Omniweb AI
+        Powered by Omniweb AI · Retell
       </div>
     </div>
   );

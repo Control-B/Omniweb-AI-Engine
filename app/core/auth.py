@@ -18,7 +18,7 @@ Four auth strategies:
 4. **Internal Key** — shared secret between FastAPI and the agent worker.
    Passed as `X-Internal-Key: ...` header.
 
-Webhooks (ElevenLabs, Stripe) have their own signature verification — no JWT.
+Webhooks (Retell, Stripe) have their own signature verification — no JWT.
 """
 import hashlib
 import hmac

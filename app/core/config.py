@@ -34,7 +34,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     INTERNAL_API_KEY: str = "change-me-in-production"  # platform → engine auth
     ADMIN_SIGNUP_CODE: str = "omniweb-admin-2024"  # required code to create admin accounts
-    ELEVENLABS_TOOL_SECRET: str = "change-me"  # shared secret for ElevenLabs tool webhooks
+    # Shared secret for agent tool webhooks (Retell custom tools → Omniweb)
+    TOOL_WEBHOOK_SECRET: str = "change-me"
     LANDING_PAGE_CLIENT_ID: str = ""  # client UUID for landing-page leads
     # Allowed CORS origins for the dashboard frontend
     CORS_ORIGINS: list[str] = [
@@ -52,38 +53,15 @@ class Settings(BaseSettings):
     # ── Redis ────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # ── ElevenLabs (Voice + Text + KB engine) ────────────────
-    ELEVENLABS_API_KEY: str = ""
-    ELEVENLABS_DEFAULT_VOICE_ID: str = "EXAVITQu4vr4xnSDxMaL"  # Rachel
-    ELEVENLABS_DEFAULT_LANGUAGE: str = "en"
-    ELEVENLABS_VOICE_ID_AR: str | None = None
-    ELEVENLABS_VOICE_ID_DE: str | None = None
-    ELEVENLABS_VOICE_ID_EN: str | None = None
-    ELEVENLABS_VOICE_ID_ES: str | None = None
-    ELEVENLABS_VOICE_ID_FR: str | None = None
-    ELEVENLABS_VOICE_ID_HI: str | None = None
-    ELEVENLABS_VOICE_ID_IT: str | None = None
-    ELEVENLABS_VOICE_ID_JA: str | None = None
-    ELEVENLABS_VOICE_ID_KO: str | None = None
-    ELEVENLABS_VOICE_ID_NL: str | None = None
-    ELEVENLABS_VOICE_ID_PL: str | None = None
-    ELEVENLABS_VOICE_ID_PT: str | None = None
-    ELEVENLABS_VOICE_ID_RU: str | None = None
-    ELEVENLABS_VOICE_ID_TR: str | None = None
-    ELEVENLABS_VOICE_ID_UK: str | None = None
-    ELEVENLABS_VOICE_ID_ZH: str | None = None
-    ELEVENLABS_WEBHOOK_SECRET: str = ""  # For verifying webhook signatures
+    # ── Retell AI (voice + web calls + telephony orchestration) ─────────
+    RETELL_API_KEY: str = ""
+    # Retell agent used for anonymous sessions (marketing site, demos)
+    RETELL_LANDING_AGENT_ID: str = ""
 
     # ── Twilio (Phone Numbers + SMS) ─────────────────────────
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_FROM_NUMBER: str = ""  # default outbound SMS number
-
-    # ── LiveKit (WebRTC voice agent infrastructure) ──────────
-    LIVEKIT_URL: str = ""          # wss://xxx.livekit.cloud
-    LIVEKIT_API_KEY: str = ""      # APIxxxxxxxxx
-    LIVEKIT_API_SECRET: str = ""   # secret paired with key
-    LIVEKIT_AGENT_NAME: str = "Kai-d15"  # LiveKit Cloud agent name (matches deployed agent)
 
     # ── Cal.com (Appointment Booking) ────────────────────────
     CALCOM_API_KEY: str = ""
@@ -150,8 +128,8 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT == "production" or self.APP_ENV == "production"
 
     @property
-    def elevenlabs_configured(self) -> bool:
-        return bool(self.ELEVENLABS_API_KEY)
+    def retell_configured(self) -> bool:
+        return bool(self.RETELL_API_KEY)
 
     @property
     def twilio_configured(self) -> bool:
@@ -164,10 +142,6 @@ class Settings(BaseSettings):
     @property
     def clerk_configured(self) -> bool:
         return bool(self.CLERK_SECRET_KEY)
-
-    @property
-    def livekit_configured(self) -> bool:
-        return bool(self.LIVEKIT_URL and self.LIVEKIT_API_KEY and self.LIVEKIT_API_SECRET)
 
     @property
     def calcom_configured(self) -> bool:

@@ -1,12 +1,9 @@
-"""ElevenLabs Tool-Call Webhooks.
+"""Voice agent tool webhooks (Retell custom tools).
 
-These endpoints are called by the ElevenLabs conversational AI agent
-when it decides to invoke a tool during a live conversation.
-Each tool receives JSON from ElevenLabs and returns a JSON response
-that the agent reads back to the user.
+Retell invokes these HTTPS tools during live calls. Each tool receives JSON
+and returns JSON the model reads back to the caller.
 
-Security: Requests are validated via a shared secret header
-(X-Tool-Secret) that must match settings.ELEVENLABS_TOOL_SECRET.
+Security: validate ``X-Tool-Secret`` against ``settings.TOOL_WEBHOOK_SECRET``.
 """
 import time
 import uuid
@@ -29,7 +26,7 @@ settings = get_settings()
 
 router = APIRouter(
     prefix="/tools",
-    tags=["elevenlabs-tools"],
+    tags=["voice-tools"],
 )
 
 # ── Default client ID for the landing-page assistant (Omniweb's own account) ──
@@ -39,9 +36,9 @@ LANDING_PAGE_CLIENT_ID = settings.LANDING_PAGE_CLIENT_ID if hasattr(settings, "L
 
 def _verify_secret(secret: str | None):
     """Validate the shared tool secret."""
-    expected = settings.ELEVENLABS_TOOL_SECRET
+    expected = settings.TOOL_WEBHOOK_SECRET
     if not expected or expected == "change-me":
-        logger.warning("ELEVENLABS_TOOL_SECRET is not configured — tool calls are open")
+        logger.warning("TOOL_WEBHOOK_SECRET is not configured — tool calls are open")
         return
     if secret != expected:
         raise HTTPException(403, "Invalid tool secret")
@@ -55,7 +52,7 @@ def _get_default_client_id() -> uuid.UUID:
 
 
 async def _resolve_tenant(agent_id: str | None) -> tuple[uuid.UUID, str, list[str]]:
-    """Resolve client_id, industry_slug, and custom_guardrails from an ElevenLabs agent_id.
+    """Resolve client_id, industry_slug, and custom_guardrails from a Retell ``agent_id``.
 
     Falls back to the landing-page client if the agent_id is not found.
 
@@ -71,7 +68,7 @@ async def _resolve_tenant(agent_id: str | None) -> tuple[uuid.UUID, str, list[st
     try:
         async with async_session_factory() as db:
             result = await db.execute(
-                select(AgentConfig).where(AgentConfig.elevenlabs_agent_id == agent_id)
+                select(AgentConfig).where(AgentConfig.retell_agent_id == agent_id)
             )
             config = result.scalar_one_or_none()
             if config:

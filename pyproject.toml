@@ -1,7 +1,7 @@
 [project]
 name = "omniweb-agent-engine"
 version = "2.0.0"
-description = "Omniweb AI Agent Engine — multi-tenant AI voice + text platform powered by ElevenLabs + Twilio"
+description = "Omniweb AI Agent Engine — multi-tenant AI voice + text platform powered by Retell + Twilio"
 requires-python = ">=3.12"
 dependencies = [
     # Web framework
@@ -27,14 +27,8 @@ dependencies = [
     # Stripe
     "stripe>=10.0.0",
 
-    # HTTP client (ElevenLabs API calls)
+    # HTTP client (Retell REST + integrations)
     "httpx>=0.27.0",
-
-    # LiveKit — API (token, dispatch), Agents SDK (self-hosted worker), Silero VAD
-    "livekit-api>=1.0.0",
-    "livekit-agents>=1.0.0",
-    "livekit-plugins-silero>=1.0.0",
-    "livekit-plugins-turn-detector>=1.0.0",
 
     # Auth / security
     "PyJWT>=2.8.0",

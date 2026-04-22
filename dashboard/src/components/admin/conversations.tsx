@@ -31,7 +31,7 @@ interface Conversation {
   started_at: string | null;
   ended_at: string | null;
   post_call_processed: boolean;
-  elevenlabs_conversation_id: string | null;
+  retell_call_id: string | null;
 }
 
 const CHANNEL_OPTS = ["all", "voice", "text"] as const;

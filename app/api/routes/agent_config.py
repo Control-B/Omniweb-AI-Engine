@@ -1,8 +1,8 @@
 """Agent Config API — manage per-client AI agent settings.
 
-When config is updated, the changes are synced to the ElevenLabs agent.
-The prompt engine automatically composes the system prompt from the
-tenant's industry, agent mode, business context, and custom instructions.
+When config is updated, high-level fields are synced to the linked Retell agent
+(voice language, display name). Full prompts and tools are edited in Retell;
+this service keeps business context aligned where the API allows.
 """
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -19,7 +19,7 @@ from app.core.auth import get_current_client
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, Client
-from app.services import elevenlabs_service
+from app.services import retell_service
 from app.services.prompt_engine import compose_system_prompt, compose_greeting
 from app.services.industry_config import (
     get_industry,
@@ -53,7 +53,7 @@ def _build_loader_snippet(*, embed_code: str, client_id: str) -> tuple[str, str]
 
 
 class AgentConfigUpdate(BaseModel):
-    elevenlabs_agent_id: Optional[str] = None
+    retell_agent_id: Optional[str] = None
     agent_name: Optional[str] = None
     agent_greeting: Optional[str] = None
     voice_id: Optional[str] = None
@@ -159,8 +159,7 @@ async def upsert_config(
 ) -> dict:
     """Create or update the agent config for a client.
 
-    If the client has an ElevenLabs agent, sync the changes to it.
-    If no ElevenLabs agent exists yet, create one.
+    If ``retell_agent_id`` is set, patches the Retell agent (language, name).
     """
     # Tenant isolation
     if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
@@ -226,57 +225,54 @@ async def upsert_config(
             custom_greeting=config.agent_greeting if body.agent_greeting else None,
         )
 
-    # Sync to ElevenLabs (skip if only elevenlabs_agent_id was changed)
-    fields_that_sync = {"agent_name", "agent_greeting", "voice_id", "voice_stability",
-                        "voice_similarity_boost", "system_prompt", "business_name",
-                        "max_call_duration", "supported_languages", "language_presets",
-                        "industry", "agent_mode", "custom_guardrails",
-                        "custom_escalation_triggers", "custom_context", "use_prompt_engine",
-                        "services", "business_hours", "timezone", "booking_url",
-                        "after_hours_message"}
+    fields_that_sync = {
+        "agent_name",
+        "business_name",
+        "supported_languages",
+        "retell_agent_id",
+        "industry",
+        "agent_mode",
+        "system_prompt",
+        "use_prompt_engine",
+        "services",
+        "business_hours",
+        "timezone",
+        "booking_url",
+        "after_hours_message",
+        "custom_guardrails",
+        "custom_escalation_triggers",
+        "custom_context",
+    }
     has_sync_fields = bool(fields_that_sync & set(body.model_dump(exclude_none=True).keys()))
     try:
-        if config.elevenlabs_agent_id and has_sync_fields:
-            # Update existing agent
-            await elevenlabs_service.update_agent(
-                config.elevenlabs_agent_id,
-                name=f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -"),
-                first_message=effective_greeting,
-                system_prompt=effective_prompt,
-                voice_id=config.voice_id,
-                voice_stability=config.voice_stability,
-                voice_similarity_boost=config.voice_similarity_boost,
-                max_duration_seconds=config.max_call_duration,
-                supported_languages=config.supported_languages if body.supported_languages is not None else None,
-                language_presets_override=config.language_presets if body.language_presets is not None else None,
-                business_name=config.business_name or "",
+        if config.retell_agent_id and has_sync_fields:
+            lang = retell_service.map_locale_to_retell_language(
+                list(config.supported_languages or ["en"])
             )
-            logger.info(f"Synced config to ElevenLabs agent {config.elevenlabs_agent_id}")
-        elif not config.elevenlabs_agent_id and has_sync_fields:
-            # Create new ElevenLabs agent
-            result_el = await elevenlabs_service.create_agent(
-                name=f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -"),
-                first_message=effective_greeting,
-                system_prompt=effective_prompt,
-                voice_id=config.voice_id,
-                voice_stability=config.voice_stability,
-                voice_similarity_boost=config.voice_similarity_boost,
-                max_duration_seconds=config.max_call_duration,
-                supported_languages=config.supported_languages,
-                business_name=config.business_name or "",
+            display = f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -") or (
+                config.agent_name or "Omniweb Agent"
             )
-            config.elevenlabs_agent_id = result_el["agent_id"]
-            logger.info(f"Created ElevenLabs agent: {config.elevenlabs_agent_id}")
+            await retell_service.patch_agent(
+                config.retell_agent_id,
+                {
+                    "agent_name": display[:120],
+                    "language": lang,
+                    "max_call_duration_ms": min(
+                        max(int(config.max_call_duration) * 1000, 60_000),
+                        3_600_000,
+                    ),
+                },
+            )
+            logger.info("Synced config to Retell agent", retell_agent_id=config.retell_agent_id)
     except Exception as exc:
-        logger.error(f"Failed to sync config to ElevenLabs: {exc}")
-        # Don't fail the request — save config locally even if ElevenLabs is down
+        logger.error(f"Failed to sync config to Retell: {exc}")
 
     await db.commit()
     await db.refresh(config)
     return {
         "ok": True,
         "client_id": client_id,
-        "elevenlabs_agent_id": config.elevenlabs_agent_id,
+        "retell_agent_id": config.retell_agent_id,
         "industry": config.industry,
         "agent_mode": config.agent_mode,
         "use_prompt_engine": config.use_prompt_engine,
@@ -324,19 +320,11 @@ async def get_widget_embed(
         client_id=str(client.id),
     )
 
-    legacy_embed_code = None
-    talk_url = None
-    if config.elevenlabs_agent_id:
-        embed_data = elevenlabs_service.get_widget_embed_code(config.elevenlabs_agent_id)
-        legacy_embed_code = embed_data["legacy"]
-        talk_url = f"https://elevenlabs.io/app/talk-to/{config.elevenlabs_agent_id}"
-
     return {
         "agent_id": str(client.id),
         "embed_code": embed_snippet,
-        "legacy_embed_code": legacy_embed_code,
+        "retell_agent_id": config.retell_agent_id,
         "widget_url": widget_url,
-        "talk_url": talk_url,
         "embed_domain": client.embed_domain,
         "embed_expires_at": client.embed_expires_at.isoformat() if client.embed_expires_at else None,
     }

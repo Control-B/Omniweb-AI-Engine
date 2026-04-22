@@ -23,7 +23,6 @@ interface PhoneNumberRecord {
   friendly_name: string;
   is_active: boolean;
   twilio_sid?: string;
-  elevenlabs_phone_number_id?: string;
   area_code?: string;
   country?: string;
   mode?: string;       // "ai" | "forward"
@@ -419,11 +418,11 @@ export function NumbersPage() {
                         <Badge variant="secondary" className="text-[9px] bg-amber-500/10 text-amber-500 border-amber-500/20">
                           <PhoneForwarded className="w-2.5 h-2.5 mr-0.5" /> Forwarding
                         </Badge>
-                      ) : num.elevenlabs_phone_number_id ? (
+                      ) : (
                         <Badge variant="default" className="text-[9px]">
-                          <Bot className="w-2.5 h-2.5 mr-0.5" /> AI Agent
+                          <Bot className="w-2.5 h-2.5 mr-0.5" /> AI (Retell)
                         </Badge>
-                      ) : null}
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {num.friendly_name}
@@ -454,7 +453,7 @@ export function NumbersPage() {
                     )}
 
                     {/* Assign to agent (AI mode, not yet connected) */}
-                    {!num.elevenlabs_phone_number_id && num.is_active && num.mode !== "forward" && modeEditing !== num.id && (
+                    {num.is_active && num.mode !== "forward" && modeEditing !== num.id && (
                       <Button
                         variant="outline"
                         size="sm"

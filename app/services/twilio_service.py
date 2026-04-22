@@ -4,7 +4,7 @@ Twilio is used for:
   - SMS follow-ups after calls
   - Voice call forwarding (when number is in "forward" mode)
 
-AI voice calls are handled by ElevenLabs Conversational AI.
+AI voice calls are handled by Retell after you connect numbers in the Retell dashboard.
 """
 from typing import Optional
 
@@ -77,7 +77,7 @@ async def set_voice_forwarding(
 async def clear_voice_config(
     twilio_sid: str,
 ) -> dict:
-    """Clear voice URL from a Twilio number (used before ElevenLabs re-import)."""
+    """Clear voice URL from a Twilio number (before attaching to another provider)."""
     if not settings.twilio_configured:
         logger.info(f"[STUB] Would clear voice config on {twilio_sid}")
         return {"ok": True, "stub": True}

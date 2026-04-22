@@ -94,7 +94,12 @@ services:
     instance_count: 1
     instance_size_slug: basic-xxs
     envs:
+      # Required for Next `npm run build`: admin `fetch()` + widget (see dashboard/Dockerfile ARGs).
+      # Use https://api.omniweb.ai here instead if that domain is live and preferred.
       - key: NEXT_PUBLIC_API_URL
+        scope: BUILD_TIME
+        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
+      - key: NEXT_PUBLIC_ENGINE_URL
         scope: BUILD_TIME
         value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
 

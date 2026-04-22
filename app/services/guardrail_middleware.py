@@ -3,7 +3,7 @@
 This module provides guardrail enforcement at two levels:
 
 1. **Tool-call level:** Before a tool webhook returns its response to
-   ElevenLabs, the response text is checked against the tenant's industry
+   the voice agent, the response text is checked against the tenant's industry
    guardrails.  If a violation is detected, the response is sanitized or
    replaced with a safe fallback.
 
@@ -13,7 +13,7 @@ This module provides guardrail enforcement at two levels:
 
 Architecture:
     ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐
-    │  ElevenLabs  │───▶│  Tool Webhook    │───▶│  Guardrail   │
+    │  Voice agent │───▶│  Tool Webhook    │───▶│  Guardrail   │
     │  Agent       │    │  Handler         │    │  Middleware   │
     │              │◀───│  (webhooks_tools) │◀───│  (this file) │
     └──────────────┘    └──────────────────┘    └──────────────┘
@@ -188,7 +188,7 @@ def check_response(
     """Check a tool-call response against guardrails.
 
     This is the primary entry point — call this before returning any
-    tool webhook response to ElevenLabs.
+    tool webhook response to the voice agent.
 
     Args:
         response_text: The text the tool is about to return.

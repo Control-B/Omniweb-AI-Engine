@@ -47,7 +47,7 @@ interface Agent {
   plan: string;
   is_active: boolean;
   agent_name: string;
-  elevenlabs_agent_id: string | null;
+  retell_agent_id: string | null;
   language: string;
   supported_languages: string[];
   greeting: string;
@@ -193,7 +193,7 @@ export function AdminAgents() {
                       <div className="p-3 rounded-lg bg-card border border-border">
                         <p className="text-[10px] text-muted-foreground font-medium">Agent ID</p>
                         <p className="text-xs text-foreground mt-0.5 font-mono truncate">
-                          {agent.elevenlabs_agent_id || "not linked"}
+                          {agent.retell_agent_id || "not linked"}
                         </p>
                       </div>
                       <div className="p-3 rounded-lg bg-card border border-border">

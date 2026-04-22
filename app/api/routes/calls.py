@@ -1,30 +1,23 @@
-"""Calls API — conversation history, status, and ElevenLabs conversation sync.
+"""Calls API — conversation history, status, and Retell-backed sessions.
 
 Dashboard/platform endpoints:
     GET    /calls                list calls for a client (paginated)
     GET    /calls/{id}          call detail with transcript
-    GET    /calls/sync          sync recent conversations from ElevenLabs
-    GET    /calls/{id}/audio    proxy audio download from ElevenLabs
+    GET    /calls/sync          no-op (Retell pushes via webhooks)
 """
-from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
 from app.api.deps import get_session
 from app.core.auth import get_current_client
-from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.models import AgentConfig, Call, PhoneNumber, Transcript
-from app.services import elevenlabs_service
+from app.models.models import Call, Transcript
 
 logger = get_logger(__name__)
-settings = get_settings()
 router = APIRouter(tags=["calls"])
 
 
@@ -74,6 +67,7 @@ async def list_calls(
                 "started_at": c.started_at.isoformat() if c.started_at else None,
                 "ended_at": c.ended_at.isoformat() if c.ended_at else None,
                 "post_call_processed": c.post_call_processed,
+                "retell_call_id": c.retell_call_id,
                 "elevenlabs_conversation_id": c.elevenlabs_conversation_id,
             }
             for c in calls
@@ -117,6 +111,7 @@ async def get_call(
         "started_at": call.started_at.isoformat() if call.started_at else None,
         "ended_at": call.ended_at.isoformat() if call.ended_at else None,
         "post_call_processed": call.post_call_processed,
+        "retell_call_id": call.retell_call_id,
         "elevenlabs_conversation_id": call.elevenlabs_conversation_id,
         "transcript": {
             "turns": transcript.turns if transcript else [],
@@ -132,53 +127,10 @@ async def sync_conversations(
     client_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Sync recent conversations from ElevenLabs into the local DB.
-
-    Useful as a fallback if webhooks were missed, or for initial data import.
-    """
-    cid = _resolve_client_id(current_client, client_id)
-    # Get client's agent
-    result = await db.execute(
-        select(AgentConfig).where(AgentConfig.client_id == cid)
-    )
-    config = result.scalar_one_or_none()
-    if not config or not config.elevenlabs_agent_id:
-        return {"synced": 0, "message": "No ElevenLabs agent configured"}
-
-    try:
-        data = await elevenlabs_service.list_conversations(
-            agent_id=config.elevenlabs_agent_id,
-            page_size=100,
-        )
-    except Exception as exc:
-        logger.error(f"Failed to fetch conversations from ElevenLabs: {exc}")
-        return {"synced": 0, "error": str(exc)}
-
-    synced = 0
-    for conv in data.get("conversations", []):
-        conv_id = conv.get("conversation_id", "")
-
-        # Skip if already exists
-        existing = await db.execute(
-            select(Call.id).where(Call.elevenlabs_conversation_id == conv_id)
-        )
-        if existing.scalar_one_or_none():
-            continue
-
-        # Create call record
-        start_time = conv.get("start_time_unix_secs")
-        call = Call(
-            client_id=cid,
-            caller_number="",
-            direction=conv.get("direction", "inbound"),
-            channel="voice" if conv.get("conversation_initiation_source") in ("phone_call", "twilio") else "text",
-            status="completed",
-            elevenlabs_conversation_id=conv_id,
-            duration_seconds=conv.get("call_duration_secs"),
-            started_at=datetime.fromtimestamp(start_time, tz=timezone.utc) if start_time else None,
-        )
-        db.add(call)
-        synced += 1
-
-    await db.commit()
-    return {"synced": synced, "total_in_elevenlabs": len(data.get("conversations", []))}
+    """Retell pushes call events to ``/api/webhooks/retell`` — no pull sync."""
+    _ = _resolve_client_id(current_client, client_id)
+    _ = db  # unused; keeps signature stable for clients
+    return {
+        "synced": 0,
+        "message": "Conversation sync is handled by Retell webhooks.",
+    }

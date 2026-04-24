@@ -152,10 +152,11 @@ async def lifespan(app: FastAPI):
 
     database_ok, database_error = await probe_database()
     if not database_ok:
-        message = "FATAL: Database connectivity check failed during startup."
-        if settings.is_production:
-            raise RuntimeError(f"{message} {database_error or 'unknown database error'}")
-        logger.warning(f"{message} Continuing because ENVIRONMENT is not production.")
+        message = "Database connectivity check failed during startup."
+        logger.warning(
+            f"{message} Continuing startup so the service can answer liveness probes. "
+            f"Database error: {database_error or 'unknown database error'}"
+        )
     else:
         logger.info("Database connectivity check passed")
 
@@ -362,8 +363,9 @@ async def health() -> dict:
         return payload
 
     payload["database_error"] = database_error
-    payload["ok"] = False
-    return JSONResponse(status_code=503, content=payload)
+    payload["ok"] = True
+    payload["status"] = "degraded"
+    return payload
 
 
 @app.get("/readyz")

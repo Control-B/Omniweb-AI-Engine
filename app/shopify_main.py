@@ -45,10 +45,11 @@ async def lifespan(app: FastAPI):
 
     db_ok, db_err = await _probe_database()
     if not db_ok:
-        msg = "FATAL: Database connectivity check failed during startup."
-        if settings.is_production:
-            raise RuntimeError(f"{msg} {db_err or 'unknown'}")
-        logger.warning(f"{msg} Continuing (non-production).")
+        logger.warning(
+            "Database connectivity check failed during Shopify startup. "
+            "Continuing startup so liveness probes can succeed. "
+            f"Database error: {db_err or 'unknown'}"
+        )
     else:
         logger.info("Database connectivity check passed")
 
@@ -130,9 +131,22 @@ app.add_middleware(RateLimitMiddleware, requests_per_minute=60, burst=10)
 async def health():
     db_ok, db_err = await _probe_database()
     return JSONResponse(
-        status_code=200 if db_ok else 503,
+        status_code=200,
         content={
             "status": "healthy" if db_ok else "degraded",
+            "service": "shopify",
+            "database": "ok" if db_ok else db_err,
+        },
+    )
+
+
+@app.get("/readyz")
+async def readiness():
+    db_ok, db_err = await _probe_database()
+    return JSONResponse(
+        status_code=200 if db_ok else 503,
+        content={
+            "status": "ready" if db_ok else "not_ready",
             "service": "shopify",
             "database": "ok" if db_ok else db_err,
         },

@@ -10,7 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,6 +87,11 @@ class AgentConfigUpdate(BaseModel):
     handoff_email: Optional[str] = None
     handoff_message: Optional[str] = None
     website_domain: Optional[str] = None
+
+
+class BuildProvidersRequest(BaseModel):
+    retell_agent_id: Optional[str] = None
+    language: Optional[str] = None
 
 
 @router.get("/setup-status/{client_id}")
@@ -402,4 +407,140 @@ async def preview_composed_prompt(
         "agent_mode": config.agent_mode,
         "use_prompt_engine": config.use_prompt_engine,
         "prompt_length_chars": len(composed),
+    }
+
+
+@router.post("/{client_id}/build-providers")
+async def build_providers(
+    client_id: str,
+    body: BuildProvidersRequest,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Build provider-ready settings from tenant config.
+
+    - Deepgram: returns a SettingsConfiguration payload your frontend/backend can use.
+    - Retell: patches a linked agent if `retell_agent_id` exists.
+    """
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
+        raise HTTPException(403, "Access denied")
+
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client_id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(404, f"No agent config for client {client_id}")
+
+    supported_languages = list(config.supported_languages or ["en"])
+    requested_language = (body.language or "").strip().lower()
+    if requested_language:
+        effective_langs = [requested_language]
+    else:
+        effective_langs = supported_languages
+
+    # Build composed prompt from the same source your runtime uses.
+    composed_prompt = compose_system_prompt(
+        agent_name=config.agent_name or "Alex",
+        business_name=config.business_name or "",
+        industry_slug=config.industry or "general",
+        agent_mode=config.agent_mode,
+        business_type=config.business_type,
+        services=config.services or [],
+        business_hours=config.business_hours or {},
+        timezone=config.timezone or "America/New_York",
+        booking_url=config.booking_url,
+        after_hours_message=config.after_hours_message or "",
+        custom_prompt=config.system_prompt,
+        custom_guardrails=config.custom_guardrails or [],
+        custom_escalation_triggers=config.custom_escalation_triggers or [],
+        custom_context=config.custom_context,
+    )
+
+    deepgram_settings: dict[str, Any] | None = None
+    if settings.deepgram_configured:
+        deepgram_settings = {
+            "type": "SettingsConfiguration",
+            "audio": {
+                "input": {"encoding": "linear16", "sample_rate": 16000},
+                "output": {"encoding": "linear16", "sample_rate": 24000, "container": "none"},
+            },
+            "agent": {
+                "listen": {"model": settings.DEEPGRAM_STT_MODEL},
+                "think": {
+                    "provider": {"type": "open_ai"},
+                    "model": settings.DEEPGRAM_AGENT_MODEL,
+                    "instructions": composed_prompt,
+                },
+                "speak": {"model": config.voice_id or settings.DEEPGRAM_TTS_VOICE},
+            },
+            "metadata": {
+                "client_id": client_id,
+                "business_name": config.business_name or "",
+                "language": (
+                    "multi"
+                    if len(effective_langs) > 1
+                    else retell_service.map_locale_to_retell_language(effective_langs)
+                ),
+                "project_id": settings.DEEPGRAM_PROJECT_ID or None,
+            },
+        }
+
+    retell_agent_id = body.retell_agent_id or config.retell_agent_id
+    retell_patch_result: dict[str, Any] | None = None
+    if settings.retell_configured and retell_agent_id:
+        language = retell_service.map_locale_to_retell_language(effective_langs)
+        display_name = (
+            f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -")
+            or config.agent_name
+            or "Omniweb Agent"
+        )
+        patch_payload = {
+            "agent_name": display_name[:120],
+            "language": language,
+            "max_call_duration_ms": min(
+                max(int(config.max_call_duration or 1800) * 1000, 60_000),
+                3_600_000,
+            ),
+        }
+        retell_patch_result = await retell_service.patch_agent(
+            retell_agent_id,
+            patch_payload,
+        )
+        if not config.retell_agent_id:
+            config.retell_agent_id = retell_agent_id
+
+    # Store latest provider build metadata.
+    widget = dict(config.widget_config or {})
+    widget["provider_build"] = {
+        "updated_at": _utcnow().isoformat(),
+        "deepgram": {
+            "configured": settings.deepgram_configured,
+            "project_id": settings.DEEPGRAM_PROJECT_ID or None,
+            "stt_model": settings.DEEPGRAM_STT_MODEL,
+            "tts_voice": config.voice_id or settings.DEEPGRAM_TTS_VOICE,
+        },
+        "retell": {
+            "configured": settings.retell_configured,
+            "agent_id": retell_agent_id,
+        },
+    }
+    config.widget_config = widget
+
+    await db.commit()
+    await db.refresh(config)
+
+    return {
+        "ok": True,
+        "client_id": client_id,
+        "deepgram": {
+            "configured": settings.deepgram_configured,
+            "project_id": settings.DEEPGRAM_PROJECT_ID or None,
+            "settings": deepgram_settings,
+        },
+        "retell": {
+            "configured": settings.retell_configured,
+            "agent_id": retell_agent_id,
+            "patch_result": retell_patch_result,
+        },
     }

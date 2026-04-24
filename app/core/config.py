@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     # Retell agent used for anonymous sessions (marketing site, demos)
     RETELL_LANDING_AGENT_ID: str = ""
 
+    # ── Deepgram (voice/web agent orchestration) ─────────────────────────
+    DEEPGRAM_API_KEY: str = ""
+    DEEPGRAM_PROJECT_ID: str = ""
+    DEEPGRAM_AGENT_MODEL: str = "gpt-4o-mini"
+    DEEPGRAM_STT_MODEL: str = "nova-3"
+    DEEPGRAM_TTS_VOICE: str = "aura-asteria-en"
+
     # ── Twilio (Phone Numbers + SMS) ─────────────────────────
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
@@ -116,6 +123,10 @@ class Settings(BaseSettings):
         "read_customers,read_themes,write_script_tags"
     )
 
+    # ── Gadget bridge (Shopify data intelligence) ───────────────────────
+    GADGET_API_BASE_URL: str = ""
+    GADGET_ENGINE_SHARED_SECRET: str = ""
+
     # ── Telephony limits ─────────────────────────────────────
     MAX_CALL_DURATION_SECONDS: int = 1800  # 30 min hard stop
 
@@ -130,6 +141,10 @@ class Settings(BaseSettings):
     @property
     def retell_configured(self) -> bool:
         return bool(self.RETELL_API_KEY)
+
+    @property
+    def deepgram_configured(self) -> bool:
+        return bool(self.DEEPGRAM_API_KEY)
 
     @property
     def twilio_configured(self) -> bool:

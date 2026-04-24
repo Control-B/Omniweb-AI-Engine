@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.core.config import get_settings
-from app.core.database import AsyncSessionLocal, engine
+from app.core.database import AsyncSessionLocal, engine, get_database_configuration_error
 from app.core.logging import configure_logging, get_logger
 
 from app.api.routes import shopify
@@ -30,6 +30,11 @@ API_PREFIX = "/api"
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
 async def _probe_database() -> tuple[bool, str | None]:
+    config_error = get_database_configuration_error()
+    if config_error:
+        logger.error(f"Database configuration error: {config_error}")
+        return False, config_error
+
     try:
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
@@ -69,7 +74,8 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     logger.info("Omniweb Shopify Service shutting down")
-    await engine.dispose()
+    if engine is not None:
+        await engine.dispose()
 
 
 async def _session_cleanup_loop():
@@ -135,6 +141,7 @@ async def health():
         content={
             "status": "healthy" if db_ok else "degraded",
             "service": "shopify",
+            "database_configured": settings.database_configured,
             "database": "ok" if db_ok else db_err,
         },
     )
@@ -148,6 +155,7 @@ async def readiness():
         content={
             "status": "ready" if db_ok else "not_ready",
             "service": "shopify",
+            "database_configured": settings.database_configured,
             "database": "ok" if db_ok else db_err,
         },
     )

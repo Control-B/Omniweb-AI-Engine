@@ -1,6 +1,7 @@
 """SQLAlchemy async database setup."""
 import ssl
 from collections.abc import AsyncGenerator
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -45,22 +46,31 @@ def _prepare_db_url(url: str) -> tuple[str, dict]:
     return url, connect_args
 
 
-_db_url, _connect_args = _prepare_db_url(settings.DATABASE_URL)
+_database_configuration_error = settings.database_configuration_error
 
-engine = create_async_engine(
-    _db_url,
-    echo=settings.DEBUG,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-    connect_args=_connect_args,
-)
+engine = None
+async_session_factory = None
 
-async_session_factory = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+if _database_configuration_error is None:
+    _db_url, _connect_args = _prepare_db_url(settings.resolved_database_url)
+
+    engine = create_async_engine(
+        _db_url,
+        echo=settings.DEBUG,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+        connect_args=_connect_args,
+    )
+
+    async_session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+else:
+    _db_url = None
+    _connect_args: dict[str, Any] = {}
 
 
 class Base(DeclarativeBase):
@@ -72,8 +82,18 @@ class Base(DeclarativeBase):
 AsyncSessionLocal = async_session_factory
 
 
+def get_database_configuration_error() -> str | None:
+    """Return a human-readable configuration error for the database, if any."""
+    return _database_configuration_error
+
+
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency — yields a DB session per request."""
+    if async_session_factory is None:
+        raise RuntimeError(
+            get_database_configuration_error()
+            or "Database session factory is unavailable"
+        )
     async with async_session_factory() as session:
         try:
             yield session

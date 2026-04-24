@@ -20,7 +20,7 @@ from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import get_settings
-from app.core.database import AsyncSessionLocal, engine
+from app.core.database import AsyncSessionLocal, engine, get_database_configuration_error
 from app.core.logging import configure_logging, get_logger
 
 # Import all route modules
@@ -60,6 +60,11 @@ import asyncio as _asyncio
 
 async def probe_database() -> tuple[bool, str | None]:
     """Verify the application can reach Postgres."""
+    config_error = get_database_configuration_error()
+    if config_error:
+        logger.error(f"Database configuration error: {config_error}")
+        return False, config_error
+
     try:
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
@@ -177,7 +182,8 @@ async def lifespan(app: FastAPI):
         except _asyncio.CancelledError:
             pass
     logger.info("Omniweb Agent Engine shutting down")
-    await engine.dispose()
+    if engine is not None:
+        await engine.dispose()
 
 
 app = FastAPI(
@@ -354,6 +360,7 @@ async def health() -> dict:
         "deepgram_configured": settings.deepgram_configured,
         "twilio_configured": settings.twilio_configured,
         "openai_configured": settings.openai_configured,
+        "database_configured": settings.database_configured,
         "database_ok": False,
     }
 

@@ -4,11 +4,13 @@ All configuration comes from environment variables (12-factor).
 Use .env for local dev; DigitalOcean App Platform env vars for production.
 """
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 DEFAULT_ENGINE_BASE_URL = "https://omniweb-engine-rs6fr.ondigitalocean.app"
+DEFAULT_DEVELOPMENT_DATABASE_URL = "postgresql+asyncpg://omniweb:password@localhost:5432/omniweb_engine"
 
 
 class Settings(BaseSettings):
@@ -48,7 +50,7 @@ class Settings(BaseSettings):
     ]
 
     # ── Database ─────────────────────────────────────────────
-    DATABASE_URL: str = "postgresql+asyncpg://omniweb:password@localhost:5432/omniweb_engine"
+    DATABASE_URL: str = ""
 
     # ── Redis ────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -137,6 +139,35 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production" or self.APP_ENV == "production"
+
+    @property
+    def resolved_database_url(self) -> str:
+        raw_url = (self.DATABASE_URL or "").strip()
+        if raw_url:
+            return raw_url
+        if self.is_production:
+            return ""
+        return DEFAULT_DEVELOPMENT_DATABASE_URL
+
+    @property
+    def database_configuration_error(self) -> str | None:
+        resolved_url = self.resolved_database_url
+        if not resolved_url:
+            return "DATABASE_URL is not configured"
+
+        if self.is_production:
+            host = (urlsplit(resolved_url).hostname or "").strip().lower()
+            if host in {"", "localhost", "127.0.0.1", "0.0.0.0"}:
+                return (
+                    "DATABASE_URL points to a local database host in production. "
+                    "Set it to your managed PostgreSQL connection string."
+                )
+
+        return None
+
+    @property
+    def database_configured(self) -> bool:
+        return self.database_configuration_error is None
 
     @property
     def retell_configured(self) -> bool:

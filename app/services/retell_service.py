@@ -135,15 +135,15 @@ def map_locale_to_retell_language(supported: list[str]) -> str:
 def language_options_public() -> list[dict[str, str]]:
     """Locales surfaced to landing / widget UIs (subset of Retell-supported)."""
     return [
-        {"code": "en", "label": "English (default)", "retell": "en-US"},
-        {"code": "es", "label": "Spanish", "retell": "es-419"},
-        {"code": "fr", "label": "French", "retell": "fr-FR"},
-        {"code": "de", "label": "German", "retell": "de-DE"},
-        {"code": "it", "label": "Italian", "retell": "it-IT"},
-        {"code": "pt", "label": "Portuguese (Brazil)", "retell": "pt-BR"},
-        {"code": "ja", "label": "Japanese", "retell": "ja-JP"},
-        {"code": "ko", "label": "Korean", "retell": "ko-KR"},
-        {"code": "zh", "label": "Chinese", "retell": "zh-CN"},
-        {"code": "hi", "label": "Hindi", "retell": "hi-IN"},
-        {"code": "multi", "label": "Multilingual (auto)", "retell": "multi"},
+        {"code": "en", "label": "English (default)", "retell": "en-US", "flag": "🇺🇸"},
+        {"code": "es", "label": "Spanish", "retell": "es-419", "flag": "🇪🇸"},
+        {"code": "fr", "label": "French", "retell": "fr-FR", "flag": "🇫🇷"},
+        {"code": "de", "label": "German", "retell": "de-DE", "flag": "🇩🇪"},
+        {"code": "it", "label": "Italian", "retell": "it-IT", "flag": "🇮🇹"},
+        {"code": "pt", "label": "Portuguese (Brazil)", "retell": "pt-BR", "flag": "🇧🇷"},
+        {"code": "ja", "label": "Japanese", "retell": "ja-JP", "flag": "🇯🇵"},
+        {"code": "ko", "label": "Korean", "retell": "ko-KR", "flag": "🇰🇷"},
+        {"code": "zh", "label": "Chinese", "retell": "zh-CN", "flag": "🇨🇳"},
+        {"code": "hi", "label": "Hindi", "retell": "hi-IN", "flag": "🇮🇳"},
+        {"code": "multi", "label": "Multilingual (auto)", "retell": "multi", "flag": "🌐"},
     ]

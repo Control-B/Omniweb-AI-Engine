@@ -20,7 +20,7 @@ import {
  * URL: ``/widget/{clientId}`` — ``clientId`` is the Omniweb ``client_id`` (UUID).
  */
 
-type LangOption = { code: string; label: string; retell: string };
+type LangOption = { code: string; label: string; retell: string; flag?: string };
 type UiMode = "voice" | "text";
 
 function engineBaseUrl(): string {
@@ -31,20 +31,13 @@ function engineBaseUrl(): string {
   return raw.replace(/\/$/, "");
 }
 
-function flagEmoji(code: string): string {
-  try {
-    if (code === "multi") return "🌐";
-    const c = code.slice(0, 2).toUpperCase();
-    if (c.length !== 2) return "🌐";
-    const A = 0x1f1e6;
-    const a = A + (c.charCodeAt(0) - 65);
-    const b = A + (c.charCodeAt(1) - 65);
-    if (a < A || a > A + 25 || b < A || b > A + 25) return "🌐";
-    if (typeof String.fromCodePoint !== "function") return "🌐";
-    return String.fromCodePoint(a, b);
-  } catch {
-    return "🌐";
-  }
+const LANG_FLAGS: Record<string, string> = {
+  en: "🇺🇸", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪", it: "🇮🇹",
+  pt: "🇧🇷", ja: "🇯🇵", ko: "🇰🇷", zh: "🇨🇳", hi: "🇮🇳", multi: "🌐",
+};
+
+function flagEmoji(lang: LangOption): string {
+  return lang.flag || LANG_FLAGS[lang.code] || "🌐";
 }
 
 type BootstrapPayload = {
@@ -306,7 +299,7 @@ export default function VoiceWidgetPage() {
                 className="w-full flex items-center justify-between gap-2 rounded-xl bg-slate-900/80 border border-white/10 px-3 py-2 text-sm text-left hover:bg-slate-900 disabled:opacity-50"
               >
                 <span className="flex items-center gap-2 truncate">
-                  <span className="text-lg">{flagEmoji(selectedLang?.code || "en")}</span>
+                  <span className="text-lg">{selectedLang ? flagEmoji(selectedLang) : "🌐"}</span>
                   <span className="truncate">{selectedLang?.label || "English"}</span>
                 </span>
                 <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
@@ -323,7 +316,7 @@ export default function VoiceWidgetPage() {
                           setLangOpen(false);
                         }}
                       >
-                        <span>{flagEmoji(l.code)}</span>
+                        <span>{flagEmoji(l)}</span>
                         <span className="truncate">{l.label}</span>
                       </button>
                     </li>

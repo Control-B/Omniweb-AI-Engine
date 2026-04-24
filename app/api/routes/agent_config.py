@@ -19,7 +19,7 @@ from app.core.auth import get_current_client
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, Client
-from app.services import elevenlabs_service
+from app.services import elevenlabs_service, retell_service
 from app.services.prompt_engine import compose_system_prompt, compose_greeting
 from app.services.industry_config import (
     get_industry,
@@ -54,9 +54,15 @@ def _build_loader_snippet(*, embed_code: str, client_id: str) -> tuple[str, str]
 
 class AgentConfigUpdate(BaseModel):
     elevenlabs_agent_id: Optional[str] = None
+    retell_agent_id: Optional[str] = None
+    retell_agent_version: Optional[int] = None
     agent_name: Optional[str] = None
     agent_greeting: Optional[str] = None
     voice_id: Optional[str] = None
+    voice_provider: Optional[str] = None
+    telephony_provider: Optional[str] = None
+    deepgram_tts_model: Optional[str] = None
+    retell_voice_id: Optional[str] = None
     voice_stability: Optional[float] = None
     voice_similarity_boost: Optional[float] = None
     system_prompt: Optional[str] = None
@@ -228,7 +234,8 @@ async def upsert_config(
 
     # Sync to ElevenLabs (skip if only elevenlabs_agent_id was changed)
     fields_that_sync = {"agent_name", "agent_greeting", "voice_id", "voice_stability",
-                        "voice_similarity_boost", "system_prompt", "business_name",
+                        "voice_provider", "telephony_provider", "deepgram_tts_model",
+                        "retell_voice_id", "voice_similarity_boost", "system_prompt", "business_name",
                         "max_call_duration", "supported_languages", "language_presets",
                         "industry", "agent_mode", "custom_guardrails",
                         "custom_escalation_triggers", "custom_context", "use_prompt_engine",
@@ -271,12 +278,44 @@ async def upsert_config(
         logger.error(f"Failed to sync config to ElevenLabs: {exc}")
         # Don't fail the request — save config locally even if ElevenLabs is down
 
+    try:
+        should_sync_retell = settings.retell_configured and config.telephony_provider == "retell"
+        if should_sync_retell and (has_sync_fields or not config.retell_agent_id):
+            retell_name = f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -") or "Omniweb AI Agent"
+            retell_result = None
+            if config.retell_agent_id:
+                retell_result = await retell_service.update_agent(
+                    config.retell_agent_id,
+                    agent_name=retell_name,
+                    language=(config.supported_languages or [settings.RETELL_DEFAULT_LANGUAGE])[0],
+                    supported_languages=config.supported_languages,
+                    voice_id=config.retell_voice_id or settings.RETELL_DEFAULT_VOICE_ID,
+                )
+                logger.info(f"Synced config to Retell agent {config.retell_agent_id}")
+            else:
+                retell_result = await retell_service.create_agent(
+                    agent_name=retell_name,
+                    language=(config.supported_languages or [settings.RETELL_DEFAULT_LANGUAGE])[0],
+                    supported_languages=config.supported_languages,
+                    voice_id=config.retell_voice_id or settings.RETELL_DEFAULT_VOICE_ID,
+                )
+                logger.info("Created Retell agent for client %s", client_id)
+
+            config.retell_agent_id = retell_result.get("agent_id", config.retell_agent_id)
+            config.retell_agent_version = retell_result.get("version", config.retell_agent_version)
+    except Exception as exc:
+        logger.error(f"Failed to sync config to Retell: {exc}")
+
     await db.commit()
     await db.refresh(config)
     return {
         "ok": True,
         "client_id": client_id,
         "elevenlabs_agent_id": config.elevenlabs_agent_id,
+        "retell_agent_id": config.retell_agent_id,
+        "retell_agent_version": config.retell_agent_version,
+        "voice_provider": config.voice_provider,
+        "telephony_provider": config.telephony_provider,
         "industry": config.industry,
         "agent_mode": config.agent_mode,
         "use_prompt_engine": config.use_prompt_engine,

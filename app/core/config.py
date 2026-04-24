@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     SECRET_KEY: str = "change-me-in-production"
     INTERNAL_API_KEY: str = "change-me-in-production"  # platform → engine auth
-    ADMIN_SIGNUP_CODE: str = "omniweb-admin-2024"  # required code to create admin accounts
+    ADMIN_SIGNUP_CODE: str = "omniweb-admin-2024"  # legacy bootstrap code; owner signup is first-run only
     ELEVENLABS_TOOL_SECRET: str = "change-me"  # shared secret for ElevenLabs tool webhooks
     LANDING_PAGE_CLIENT_ID: str = ""  # client UUID for landing-page leads
     # Allowed CORS origins for the dashboard frontend
@@ -73,6 +73,20 @@ class Settings(BaseSettings):
     ELEVENLABS_VOICE_ID_UK: str | None = None
     ELEVENLABS_VOICE_ID_ZH: str | None = None
     ELEVENLABS_WEBHOOK_SECRET: str = ""  # For verifying webhook signatures
+
+    # ── Deepgram (Public voice utilities + summarization) ────
+    DEEPGRAM_API_KEY: str = ""
+    DEEPGRAM_API_BASE_URL: str = "https://api.deepgram.com/v1"
+    DEEPGRAM_DEFAULT_LANGUAGE: str = "en"
+    DEEPGRAM_DEFAULT_TTS_MODEL: str = "aura-2-thalia-en"
+
+    # ── Retell (AI telephony) ────────────────────────────────
+    RETELL_API_KEY: str = ""
+    RETELL_API_BASE_URL: str = "https://api.retellai.com"
+    RETELL_LLM_ID: str = ""
+    RETELL_DEFAULT_VOICE_ID: str = ""
+    RETELL_DEFAULT_LANGUAGE: str = "en-US"
+    RETELL_WEBHOOK_URL: str = ""
 
     # ── Twilio (Phone Numbers + SMS) ─────────────────────────
     TWILIO_ACCOUNT_SID: str = ""
@@ -152,6 +166,14 @@ class Settings(BaseSettings):
     @property
     def elevenlabs_configured(self) -> bool:
         return bool(self.ELEVENLABS_API_KEY)
+
+    @property
+    def deepgram_configured(self) -> bool:
+        return bool(self.DEEPGRAM_API_KEY)
+
+    @property
+    def retell_configured(self) -> bool:
+        return bool(self.RETELL_API_KEY and self.RETELL_LLM_ID and self.RETELL_DEFAULT_VOICE_ID)
 
     @property
     def twilio_configured(self) -> bool:

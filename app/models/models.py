@@ -111,6 +111,8 @@ class AgentConfig(Base):
     # ElevenLabs agent linkage
     elevenlabs_agent_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     elevenlabs_kb_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    retell_agent_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    retell_agent_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Identity
     agent_name: Mapped[str] = mapped_column(String(100), default="Alex", nullable=False)
@@ -122,6 +124,10 @@ class AgentConfig(Base):
 
     # Voice (ElevenLabs voice ID)
     voice_id: Mapped[str] = mapped_column(String(100), default="EXAVITQu4vr4xnSDxMaL", nullable=False)
+    voice_provider: Mapped[str] = mapped_column(String(30), default="deepgram", nullable=False)
+    telephony_provider: Mapped[str] = mapped_column(String(30), default="retell", nullable=False)
+    deepgram_tts_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    retell_voice_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     voice_stability: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
     voice_similarity_boost: Mapped[float] = mapped_column(Float, default=0.75, nullable=False)
 
@@ -348,18 +354,20 @@ class ShopifyDiscountApproval(Base):
 # ── Phone Numbers ─────────────────────────────────────────────────────────────
 
 class PhoneNumber(Base):
-    """A Twilio phone number imported into ElevenLabs for a client."""
+    """A client phone number provisioned through Retell or Twilio."""
     __tablename__ = "phone_numbers"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(30), default="twilio-elevenlabs", nullable=False)
 
     # Twilio
-    twilio_sid: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    twilio_sid: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
     phone_number: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)  # E.164
 
     # ElevenLabs
     elevenlabs_phone_number_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    retell_phone_number_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     friendly_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -401,6 +409,8 @@ class Call(Base):
 
     # ElevenLabs
     elevenlabs_conversation_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    provider: Mapped[str] = mapped_column(String(30), default="elevenlabs", nullable=False)
+    retell_call_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
 
     # Twilio (for SMS follow-ups or outbound)
     twilio_call_sid: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -433,6 +443,7 @@ class Call(Base):
         Index("ix_calls_started_at", "started_at"),
         Index("ix_calls_channel", "channel"),
         Index("ix_calls_elevenlabs_conversation_id", "elevenlabs_conversation_id"),
+        Index("ix_calls_retell_call_id", "retell_call_id"),
     )
 
 

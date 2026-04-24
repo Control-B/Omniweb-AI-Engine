@@ -48,6 +48,7 @@ from app.api.routes import (
     templates,
     webhooks,
     webhooks_elevenlabs,
+    webhooks_retell,
     webhooks_stripe,
     webhooks_tools,
 )
@@ -148,6 +149,8 @@ async def lifespan(app: FastAPI):
 
     logger.info("Omniweb Agent Engine starting up")
     logger.info(f"ElevenLabs configured: {settings.elevenlabs_configured}")
+    logger.info(f"Deepgram configured: {settings.deepgram_configured}")
+    logger.info(f"Retell configured: {settings.retell_configured}")
     logger.info(f"LiveKit configured: {settings.livekit_configured}")
     logger.info(f"Twilio configured: {settings.twilio_configured}")
     logger.info(f"OpenAI configured: {settings.openai_configured}")
@@ -312,6 +315,7 @@ app.include_router(auth.router, prefix=API_PREFIX)
 
 # Webhooks (no auth — URLs configured in ElevenLabs/Stripe dashboards)
 app.include_router(webhooks_elevenlabs.router, prefix=API_PREFIX)
+app.include_router(webhooks_retell.router, prefix=API_PREFIX)
 app.include_router(webhooks_stripe.router, prefix=API_PREFIX)
 app.include_router(webhooks_tools.router, prefix=API_PREFIX)
 
@@ -351,6 +355,8 @@ async def health() -> dict:
         "service": "omniweb-agent-engine",
         "version": "2.0.0",
         "elevenlabs_configured": settings.elevenlabs_configured,
+        "deepgram_configured": settings.deepgram_configured,
+        "retell_configured": settings.retell_configured,
         "livekit_configured": settings.livekit_configured,
         "twilio_configured": settings.twilio_configured,
         "openai_configured": settings.openai_configured,

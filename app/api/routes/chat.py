@@ -16,7 +16,7 @@ from app.api.deps import get_session
 from app.core.auth import get_current_client
 from app.core.logging import get_logger
 from app.models.models import AgentConfig
-from app.services import elevenlabs_service
+from app.services import deepgram_service, elevenlabs_service
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -38,14 +38,18 @@ async def get_welcome_audio(body: WelcomeAudioRequest) -> Response:
         raise HTTPException(400, "Text must be 400 characters or fewer")
 
     try:
-        audio_bytes = await elevenlabs_service.synthesize_speech(
-            text=text,
-            language=body.language,
-            voice_id=body.voice_id,
-        )
+        audio_bytes = await deepgram_service.synthesize_speech(text=text, language=body.language, voice_id=body.voice_id)
     except Exception as exc:
-        logger.error(f"Failed to synthesize welcome audio: {exc}")
-        raise HTTPException(502, "Failed to synthesize welcome audio") from exc
+        logger.warning(f"Deepgram welcome audio failed, falling back to ElevenLabs: {exc}")
+        try:
+            audio_bytes = await elevenlabs_service.synthesize_speech(
+                text=text,
+                language=body.language,
+                voice_id=body.voice_id,
+            )
+        except Exception as fallback_exc:
+            logger.error(f"Failed to synthesize welcome audio: {fallback_exc}")
+            raise HTTPException(502, "Failed to synthesize welcome audio") from fallback_exc
 
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
@@ -54,10 +58,10 @@ async def get_welcome_audio(body: WelcomeAudioRequest) -> Response:
 async def get_chat_languages() -> dict:
     """Return the public language and voice options for the landing widget."""
     return {
-        "default_language": elevenlabs_service._normalize_language_code(
-            elevenlabs_service.settings.ELEVENLABS_DEFAULT_LANGUAGE
+        "default_language": deepgram_service._normalize_language_code(
+            deepgram_service.settings.DEEPGRAM_DEFAULT_LANGUAGE
         ),
-        "languages": elevenlabs_service.get_language_options(),
+        "languages": deepgram_service.get_language_options(),
     }
 
 

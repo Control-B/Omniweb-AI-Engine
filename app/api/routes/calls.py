@@ -70,11 +70,13 @@ async def list_calls(
                 "direction": c.direction,
                 "channel": c.channel,
                 "status": c.status,
+                "provider": c.provider,
                 "duration_seconds": c.duration_seconds,
                 "started_at": c.started_at.isoformat() if c.started_at else None,
                 "ended_at": c.ended_at.isoformat() if c.ended_at else None,
                 "post_call_processed": c.post_call_processed,
                 "elevenlabs_conversation_id": c.elevenlabs_conversation_id,
+                "retell_call_id": c.retell_call_id,
             }
             for c in calls
         ],
@@ -112,12 +114,14 @@ async def get_call(
         "direction": call.direction,
         "channel": call.channel,
         "status": call.status,
+        "provider": call.provider,
         "duration_seconds": call.duration_seconds,
         "recording_url": call.recording_url,
         "started_at": call.started_at.isoformat() if call.started_at else None,
         "ended_at": call.ended_at.isoformat() if call.ended_at else None,
         "post_call_processed": call.post_call_processed,
         "elevenlabs_conversation_id": call.elevenlabs_conversation_id,
+        "retell_call_id": call.retell_call_id,
         "transcript": {
             "turns": transcript.turns if transcript else [],
             "summary": transcript.summary if transcript else None,

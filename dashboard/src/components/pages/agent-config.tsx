@@ -88,9 +88,9 @@ interface AgentConfig {
 interface WidgetInfo {
   agent_id: string;
   embed_code: string;
-  legacy_embed_code?: string;
-  widget_url?: string;
-  talk_url: string;
+  legacy_embed_code?: string | null;
+  widget_url?: string | null;
+  talk_url?: string | null;
 }
 
 export function AgentConfigPage() {
@@ -773,7 +773,7 @@ export function AgentConfigPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Voice Widget Embed</CardTitle>
-                  <CardDescription>Add this iframe to your website for a voice-first assistant</CardDescription>
+                  <CardDescription>Copy this script into your website just before the closing body tag</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="relative">
@@ -806,26 +806,32 @@ export function AgentConfigPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Test Your Agent</CardTitle>
-                  <CardDescription>Try your voice agent before deploying to your website</CardDescription>
+                  <CardDescription>Try your voice agent and validate the copy-paste install flow before going live</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex gap-2 flex-wrap">
                     {widget.widget_url && (
-                      <Button size="sm" onClick={() => window.open(widget.widget_url, "_blank")}>
+                      <Button size="sm" onClick={() => window.open(widget.widget_url!, "_blank")}>
                         <Mic className="w-3.5 h-3.5" />
                         Test Voice Widget
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" onClick={() => window.open(widget.talk_url, "_blank")}>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      ElevenLabs Test Page
-                    </Button>
+                    {widget.talk_url && (
+                      <Button variant="outline" size="sm" onClick={() => window.open(widget.talk_url!, "_blank")}>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        ElevenLabs Test Page
+                      </Button>
+                    )}
                     {widget.widget_url && (
                       <Button variant="outline" size="sm" onClick={() => copyToClipboard(widget.widget_url!, "url")}>
                         {copied === "url" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                         Copy Widget URL
                       </Button>
                     )}
+                    <Button variant="outline" size="sm" onClick={() => window.open("/widget-demo", "_blank")}>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Open Demo Website
+                    </Button>
                   </div>
                   {widget.widget_url && (
                     <div className="bg-secondary px-3 py-2 rounded-md text-xs text-muted-foreground font-mono break-all">{widget.widget_url}</div>

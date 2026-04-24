@@ -1,4 +1,4 @@
-"""Phone Number Provisioning Service — Twilio + ElevenLabs lifecycle.
+"""Phone Number Provisioning Service — Retell and Twilio lifecycle.
 
 Provisioning flow:
 
@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import PhoneNumber
-from app.services import elevenlabs_service
+from app.services import elevenlabs_service, retell_service
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -33,6 +33,9 @@ async def provision_new_number(
     phone_number: str,
     friendly_name: str,
     elevenlabs_agent_id: str | None = None,
+    retell_agent_id: str | None = None,
+    retell_agent_version: int | None = None,
+    telephony_provider: str = "retell",
     area_code: str | None = None,
 ) -> PhoneNumber:
     """Buy a Twilio number and import it into ElevenLabs.
@@ -46,7 +49,34 @@ async def provision_new_number(
 
     Returns PhoneNumber ORM instance (already saved to DB).
     """
-    logger.info(f"Provisioning number {phone_number} for client {client_id}")
+    logger.info(f"Provisioning number {phone_number} for client {client_id} via {telephony_provider}")
+
+    use_retell = telephony_provider == "retell" and settings.retell_configured and retell_agent_id
+
+    if use_retell:
+        retell_result = await retell_service.create_phone_number(
+            phone_number=phone_number,
+            agent_id=retell_agent_id,
+            agent_version=retell_agent_version,
+            nickname=friendly_name,
+            area_code=int(area_code) if area_code else None,
+        )
+        number_record = PhoneNumber(
+            client_id=client_id,
+            provider="retell",
+            phone_number=phone_number,
+            friendly_name=friendly_name,
+            twilio_sid=None,
+            retell_phone_number_id=retell_result.get("phone_number", phone_number),
+            is_active=True,
+            area_code=(phone_number[2:5] if phone_number.startswith("+1") else None),
+            country="US",
+        )
+        db.add(number_record)
+        await db.commit()
+        await db.refresh(number_record)
+        logger.info("Provisioned Retell number %s for client %s", phone_number, client_id)
+        return number_record
 
     # Step 1: Buy the number from Twilio
     twilio_sid = await _buy_twilio_number(phone_number, friendly_name)
@@ -64,6 +94,7 @@ async def provision_new_number(
     # Step 3: Persist to database
     number_record = PhoneNumber(
         client_id=client_id,
+        provider="twilio-elevenlabs",
         phone_number=phone_number,
         friendly_name=friendly_name,
         twilio_sid=twilio_sid,
@@ -145,6 +176,9 @@ async def deprovision_number(
     if number.elevenlabs_phone_number_id:
         await elevenlabs_service.delete_phone_number(number.elevenlabs_phone_number_id)
 
+    if number.provider == "retell" and number.retell_phone_number_id:
+        await retell_service.delete_phone_number(number.retell_phone_number_id)
+
     # Optionally release from Twilio
     if release_twilio_number and number.twilio_sid and settings.twilio_configured:
         try:
@@ -167,6 +201,8 @@ async def set_number_mode(
     mode: str,
     forward_to: str | None = None,
     elevenlabs_agent_id: str | None = None,
+    retell_agent_id: str | None = None,
+    retell_agent_version: int | None = None,
 ) -> None:
     """Switch a phone number between 'ai' and 'forward' mode.
 
@@ -174,6 +210,23 @@ async def set_number_mode(
     - forward mode: Twilio forwards calls to `forward_to` phone number
     """
     from app.services import twilio_service
+
+    if number.provider == "retell":
+        if mode != "ai":
+            raise ValueError("Forward mode is not supported for Retell-managed numbers")
+        if not retell_agent_id:
+            raise ValueError("retell_agent_id is required when mode is 'ai' for Retell numbers")
+        await retell_service.update_phone_number(
+            number.phone_number,
+            agent_id=retell_agent_id,
+            agent_version=retell_agent_version,
+            nickname=number.friendly_name,
+        )
+        number.mode = "ai"
+        number.forward_to = None
+        await db.commit()
+        logger.info(f"Set {number.phone_number} to mode=ai via Retell")
+        return
 
     if mode == "forward":
         if not forward_to:

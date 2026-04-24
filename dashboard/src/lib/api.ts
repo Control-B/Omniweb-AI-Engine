@@ -144,9 +144,30 @@ export interface AuthResponse {
   token_type: string;
   client_id: string;
   email: string;
+  name?: string;
+  first_name?: string;
   plan: string;
   role: string;
   permissions?: string[];
+}
+
+export async function exchangeClerkSession(clerkToken: string): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}${API_PREFIX}/auth/clerk-session`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${clerkToken}`,
+    },
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail ? String(body.detail) : `Clerk session exchange failed (${res.status})`);
+  }
+
+  const data = await res.json() as AuthResponse;
+  setToken(data.access_token);
+  return data;
 }
 
 export async function login(
@@ -192,7 +213,7 @@ export function logout() {
   if (typeof window !== "undefined") {
     localStorage.removeItem("omniweb_setup_complete");
     localStorage.removeItem(ADMIN_TOKEN_KEY);
-    window.location.replace("/login");
+    window.location.replace("/logout");
   }
 }
 

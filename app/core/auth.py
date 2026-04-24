@@ -400,6 +400,8 @@ async def _resolve_clerk_token(token: str) -> dict:
         return {
             "client_id": str(client.id),
             "email": client.email,
+                            "name": getattr(client, "name", full_name) or full_name,
+                            "first_name": (getattr(client, "name", "") or full_name).split()[0] if (getattr(client, "name", "") or full_name) else "",
             "plan": client.plan,
             "role": client.role,
               "permissions": get_effective_permissions(client.role, getattr(client, "permissions", None)),

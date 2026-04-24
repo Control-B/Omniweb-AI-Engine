@@ -64,7 +64,7 @@ export function AdminSidebar({ activePage, onNavigate }: AdminSidebarProps) {
             <Shield className="w-4 h-4 text-primary shrink-0" />
             <div className="min-w-0">
               <div className="text-xs font-medium text-foreground truncate">
-                {user?.email}
+                  {user?.first_name || user?.name || user?.email}
               </div>
               <div className="text-[10px] text-primary font-medium">
                 {user?.role === "owner" ? "Owner" : "Internal Staff"}

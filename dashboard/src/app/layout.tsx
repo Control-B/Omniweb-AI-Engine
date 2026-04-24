@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 import { MaybeAuth } from "@/components/maybe-auth";
+import { OptionalClerkProvider } from "@/components/auth/optional-clerk-provider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -40,7 +41,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`}>
       <body>
-        <MaybeAuth pathname={pathname}>{children}</MaybeAuth>
+          <OptionalClerkProvider>
+            <MaybeAuth pathname={pathname}>{children}</MaybeAuth>
+          </OptionalClerkProvider>
       </body>
     </html>
   );

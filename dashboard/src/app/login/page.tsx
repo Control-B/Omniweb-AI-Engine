@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { ClerkLoginPanel } from "@/components/auth/clerk-login-panel";
 import { getAdminBootstrapStatus, login, requestPasswordReset, type AdminBootstrapStatus } from "@/lib/api";
 import { isInternalRole } from "@/lib/auth-context";
 
@@ -76,6 +77,17 @@ export default function LoginPage() {
             </p>
           </div>
         </div>
+
+          <ClerkLoginPanel />
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="bg-background px-3">Fallback login</span>
+            </div>
+          </div>
 
         {/* Portal toggle */}
         <div className="grid grid-cols-2 gap-1 rounded-lg bg-secondary p-1">
@@ -209,6 +221,9 @@ export default function LoginPage() {
           <a href="/reset-password" className="text-muted-foreground hover:text-foreground transition-colors">
             Use Invite / Recovery Code
           </a>
+            <a href="/register" className="text-muted-foreground hover:text-foreground transition-colors">
+              Create account
+            </a>
           <a href="/demo" className="text-muted-foreground hover:text-foreground transition-colors">
             Try Demo Dashboard
           </a>

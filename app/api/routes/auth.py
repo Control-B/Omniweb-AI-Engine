@@ -70,6 +70,8 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     client_id: str
     email: str
+    name: str | None = None
+    first_name: str | None = None
     plan: str
     role: str = "client"
     permissions: list[str] = []
@@ -1010,6 +1012,11 @@ async def clerk_session(
         email=client["email"],
         plan=client["plan"],
         role=client["role"],
+        permissions=client.get("permissions"),
+        extra={
+            "name": client.get("name"),
+            "first_name": client.get("first_name"),
+        },
     )
 
     return {
@@ -1017,8 +1024,11 @@ async def clerk_session(
         "token_type": "bearer",
         "client_id": client["client_id"],
         "email": client["email"],
+        "name": client.get("name"),
+        "first_name": client.get("first_name"),
         "plan": client["plan"],
         "role": client.get("role", "client"),
+        "permissions": client.get("permissions", []),
     }
 
 

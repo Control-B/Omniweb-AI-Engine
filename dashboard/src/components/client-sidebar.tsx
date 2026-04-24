@@ -75,7 +75,7 @@ export function ClientSidebar({ activePage, onNavigate }: ClientSidebarProps) {
             </div>
             <div className="min-w-0">
               <div className="text-xs font-medium text-foreground truncate">
-                {user?.email}
+                  {user?.first_name || user?.name || user?.email}
               </div>
               <div className="text-[10px] text-muted-foreground capitalize">
                 {user?.plan} Plan

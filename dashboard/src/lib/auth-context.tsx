@@ -70,6 +70,8 @@ export function isInternalRole(role: string | null | undefined): role is Exclude
 export interface User {
   client_id: string;
   email: string;
+  name?: string;
+  first_name?: string;
   plan: string;
   role: UserRole;
   permissions: UserPermission[];
@@ -118,6 +120,8 @@ function readUser(): User | null {
     return {
       client_id: sub,
       email: typeof payload.email === "string" ? payload.email : "",
+        name: typeof payload.name === "string" ? payload.name : undefined,
+        first_name: typeof payload.first_name === "string" ? payload.first_name : undefined,
       plan: typeof payload.plan === "string" ? payload.plan : "",
       role: (payload.role || "client") as UserRole,
       permissions:

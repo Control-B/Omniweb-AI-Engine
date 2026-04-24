@@ -973,6 +973,7 @@ async def admin_signup(
         email=client.email,
         plan=client.plan,
         role=client.role,
+        permissions=get_effective_permissions(client.role, client.permissions),
     )
 
     logger.info(f"Owner bootstrap completed: {client.email} ({client.id})")
@@ -983,7 +984,8 @@ async def admin_signup(
         "client_id": str(client.id),
         "email": client.email,
         "plan": client.plan,
-        "role": "admin",
+        "role": client.role,
+        "permissions": get_effective_permissions(client.role, client.permissions),
     }
 
 

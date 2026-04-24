@@ -32,6 +32,7 @@ from app.api.routes import (
     automations,
     calls,
     chat,
+    deepgram,
     embed,
     industry,
     knowledge_base,
@@ -145,6 +146,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("Omniweb Agent Engine starting up")
     logger.info(f"Retell configured: {settings.retell_configured}")
+    logger.info(f"Deepgram configured: {settings.deepgram_configured}")
     logger.info(f"Twilio configured: {settings.twilio_configured}")
     logger.info(f"OpenAI configured: {settings.openai_configured}")
 
@@ -322,6 +324,7 @@ app.include_router(chat.router, prefix=API_PREFIX)
 app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
 app.include_router(retell.router, prefix=API_PREFIX)
+app.include_router(deepgram.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
 app.include_router(shopify.router, prefix=API_PREFIX)
 app.include_router(shopify_webhooks.router, prefix=API_PREFIX)

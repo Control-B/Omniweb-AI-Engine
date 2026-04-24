@@ -1,4 +1,4 @@
-"""Chat API — widget configuration for voice (Retell) + future text channels."""
+"""Chat API — widget configuration for voice (Deepgram Voice Agent + optional Retell)."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,30 +38,7 @@ async def get_widget(
     client_id: str,
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Public widget metadata for embedding (voice via Retell web call)."""
-    result = await db.execute(
-        select(AgentConfig).where(AgentConfig.client_id == client_id)
-    )
-    config = result.scalar_one_or_none()
-    if not config or not config.retell_agent_id:
-        raise HTTPException(404, "No Retell agent configured for this client")
-
-    engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL).rstrip("/")
-    return {
-        "client_id": client_id,
-        "retell_agent_id": config.retell_agent_id,
-        "agent_name": config.agent_name,
-        "engine_url": engine_url,
-        "web_call_path": "/api/retell/web-call",
-    }
-
-
-@router.get("/config/{client_id}")
-async def get_chat_config(
-    client_id: str,
-    db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Configuration for frontend SDK integration (Retell)."""
+    """Public widget metadata for embedding (Deepgram Voice Agent or Retell web call)."""
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client_id)
     )
@@ -70,15 +47,51 @@ async def get_chat_config(
         raise HTTPException(404, "No agent configured for this client")
 
     engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL).rstrip("/")
-    return {
+    out: dict = {
+        "client_id": client_id,
+        "agent_name": config.agent_name,
+        "engine_url": engine_url,
+    }
+    if settings.deepgram_configured:
+        out["voice_provider"] = "deepgram"
+        out["deepgram_bootstrap_path"] = "/api/deepgram/voice-agent/bootstrap"
+    if config.retell_agent_id:
+        out["retell_agent_id"] = config.retell_agent_id
+        out["web_call_path"] = "/api/retell/web-call"
+    if not settings.deepgram_configured and not config.retell_agent_id:
+        raise HTTPException(404, "No voice provider configured for this client")
+
+    return out
+
+
+@router.get("/config/{client_id}")
+async def get_chat_config(
+    client_id: str,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Configuration for frontend SDK integration (Deepgram and/or Retell)."""
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client_id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(404, "No agent configured for this client")
+
+    engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL).rstrip("/")
+    out: dict = {
         "client_id": client_id,
         "retell_agent_id": config.retell_agent_id,
         "agent_name": config.agent_name,
         "greeting": config.agent_greeting,
         "business_name": config.business_name,
         "engine_url": engine_url,
-        "web_call_path": "/api/retell/web-call",
     }
+    if settings.deepgram_configured:
+        out["voice_provider"] = "deepgram"
+        out["deepgram_bootstrap_path"] = "/api/deepgram/voice-agent/bootstrap"
+    if config.retell_agent_id:
+        out["web_call_path"] = "/api/retell/web-call"
+    return out
 
 
 @router.get("/conversations")

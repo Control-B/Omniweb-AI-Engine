@@ -1,20 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { RetellWebClient } from "retell-client-js-sdk";
-import { Mic, MicOff, PhoneOff, Loader2, Volume2 } from "lucide-react";
+import {
+  ArrowUp,
+  ChevronDown,
+  MessageCircle,
+  Mic,
+  X,
+} from "lucide-react";
+import {
+  DeepgramVoiceAgentSession,
+  type TranscriptLine,
+} from "@/lib/deepgramVoiceAgentClient";
 
 /**
- * Voice widget — Retell WebRTC via ``retell-client-js-sdk``.
+ * Omniweb embeddable widget — Deepgram Voice Agent (orb + panel).
  *
- * URL: /widget/{clientId}
- *
- * ``agentId`` route param is the Omniweb ``client_id`` (UUID). The engine
- * resolves the Retell agent and returns a short-lived ``access_token``.
+ * URL: ``/widget/{clientId}`` — ``clientId`` is the Omniweb ``client_id`` (UUID).
  */
 
-type ConvStatus = "idle" | "connecting" | "connected" | "error";
+type LangOption = { code: string; label: string; retell: string };
+type UiMode = "voice" | "text";
 
 function engineBaseUrl(): string {
   const raw =
@@ -24,215 +31,350 @@ function engineBaseUrl(): string {
   return raw.replace(/\/$/, "");
 }
 
+function flagEmoji(code: string): string {
+  if (code === "multi") return "🌐";
+  const c = code.slice(0, 2).toUpperCase();
+  if (c.length !== 2) return "🌐";
+  const A = 0x1f1e6;
+  const a = A + (c.charCodeAt(0) - 65);
+  const b = A + (c.charCodeAt(1) - 65);
+  if (a < A || a > A + 25 || b < A || b > A + 25) return "🌐";
+  return String.fromCodePoint(a, b);
+}
+
+type BootstrapPayload = {
+  websocket_url: string;
+  access_token: string;
+  settings: Record<string, unknown>;
+};
+
 export default function VoiceWidgetPage() {
   const { agentId } = useParams<{ agentId: string }>();
-  const [convStatus, setConvStatus] = useState<ConvStatus>("idle");
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [langs, setLangs] = useState<LangOption[]>([]);
+  const [langOpen, setLangOpen] = useState(false);
+  const [selectedLang, setSelectedLang] = useState<LangOption | null>(null);
+  const [mode, setMode] = useState<UiMode>("voice");
+  const [sessionOn, setSessionOn] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [micMuted, setMicMuted] = useState(false);
-  const [agentSpeaking, setAgentSpeaking] = useState(false);
-  const clientRef = useRef<RetellWebClient | null>(null);
+  const [lines, setLines] = useState<TranscriptLine[]>([]);
+  const [textDraft, setTextDraft] = useState("");
+  const sessionRef = useRef<DeepgramVoiceAgentSession | null>(null);
 
   useEffect(() => {
-    const c = new RetellWebClient();
-    clientRef.current = c;
-
-    const onStarted = () => {
-      setConvStatus("connected");
-      setErrorMsg("");
-    };
-    const onEnded = () => {
-      setConvStatus("idle");
-      setAgentSpeaking(false);
-    };
-    const onError = (e: unknown) => {
-      console.error("Retell error:", e);
-      const msg =
-        typeof e === "string"
-          ? e
-          : e && typeof e === "object" && "message" in e
-            ? String((e as { message?: string }).message)
-            : "Connection failed";
-      setErrorMsg(msg);
-      setConvStatus("error");
-    };
-
-    c.on("call_started", onStarted);
-    c.on("call_ended", onEnded);
-    c.on("error", onError);
-    c.on("agent_start_talking", () => setAgentSpeaking(true));
-    c.on("agent_stop_talking", () => setAgentSpeaking(false));
-
-    return () => {
+    let cancelled = false;
+    (async () => {
       try {
-        c.stopCall();
+        const res = await fetch(`${engineBaseUrl()}/api/chat/languages`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { languages?: LangOption[] };
+        const list = data.languages || [];
+        if (cancelled) return;
+        setLangs(list);
+        const def = list.find((l) => l.code === "en") || list[0] || null;
+        setSelectedLang(def);
       } catch {
         /* ignore */
       }
-      clientRef.current = null;
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
-  const startSession = useCallback(async () => {
-    if (!agentId) return;
-    setConvStatus("connecting");
-    setErrorMsg("");
+  const subtitle = useMemo(() => {
+    if (connecting) return "Connecting…";
+    if (sessionOn) return mode === "voice" ? "Listening…" : "Type a message";
+    return "Ready to talk";
+  }, [connecting, sessionOn, mode]);
 
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      const res = await fetch(`${engineBaseUrl()}/api/retell/web-call`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_id: agentId }),
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || `HTTP ${res.status}`);
-      }
-
-      const data = (await res.json()) as { access_token: string };
-      if (!data.access_token) {
-        throw new Error("Missing access_token from engine");
-      }
-
-      const client = clientRef.current;
-      if (!client) throw new Error("Retell client not ready");
-
-      await client.startCall({ accessToken: data.access_token });
-    } catch (err: unknown) {
-      console.error("Failed to start session:", err);
-      const e = err as { name?: string; message?: string };
-      if (e?.name === "NotAllowedError" || e?.name === "PermissionDeniedError") {
-        setErrorMsg("Microphone access is required. Please allow microphone access and try again.");
-      } else {
-        setErrorMsg(e?.message || "Failed to connect. Please try again.");
-      }
-      setConvStatus("error");
-    }
-  }, [agentId]);
-
-  const endSession = useCallback(async () => {
-    try {
-      await clientRef.current?.stopCall();
-    } catch {
-      /* ignore */
-    }
-    setConvStatus("idle");
-    setAgentSpeaking(false);
+  const stopSession = useCallback(async () => {
+    await sessionRef.current?.disconnect();
+    sessionRef.current = null;
+    setSessionOn(false);
+    setConnecting(false);
   }, []);
 
-  const toggleMic = useCallback(() => {
-    setMicMuted((prev) => !prev);
-  }, []);
+  useEffect(() => {
+    return () => {
+      void stopSession();
+    };
+  }, [stopSession]);
 
-  const isActive = convStatus === "connected";
-  const isConnecting = convStatus === "connecting";
-  const isSpeaking = isActive && agentSpeaking;
+  const bootstrap = useCallback(async (): Promise<BootstrapPayload> => {
+    if (!agentId) throw new Error("Missing agent id");
+    const res = await fetch(`${engineBaseUrl()}/api/deepgram/voice-agent/bootstrap`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: agentId,
+        language: selectedLang?.code || "en",
+      }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t || `HTTP ${res.status}`);
+    }
+    return (await res.json()) as BootstrapPayload;
+  }, [agentId, selectedLang?.code]);
+
+  const startSession = useCallback(
+    async (withMic: boolean) => {
+      if (!agentId) return;
+      setConnecting(true);
+      setErrorMsg("");
+      try {
+        await stopSession();
+        const payload = await bootstrap();
+        const session = new DeepgramVoiceAgentSession({
+          onTranscript: (line) => {
+            setLines((prev) => [...prev, line]);
+          },
+          onError: (m) => setErrorMsg(m),
+          onClose: () => {
+            setSessionOn(false);
+          },
+        });
+        sessionRef.current = session;
+        await session.connect({
+          websocketUrl: payload.websocket_url,
+          accessToken: payload.access_token,
+          settings: payload.settings,
+          enableMic: withMic,
+        });
+        setSessionOn(true);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to connect";
+        setErrorMsg(msg);
+        await stopSession();
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [agentId, bootstrap, stopSession],
+  );
+
+  const onVoiceClick = useCallback(async () => {
+    setMode("voice");
+    setPanelOpen(true);
+    await startSession(true);
+  }, [startSession]);
+
+  const onTextMode = useCallback(async () => {
+    setMode("text");
+    setPanelOpen(true);
+    if (!sessionOn) {
+      await startSession(false);
+      return;
+    }
+    if (mode === "voice") {
+      await startSession(false);
+    }
+  }, [sessionOn, mode, startSession]);
+
+  const sendText = useCallback(async () => {
+    const t = textDraft.trim();
+    if (!t) return;
+    setMode("text");
+    if (!sessionRef.current) {
+      await startSession(false);
+    }
+    sessionRef.current?.injectUserMessage(t);
+    setTextDraft("");
+  }, [textDraft, startSession]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center p-4 select-none">
-      <div className="relative flex items-center justify-center mb-8">
-        {isActive && isSpeaking && (
-          <>
-            <div className="absolute w-40 h-40 rounded-full bg-blue-500/10 animate-ping" style={{ animationDuration: "2s" }} />
-            <div className="absolute w-32 h-32 rounded-full bg-blue-500/15 animate-ping" style={{ animationDuration: "1.5s", animationDelay: "0.3s" }} />
-          </>
-        )}
-        {isActive && !isSpeaking && (
-          <div className="absolute w-28 h-28 rounded-full bg-blue-500/10 animate-pulse" style={{ animationDuration: "3s" }} />
-        )}
+    <div className="fixed inset-0 z-[9999] pointer-events-none font-sans">
+      {/* Floating orb */}
+      <button
+        type="button"
+        onClick={() => setPanelOpen((o) => !o)}
+        className="pointer-events-auto absolute bottom-6 right-6 h-16 w-16 rounded-full shadow-[0_8px_32px_rgba(56,189,248,0.45)] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/80 ring-offset-2 ring-offset-slate-950 transition-transform hover:scale-105 active:scale-95"
+        style={{
+          background:
+            "conic-gradient(from 200deg at 50% 50%, #0ea5e9 0deg, #e0f2fe 80deg, #0369a1 200deg, #7dd3fc 320deg, #0ea5e9 360deg)",
+          boxShadow:
+            "inset 0 2px 12px rgba(255,255,255,0.35), 0 0 0 1px rgba(255,255,255,0.12), 0 12px 40px rgba(14,165,233,0.35)",
+        }}
+        aria-label={panelOpen ? "Close assistant" : "Open Omniweb AI"}
+      >
+        <span className="absolute inset-1 rounded-full bg-gradient-to-br from-white/25 to-transparent opacity-80" />
+        <span className="absolute inset-0 rounded-full animate-pulse opacity-30 bg-cyan-400/40 blur-md" />
+      </button>
 
-        <button
-          onClick={isActive ? endSession : startSession}
-          disabled={isConnecting}
-          className={`
-            relative z-10 w-24 h-24 rounded-full flex items-center justify-center
-            transition-all duration-500 ease-out
-            focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:ring-offset-2 focus:ring-offset-[#0a0a0f]
-            ${isConnecting
-              ? "bg-gradient-to-br from-blue-600/60 to-cyan-500/60 cursor-wait"
-              : isActive
-                ? isSpeaking
-                  ? "bg-gradient-to-br from-blue-500 to-cyan-400 shadow-[0_0_40px_rgba(59,130,246,0.5)] scale-105"
-                  : "bg-gradient-to-br from-blue-600 to-cyan-500 shadow-[0_0_25px_rgba(59,130,246,0.3)]"
-                : "bg-gradient-to-br from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:scale-105 cursor-pointer"
-            }
-          `}
-          aria-label={isActive ? "End call" : "Start call"}
-        >
-          {isConnecting ? (
-            <Loader2 className="w-8 h-8 text-white animate-spin" />
-          ) : isActive ? (
-            isSpeaking ? (
-              <Volume2 className="w-8 h-8 text-white animate-pulse" />
-            ) : (
-              <Mic className="w-8 h-8 text-white" />
-            )
-          ) : (
-            <Mic className="w-8 h-8 text-white" />
-          )}
-        </button>
-      </div>
-
-      <div className="text-center mb-6 min-h-[3rem]">
-        {convStatus === "idle" && (
-          <p className="text-white/80 text-sm font-medium">Tap to start talking</p>
-        )}
-        {isConnecting && (
-          <p className="text-blue-300 text-sm font-medium animate-pulse">Connecting…</p>
-        )}
-        {isActive && isSpeaking && (
-          <p className="text-cyan-300 text-sm font-medium">Agent is speaking…</p>
-        )}
-        {isActive && !isSpeaking && (
-          <p className="text-white/70 text-sm font-medium">Listening…</p>
-        )}
-        {convStatus === "error" && (
-          <div className="space-y-2">
-            <p className="text-red-400 text-sm">{errorMsg}</p>
+      {/* Panel */}
+      {panelOpen && (
+        <div className="pointer-events-auto absolute bottom-24 right-6 w-[min(100vw-2rem,22rem)] max-h-[min(85vh,32rem)] flex flex-col rounded-2xl border border-white/10 bg-[#0b1220] shadow-2xl text-slate-100 overflow-hidden">
+          <header className="flex items-start gap-3 px-4 pt-4 pb-3 border-b border-white/5">
+            <div
+              className="h-10 w-10 shrink-0 rounded-full"
+              style={{
+                background:
+                  "conic-gradient(from 210deg at 50% 50%, #38bdf8, #f8fafc, #0284c7, #38bdf8)",
+                boxShadow: "inset 0 1px 6px rgba(255,255,255,0.4)",
+              }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm tracking-tight">Omniweb AI</p>
+              <p className="text-xs text-slate-400 truncate">{subtitle}</p>
+            </div>
             <button
               type="button"
-              onClick={startSession}
-              className="text-xs text-blue-400 hover:text-blue-300 underline"
+              onClick={() => {
+                setPanelOpen(false);
+                void stopSession();
+              }}
+              className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+              aria-label="Close"
             >
-              Try again
+              <X className="h-5 w-5" />
+            </button>
+          </header>
+
+          {errorMsg ? (
+            <div className="mx-3 mt-3 rounded-lg bg-red-950/80 border border-red-500/30 px-3 py-2 text-xs text-red-200 flex flex-wrap items-center gap-2">
+              <span className="flex-1 min-w-0 break-words">{errorMsg}</span>
+              <button
+                type="button"
+                className="shrink-0 text-red-300 underline hover:text-red-100"
+                onClick={() => {
+                  setErrorMsg("");
+                  void (mode === "voice" ? onVoiceClick() : onTextMode());
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          ) : null}
+
+          <div className="flex-1 min-h-[10rem] max-h-[14rem] overflow-y-auto px-4 py-3 space-y-2 text-sm">
+            {lines.length === 0 && !errorMsg && (
+              <p className="text-slate-500 text-xs leading-relaxed">
+                Start voice or type below. Your conversation appears here in real time.
+              </p>
+            )}
+            {lines.map((ln, i) => (
+              <div
+                key={`${i}-${ln.role}`}
+                className={`rounded-lg px-3 py-2 ${
+                  ln.role === "user"
+                    ? "bg-slate-800/80 ml-4 text-slate-100"
+                    : "bg-cyan-950/40 mr-4 text-cyan-50 border border-cyan-500/15"
+                }`}
+              >
+                <p className="text-[10px] uppercase tracking-wide opacity-60 mb-0.5">
+                  {ln.role === "user" ? "You" : "Assistant"}
+                </p>
+                <p className="whitespace-pre-wrap break-words">{ln.content}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="px-4 pb-2">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Language</p>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setLangOpen((o) => !o)}
+                disabled={sessionOn}
+                className="w-full flex items-center justify-between gap-2 rounded-xl bg-slate-900/80 border border-white/10 px-3 py-2 text-sm text-left hover:bg-slate-900 disabled:opacity-50"
+              >
+                <span className="flex items-center gap-2 truncate">
+                  <span className="text-lg">{flagEmoji(selectedLang?.code || "en")}</span>
+                  <span className="truncate">{selectedLang?.label || "English"}</span>
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+              </button>
+              {langOpen && langs.length > 0 && (
+                <ul className="absolute z-10 bottom-full mb-1 w-full max-h-48 overflow-auto rounded-xl border border-white/10 bg-[#0f172a] shadow-xl py-1 text-sm">
+                  {langs.map((l) => (
+                    <li key={l.code}>
+                      <button
+                        type="button"
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 text-left"
+                        onClick={() => {
+                          setSelectedLang(l);
+                          setLangOpen(false);
+                        }}
+                      >
+                        <span>{flagEmoji(l.code)}</span>
+                        <span className="truncate">{l.label}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2 px-4 pb-3">
+            <button
+              type="button"
+              onClick={() => void onVoiceClick()}
+              disabled={connecting}
+              className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium transition-all ${
+                mode === "voice" && sessionOn
+                  ? "bg-cyan-500 text-slate-950 shadow-[0_0_24px_rgba(34,211,238,0.35)]"
+                  : "bg-cyan-600/90 text-white hover:bg-cyan-500"
+              } disabled:opacity-60`}
+            >
+              <Mic className="h-4 w-4" />
+              Voice
+            </button>
+            <button
+              type="button"
+              onClick={() => void onTextMode()}
+              disabled={connecting}
+              className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium border border-white/10 transition-all ${
+                mode === "text"
+                  ? "bg-slate-800 text-white"
+                  : "bg-slate-900/60 text-slate-300 hover:bg-slate-800"
+              } disabled:opacity-60`}
+            >
+              <MessageCircle className="h-4 w-4" />
+              Text
             </button>
           </div>
-        )}
-      </div>
 
-      {isActive && (
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={toggleMic}
-            className={`
-              w-12 h-12 rounded-full flex items-center justify-center transition-all
-              ${micMuted
-                ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-              }
-            `}
-            aria-label={micMuted ? "Unmute" : "Mute"}
-          >
-            {micMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-          </button>
+          <div className="flex items-end gap-2 px-4 pb-4 border-t border-white/5 pt-3">
+            <textarea
+              rows={2}
+              value={textDraft}
+              onChange={(e) => setTextDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void sendText();
+                }
+              }}
+              placeholder="Start voice or type a message…"
+              className="flex-1 resize-none rounded-xl bg-slate-900/80 border border-white/10 px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+            />
+            <button
+              type="button"
+              onClick={() => void sendText()}
+              disabled={connecting || !textDraft.trim()}
+              className="shrink-0 h-11 w-11 rounded-full bg-violet-600 hover:bg-violet-500 disabled:opacity-40 flex items-center justify-center text-white"
+              aria-label="Send"
+            >
+              <ArrowUp className="h-5 w-5" />
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={endSession}
-            className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 flex items-center justify-center transition-all"
-            aria-label="End call"
-          >
-            <PhoneOff className="w-5 h-5" />
-          </button>
+          {sessionOn && mode === "voice" && (
+            <div className="px-4 pb-3 flex justify-center">
+              <button
+                type="button"
+                onClick={() => void stopSession()}
+                className="text-xs text-slate-400 hover:text-slate-200 underline"
+              >
+                End voice session
+              </button>
+            </div>
+          )}
         </div>
       )}
-
-      <div className="absolute bottom-4 text-[10px] text-white/20">
-        Powered by Omniweb AI · Retell
-      </div>
     </div>
   );
 }

@@ -24,15 +24,27 @@ const API_PREFIX = "/api";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("omniweb_token");
+  try {
+    return localStorage.getItem("omniweb_token");
+  } catch {
+    return null;
+  }
 }
 
 export function setToken(token: string) {
-  localStorage.setItem("omniweb_token", token);
+  try {
+    localStorage.setItem("omniweb_token", token);
+  } catch {
+    /* quota / private mode */
+  }
 }
 
 export function clearToken() {
-  localStorage.removeItem("omniweb_token");
+  try {
+    localStorage.removeItem("omniweb_token");
+  } catch {
+    /* ignore */
+  }
 }
 
 // ── Admin token stash (for demo round-tripping) ──────────────────────────────
@@ -41,32 +53,49 @@ const ADMIN_TOKEN_KEY = "omniweb_admin_token_stash";
 
 /** Save the current token before entering demo mode so we can restore it later. */
 export function stashAdminToken() {
-  const current = getToken();
-  if (current) {
-    localStorage.setItem(ADMIN_TOKEN_KEY, current);
+  try {
+    const current = getToken();
+    if (current) {
+      localStorage.setItem(ADMIN_TOKEN_KEY, current);
+    }
+  } catch {
+    /* ignore */
   }
 }
 
 /** Restore the admin token stashed before demo mode. Returns true if restored. */
 export function restoreAdminToken(): boolean {
-  const stashed = localStorage.getItem(ADMIN_TOKEN_KEY);
-  if (stashed) {
-    setToken(stashed);
-    localStorage.removeItem(ADMIN_TOKEN_KEY);
-    return true;
+  try {
+    const stashed = localStorage.getItem(ADMIN_TOKEN_KEY);
+    if (stashed) {
+      setToken(stashed);
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      return true;
+    }
+  } catch {
+    /* ignore */
   }
   return false;
 }
 
 /** Check if there's a stashed admin session (i.e. we're in demo mode). */
 export function hasStashedAdminToken(): boolean {
-  return !!localStorage.getItem(ADMIN_TOKEN_KEY);
+  try {
+    return !!localStorage.getItem(ADMIN_TOKEN_KEY);
+  } catch {
+    return false;
+  }
 }
 
 export function parseJwt(token: string): Record<string, any> | null {
   try {
-    const payload = token.split(".")[1];
-    return JSON.parse(atob(payload));
+    const segment = token.split(".")[1];
+    if (!segment) return null;
+    // JWT uses base64url; atob() expects standard base64.
+    let b64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4;
+    if (pad) b64 += "=".repeat(4 - pad);
+    return JSON.parse(atob(b64));
   } catch {
     return null;
   }

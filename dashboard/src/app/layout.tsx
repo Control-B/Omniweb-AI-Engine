@@ -1,6 +1,22 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
-import { AuthProvider } from "@/lib/auth-context";
+import { MaybeAuth } from "@/components/maybe-auth";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Omniweb AI — Dashboard",
@@ -19,10 +35,12 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = headers().get("x-omniweb-path") || "";
+
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`}>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <MaybeAuth pathname={pathname}>{children}</MaybeAuth>
       </body>
     </html>
   );

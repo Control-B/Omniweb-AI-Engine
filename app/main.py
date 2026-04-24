@@ -350,6 +350,7 @@ async def health() -> dict:
         "service": "omniweb-agent-engine",
         "version": "2.0.0",
         "retell_configured": settings.retell_configured,
+        "deepgram_configured": settings.deepgram_configured,
         "twilio_configured": settings.twilio_configured,
         "openai_configured": settings.openai_configured,
         "database_ok": False,

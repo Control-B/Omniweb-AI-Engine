@@ -32,14 +32,19 @@ function engineBaseUrl(): string {
 }
 
 function flagEmoji(code: string): string {
-  if (code === "multi") return "🌐";
-  const c = code.slice(0, 2).toUpperCase();
-  if (c.length !== 2) return "🌐";
-  const A = 0x1f1e6;
-  const a = A + (c.charCodeAt(0) - 65);
-  const b = A + (c.charCodeAt(1) - 65);
-  if (a < A || a > A + 25 || b < A || b > A + 25) return "🌐";
-  return String.fromCodePoint(a, b);
+  try {
+    if (code === "multi") return "🌐";
+    const c = code.slice(0, 2).toUpperCase();
+    if (c.length !== 2) return "🌐";
+    const A = 0x1f1e6;
+    const a = A + (c.charCodeAt(0) - 65);
+    const b = A + (c.charCodeAt(1) - 65);
+    if (a < A || a > A + 25 || b < A || b > A + 25) return "🌐";
+    if (typeof String.fromCodePoint !== "function") return "🌐";
+    return String.fromCodePoint(a, b);
+  } catch {
+    return "🌐";
+  }
 }
 
 type BootstrapPayload = {
@@ -48,8 +53,16 @@ type BootstrapPayload = {
   settings: Record<string, unknown>;
 };
 
+function normalizeAgentId(raw: string | string[] | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  const s = typeof v === "string" ? v.trim() : "";
+  return s || undefined;
+}
+
 export default function VoiceWidgetPage() {
-  const { agentId } = useParams<{ agentId: string }>();
+  const params = useParams<{ agentId: string }>();
+  const agentId = normalizeAgentId(params?.agentId);
   const [panelOpen, setPanelOpen] = useState(false);
   const [langs, setLangs] = useState<LangOption[]>([]);
   const [langOpen, setLangOpen] = useState(false);
@@ -184,8 +197,20 @@ export default function VoiceWidgetPage() {
     setTextDraft("");
   }, [textDraft, startSession]);
 
+  if (!agentId) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-slate-950 px-4 text-center text-slate-300 text-sm">
+        <p>
+          Invalid widget URL — missing client id. Use{" "}
+          <code className="text-cyan-400">/widget/&lt;your-uuid&gt;</code>.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-[9999] pointer-events-none font-sans">
+    <div className="min-h-dvh w-full bg-slate-950 relative">
+      <div className="fixed inset-0 z-[9999] pointer-events-none font-sans">
       {/* Floating orb */}
       <button
         type="button"
@@ -375,6 +400,7 @@ export default function VoiceWidgetPage() {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

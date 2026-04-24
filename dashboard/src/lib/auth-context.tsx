@@ -102,23 +102,37 @@ export function hasPermission(
 }
 
 function readUser(): User | null {
-  const token = getToken();
-  if (!token) return null;
-  const payload = parseJwt(token);
-  if (!payload || (payload.exp && payload.exp * 1000 < Date.now())) {
-    clearToken();
-    return null;
-  }
-  return {
-    client_id: payload.sub,
-    email: payload.email,
-    plan: payload.plan,
-    role: payload.role || "client",
+  try {
+    const token = getToken();
+    if (!token) return null;
+    const payload = parseJwt(token);
+    if (!payload || (payload.exp && Number(payload.exp) * 1000 < Date.now())) {
+      clearToken();
+      return null;
+    }
+    const sub = payload.sub;
+    if (typeof sub !== "string" || !sub) {
+      clearToken();
+      return null;
+    }
+    return {
+      client_id: sub,
+      email: typeof payload.email === "string" ? payload.email : "",
+      plan: typeof payload.plan === "string" ? payload.plan : "",
+      role: (payload.role || "client") as UserRole,
       permissions:
         payload.permissions ||
         DEFAULT_ROLE_PERMISSIONS[(payload.role || "client") as UserRole] ||
         [],
-  };
+    };
+  } catch {
+    try {
+      clearToken();
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -128,8 +142,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(() => {
-    setUser(readUser());
-    setLoading(false);
+    try {
+      setUser(readUser());
+    } catch {
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {

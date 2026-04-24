@@ -82,6 +82,25 @@ services:
       - key: CORS_ORIGINS
         scope: RUN_AND_BUILD_TIME
         value: '["https://omniweb.ai","https://www.omniweb.ai","https://roadcall.ai","https://www.roadcall.ai"]'
+      - key: DEEPGRAM_API_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        value: EV[1:cK+FhXlHWx6S1hIhMtzgK7oU6QcdyVPj:Xyds6epxMQi1Gko80J27qA3/t9VtyZmn+T8cBNrogLe8iRVSVY++zTpKdIvIWMEPMmZtxfwAG2Q=]
+      - key: DEEPGRAM_PROJECT_ID
+        scope: RUN_AND_BUILD_TIME
+        value: "3be092be-81b5-4461-8e2a-1e639e1f43e4"
+      - key: DEEPGRAM_AGENT_MODEL
+        scope: RUN_AND_BUILD_TIME
+        value: gpt-4o-mini
+      - key: DEEPGRAM_STT_MODEL
+        scope: RUN_AND_BUILD_TIME
+        value: nova-3
+      - key: DEEPGRAM_TTS_VOICE
+        scope: RUN_AND_BUILD_TIME
+        value: aura-asteria-en
+      - key: LANDING_PAGE_CLIENT_ID
+        scope: RUN_AND_BUILD_TIME
+        value: ""
 
   - name: dashboard
     github:

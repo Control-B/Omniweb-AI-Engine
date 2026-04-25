@@ -1,15 +1,16 @@
-client_id = ""
-name = "Omniweb AI"
-handle = "omniweb-ai"
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "dffcbcb9a55b1dc6b0493f87557fde75"
+name = "omniweb"
 application_url = "https://app.omniweb.ai"
 embedded = true
 
-[build]
-automatically_update_urls_on_dev = true
-dev_store_url = ""
+[webhooks]
+api_version = "2026-07"
 
 [access_scopes]
-scopes = "read_products,read_orders,read_customers,read_themes"
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,read_orders,read_products,read_themes,unauthenticated_read_product_listings"
 
 [auth]
 redirect_urls = [
@@ -18,36 +19,6 @@ redirect_urls = [
   "https://app.omniweb.ai/api/auth/callback"
 ]
 
-[webhooks]
-api_version = "2026-07"
-
-  [[webhooks.subscriptions]]
-  topics = [ "app/uninstalled" ]
-  uri = "/webhooks/app/uninstalled"
-
-  [[webhooks.subscriptions]]
-  topics = [ "app_subscriptions/update" ]
-  uri = "/webhooks/app/subscriptions/update"
-
-  [[webhooks.subscriptions]]
-  topics = [ "customers/data_request" ]
-  uri = "/webhooks/customers/data_request"
-  compliance_topics = [ "customers/data_request" ]
-
-  [[webhooks.subscriptions]]
-  topics = [ "customers/redact" ]
-  uri = "/webhooks/customers/redact"
-  compliance_topics = [ "customers/redact" ]
-
-  [[webhooks.subscriptions]]
-  topics = [ "shop/redact" ]
-  uri = "/webhooks/shop/redact"
-  compliance_topics = [ "shop/redact" ]
-
-[app_proxy]
-url = "https://api.omniweb.ai/api/shopify/public"
-subpath = "omniweb"
-prefix = "apps"
-
-[pos]
-embedded = false
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true

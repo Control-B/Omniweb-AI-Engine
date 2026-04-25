@@ -15,6 +15,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 import { syncShopToEngine } from "../services/engine.server";
+import { ensureStorefrontAccessToken } from "../services/storefront-token.server";
 
 export async function loader({ request }: { request: Request }) {
   const { session } = await authenticate.admin(request);
@@ -29,7 +30,7 @@ export async function loader({ request }: { request: Request }) {
 }
 
 export async function action({ request }: { request: Request }) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const form = await request.formData();
 
   const shop = await prisma.shop.upsert({
@@ -61,14 +62,30 @@ export async function action({ request }: { request: Request }) {
     },
   });
 
-  await syncShopToEngine({
+  const storefrontToken = await ensureStorefrontAccessToken({
+    admin,
+    shopId: shop.id,
+    shopDomain: session.shop,
+    encryptedToken: shop.encryptedStorefrontToken,
+  });
+  const engineSync = await syncShopToEngine({
     shop_domain: session.shop,
     engine_client_id: shop.engineClientId,
+    admin_access_token: session.accessToken,
+    storefront_access_token: storefrontToken,
+    granted_scopes: (session.scope || "").split(",").map((scope) => scope.trim()).filter(Boolean),
+    storefront_api_version: process.env.SHOPIFY_API_VERSION || "2026-07",
     plan: shop.subscription?.plan || "starter",
     subscription_status: shop.subscription?.status || "trialing",
     assistant_enabled: true,
     agent_config: config,
   });
+  if (engineSync.client_id && engineSync.client_id !== shop.engineClientId) {
+    await prisma.shop.update({
+      where: { id: shop.id },
+      data: { engineClientId: engineSync.client_id },
+    });
+  }
 
   return redirect("/app/agent?saved=1");
 }

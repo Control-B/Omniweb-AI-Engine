@@ -32,6 +32,8 @@
   let greeting = ""
   let minimised = true
   let voiceOpen = false
+  let voiceSession = null
+  let voiceBusy = false
   let messages = []
   let sending = false
 
@@ -50,8 +52,21 @@
       font:600 13px/1 system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.22)}
     #omniweb-voice-fab:hover{background:#1e293b}
     #omniweb-voice-panel{position:fixed;bottom:96px;right:24px;z-index:99999;
-      width:min(100vw - 1rem,420px);height:min(100dvh - 1rem,640px);border:0;border-radius:12px;
-      box-shadow:0 12px 48px rgba(0,0,0,.35);background:#0b1220;display:none}
+      width:min(100vw - 1rem,360px);border-radius:16px;padding:14px;
+      box-shadow:0 12px 48px rgba(0,0,0,.35);background:#0b1220;color:#e5e7eb;
+      display:none;font-family:system-ui,sans-serif}
+    #omniweb-voice-panel .omniweb-voice-row{display:flex;align-items:center;gap:10px}
+    #omniweb-voice-panel .omniweb-voice-status{flex:1;font-size:13px;color:#cbd5e1}
+    #omniweb-voice-panel .omniweb-voice-title{font-weight:700;font-size:14px;color:#fff}
+    #omniweb-voice-panel button{border:0;border-radius:999px;padding:8px 12px;cursor:pointer;
+      font:600 12px/1 system-ui,sans-serif}
+    #omniweb-voice-action{background:#6366f1;color:#fff}
+    #omniweb-voice-close{background:#1e293b;color:#fff}
+    #omniweb-voice-transcript{margin-top:12px;max-height:180px;overflow:auto;display:flex;
+      flex-direction:column;gap:8px}
+    .omniweb-voice-line{font-size:13px;line-height:1.35;padding:8px 10px;border-radius:12px}
+    .omniweb-voice-line.user{background:#312e81;color:#eef2ff;align-self:flex-end}
+    .omniweb-voice-line.assistant{background:#172033;color:#e5e7eb;align-self:flex-start}
     #omniweb-chat-window{position:fixed;bottom:96px;right:24px;z-index:99999;
       width:380px;max-height:520px;border-radius:16px;background:#fff;
       display:flex;flex-direction:column;overflow:hidden;
@@ -91,8 +106,18 @@
   fab.onclick = toggleChat
   const voiceFab = el("button", { id: "omniweb-voice-fab", textContent: "Voice" })
   voiceFab.onclick = toggleVoice
-  const voicePanel = el("iframe", { id: "omniweb-voice-panel", title: "Omniweb Voice Assistant" })
-  voicePanel.setAttribute("allow", "microphone; autoplay")
+  const voicePanel = el("div", { id: "omniweb-voice-panel" })
+  voicePanel.innerHTML = `
+    <div class="omniweb-voice-row">
+      <div>
+        <div class="omniweb-voice-title">Voice Assistant</div>
+        <div class="omniweb-voice-status" id="omniweb-voice-status">Ready</div>
+      </div>
+      <button id="omniweb-voice-action" type="button">Start</button>
+      <button id="omniweb-voice-close" type="button">Close</button>
+    </div>
+    <div id="omniweb-voice-transcript"></div>
+  `
 
   const win = el("div", { id: "omniweb-chat-window", className: "hidden" })
   const header = el("div", { id: "omniweb-chat-header" })
@@ -113,6 +138,11 @@
   document.body.append(fab, voiceFab, voicePanel, win)
 
   document.getElementById("omniweb-chat-close").onclick = toggleChat
+  document.getElementById("omniweb-voice-close").onclick = closeVoice
+  document.getElementById("omniweb-voice-action").onclick = () => {
+    if (voiceSession) stopVoice()
+    else startVoice()
+  }
   sendBtn.onclick = sendMessage
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -154,18 +184,77 @@
   }
 
   function toggleVoice() {
-    voiceOpen = !voiceOpen
-    if (!voiceOpen) {
-      voicePanel.style.display = "none"
-      return
-    }
-    if (!clientId) {
-      appendMsg("system", "Voice is not configured for this store.")
-      voiceOpen = false
-      return
-    }
-    voicePanel.src = `${ENGINE.replace(/\/$/, "")}/widget/${encodeURIComponent(clientId)}?panel=1`
+    if (voiceOpen) return closeVoice()
+    voiceOpen = true
     voicePanel.style.display = "block"
+    if (!voiceSession && !voiceBusy) startVoice()
+  }
+
+  async function closeVoice() {
+    voiceOpen = false
+    voicePanel.style.display = "none"
+    await stopVoice()
+  }
+
+  async function startVoice() {
+    if (voiceBusy) return
+    voiceBusy = true
+    setVoiceStatus("Connecting...")
+    try {
+      await ensureToken()
+      if (!token) throw new Error("Storefront token is unavailable")
+      const ctx = buildContext()
+      const res = await authedFetch(endpoints.voice_session || "/api/shopify/public/voice/session", {
+        method: "POST",
+        body: JSON.stringify({
+          context: ctx,
+          language: (navigator.language || "en").split("-")[0],
+        }),
+      })
+      if (!res.ok) {
+        const detail = await readError(res)
+        throw new Error(detail || `Voice session failed (${res.status})`)
+      }
+      const data = await res.json()
+      sessionId = data.voice_session_id || data.session_id || sessionId
+      const session = new StorefrontVoiceSession({
+        onTranscript(line) {
+          appendVoiceLine(line.role, line.content)
+          appendMsg(line.role === "user" ? "shopper" : "assistant", line.content)
+        },
+        onError(message) {
+          setVoiceStatus(message || "Voice error")
+        },
+        onClose() {
+          voiceSession = null
+          voiceBusy = false
+          setVoiceStatus("Ended")
+          setVoiceAction("Start")
+        },
+      })
+      voiceSession = session
+      await session.connect({
+        websocketUrl: data.websocket_url || data.websocketUrl || data.deepgram?.websocket_url,
+        accessToken: data.access_token || data.accessToken || data.deepgram?.access_token,
+        settings: data.settings || data.deepgram?.settings,
+      })
+      setVoiceStatus("Listening...")
+      setVoiceAction("End")
+    } catch (err) {
+      console.error("[Omniweb] voice error", err)
+      setVoiceStatus(err?.message || "Could not start voice")
+      appendMsg("system", "Voice couldn't start. Please try again.")
+      await stopVoice()
+    } finally {
+      voiceBusy = false
+    }
+  }
+
+  async function stopVoice() {
+    const current = voiceSession
+    voiceSession = null
+    if (current) await current.disconnect()
+    setVoiceAction("Start")
   }
 
   async function startSession() {
@@ -292,6 +381,210 @@
         ...(opts.headers || {}),
       },
     })
+  }
+
+  async function readError(res) {
+    try {
+      const data = await res.json()
+      return data.detail || data.error || JSON.stringify(data)
+    } catch {
+      return res.text()
+    }
+  }
+
+  function setVoiceStatus(text) {
+    const node = document.getElementById("omniweb-voice-status")
+    if (node) node.textContent = text
+  }
+
+  function setVoiceAction(text) {
+    const node = document.getElementById("omniweb-voice-action")
+    if (node) node.textContent = text
+  }
+
+  function appendVoiceLine(role, text) {
+    if (!text) return
+    const box = document.getElementById("omniweb-voice-transcript")
+    if (!box) return
+    const line = el("div", { className: `omniweb-voice-line ${role}` })
+    line.textContent = text
+    box.appendChild(line)
+    box.scrollTop = box.scrollHeight
+  }
+
+  function audioContextClass() {
+    return window.AudioContext || window.webkitAudioContext || null
+  }
+
+  function floatTo16kPcm(input, inputSampleRate) {
+    if (!input.length) return new ArrayBuffer(0)
+    const ratio = inputSampleRate / 16000
+    const outLen = Math.max(1, Math.floor(input.length / ratio))
+    const out = new Int16Array(outLen)
+    for (let i = 0; i < outLen; i += 1) {
+      const srcPos = i * ratio
+      const i0 = Math.floor(srcPos)
+      const i1 = Math.min(i0 + 1, input.length - 1)
+      const frac = srcPos - i0
+      const sample = (input[i0] || 0) * (1 - frac) + (input[i1] || 0) * frac
+      out[i] = Math.min(1, Math.max(-1, sample)) * 0x7fff
+    }
+    return out.buffer
+  }
+
+  class StorefrontVoiceSession {
+    constructor(handlers) {
+      this.handlers = handlers || {}
+      this.ws = null
+      this.micContext = null
+      this.ttsContext = null
+      this.micSource = null
+      this.processor = null
+      this.ttsAnalyser = null
+      this.pendingSettingsJson = null
+      this.settingsApplied = false
+      this.sources = new Set()
+      this.playHead = 0
+      this.welcomeTimer = null
+    }
+
+    async connect(params) {
+      await this.disconnect()
+      if (!params.websocketUrl || !params.accessToken || !params.settings) {
+        throw new Error("Voice bootstrap payload is incomplete")
+      }
+      const socket = new WebSocket(params.websocketUrl, ["bearer", params.accessToken])
+      socket.binaryType = "arraybuffer"
+      await new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("WebSocket connection timeout")), 12000)
+        socket.addEventListener("open", () => {
+          clearTimeout(to)
+          resolve()
+        }, { once: true })
+        socket.addEventListener("error", () => {
+          clearTimeout(to)
+          reject(new Error("WebSocket connection failed"))
+        }, { once: true })
+      })
+
+      const AudioCtx = audioContextClass()
+      if (!AudioCtx) throw new Error("Web Audio API is not available")
+
+      this.ws = socket
+      this.pendingSettingsJson = JSON.stringify(params.settings)
+      socket.addEventListener("message", this.onMessage)
+      socket.addEventListener("close", () => this.handlers.onClose?.())
+      this.welcomeTimer = setTimeout(() => {
+        this.handlers.onError?.("Voice service did not send Welcome.")
+      }, 12000)
+
+      this.ttsContext = new AudioCtx({ latencyHint: "interactive", sampleRate: 48000 })
+      this.ttsAnalyser = this.ttsContext.createAnalyser()
+      this.ttsAnalyser.connect(this.ttsContext.destination)
+      this.playHead = this.ttsContext.currentTime
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, sampleRate: 16000 },
+      })
+      this.micContext = new AudioCtx()
+      await this.micContext.resume()
+      this.micSource = this.micContext.createMediaStreamSource(stream)
+      this.processor = this.micContext.createScriptProcessor(4096, 1, 1)
+      this.micSource.connect(this.processor)
+      this.processor.connect(this.micContext.destination)
+      const inputRate = this.micContext.sampleRate
+      this.processor.onaudioprocess = (ev) => {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.settingsApplied) return
+        const pcm = floatTo16kPcm(ev.inputBuffer.getChannelData(0), inputRate)
+        if (pcm.byteLength) this.ws.send(pcm)
+      }
+      await this.ttsContext.resume()
+    }
+
+    onMessage = (ev) => {
+      if (ev.data instanceof ArrayBuffer) {
+        if (this.settingsApplied) this.playPcm(ev.data)
+        return
+      }
+      try {
+        const data = JSON.parse(String(ev.data))
+        if (data.type === "Welcome" && this.ws && this.pendingSettingsJson) {
+          if (this.welcomeTimer) clearTimeout(this.welcomeTimer)
+          this.welcomeTimer = null
+          this.ws.send(this.pendingSettingsJson)
+          this.pendingSettingsJson = null
+        }
+        if (data.type === "SettingsApplied") this.settingsApplied = true
+        if (data.type === "UserStartedSpeaking") this.stopPlayback()
+        if (data.type === "ConversationText" && (data.role === "user" || data.role === "assistant")) {
+          this.handlers.onTranscript?.({ role: data.role, content: String(data.content || "") })
+        }
+        if (data.type === "Error") {
+          this.handlers.onError?.(data.message || JSON.stringify(data.description || data))
+        }
+      } catch {
+        // Ignore non-JSON websocket messages.
+      }
+    }
+
+    playPcm(buf) {
+      if (!this.ttsContext || !this.ttsAnalyser) return
+      const samples = new Int16Array(buf)
+      if (!samples.length) return
+      const buffer = this.ttsContext.createBuffer(1, samples.length, 24000)
+      const ch = buffer.getChannelData(0)
+      for (let i = 0; i < samples.length; i += 1) ch[i] = samples[i] / 32768
+      const src = this.ttsContext.createBufferSource()
+      src.buffer = buffer
+      src.connect(this.ttsAnalyser)
+      const now = this.ttsContext.currentTime
+      if (this.playHead < now) this.playHead = now
+      src.addEventListener("ended", () => this.sources.delete(src))
+      src.start(this.playHead)
+      this.playHead += buffer.duration
+      this.sources.add(src)
+    }
+
+    stopPlayback() {
+      this.sources.forEach((src) => {
+        try { src.stop() } catch {}
+      })
+      this.sources.clear()
+      if (this.ttsContext) this.playHead = this.ttsContext.currentTime
+    }
+
+    async disconnect() {
+      if (this.welcomeTimer) clearTimeout(this.welcomeTimer)
+      this.welcomeTimer = null
+      this.pendingSettingsJson = null
+      this.settingsApplied = false
+      if (this.ws) {
+        try {
+          this.ws.removeEventListener("message", this.onMessage)
+          this.ws.close(1000, "client disconnect")
+        } catch {}
+        this.ws = null
+      }
+      this.stopPlayback()
+      if (this.processor) {
+        try { this.processor.disconnect() } catch {}
+        this.processor = null
+      }
+      if (this.micSource) {
+        try { this.micSource.disconnect() } catch {}
+        this.micSource.mediaStream.getTracks().forEach((track) => track.stop())
+        this.micSource = null
+      }
+      if (this.micContext) {
+        try { await this.micContext.close() } catch {}
+        this.micContext = null
+      }
+      if (this.ttsContext) {
+        try { await this.ttsContext.close() } catch {}
+        this.ttsContext = null
+      }
+      this.ttsAnalyser = null
+    }
   }
 
   function appendMsg(role, text) {

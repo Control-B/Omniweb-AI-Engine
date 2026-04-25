@@ -1,14 +1,25 @@
 # ── Stage 1: Install dependencies ─────────────────────────────────────────────
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY dashboard/package.json dashboard/package-lock.json* ./
-RUN npm ci || npm install
+RUN corepack enable && corepack prepare pnpm@9.6.0 --activate
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# ── Dev runtime: isolated container without macOS bind-mount file locks ──────
+FROM deps AS dev
+WORKDIR /app
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY . .
+EXPOSE 3000
+CMD ["pnpm", "dev"]
 
 # ── Stage 2: Build ────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@9.6.0 --activate
 COPY --from=deps /app/node_modules ./node_modules
-COPY dashboard/ ./
+COPY . .
 
 # Baked into the client bundle at build time (set on the dashboard component in DO).
 ARG NEXT_PUBLIC_API_URL
@@ -23,7 +34,7 @@ ENV NEXT_PUBLIC_PLATFORM_URL=$NEXT_PUBLIC_PLATFORM_URL
 ENV CLERK_PUBLISHABLE_KEY=$CLERK_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 
-RUN npm run build
+RUN pnpm build
 
 # ── Stage 3: Production runner ────────────────────────────────────────────────
 FROM node:20-alpine AS runner

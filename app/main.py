@@ -210,6 +210,7 @@ app.add_middleware(
         "X-Internal-Key",
         "X-Gadget-Secret",
         "X-Engine-Secret",
+        "X-Omniweb-Shopify-Secret",
         "X-Tool-Secret",
     ],
 )

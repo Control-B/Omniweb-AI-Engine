@@ -1,0 +1,42 @@
+services:
+  dashboard:
+    build:
+      context: ./dashboard
+      target: dev
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_ENGINE_URL: ${NEXT_PUBLIC_ENGINE_URL:-http://localhost:8000}
+      NEXT_PUBLIC_PLATFORM_URL: ${NEXT_PUBLIC_PLATFORM_URL:-http://localhost:3000}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  shopify-app:
+    build:
+      context: ./frontend/shopify-app
+      target: dev
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: development
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY:-}
+      SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET:-}
+      SHOPIFY_APP_URL: ${SHOPIFY_APP_URL:-http://localhost:3001}
+      SHOPIFY_API_VERSION: ${SHOPIFY_API_VERSION:-2026-07}
+      SHOPIFY_SCOPES: ${SHOPIFY_SCOPES:-read_customers,read_orders,read_products,read_themes,unauthenticated_read_product_listings}
+      DATABASE_URL: postgresql://omniweb:password@postgres:5432/omniweb_engine
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-at-least-32-characters}
+      OMNIWEB_ENGINE_URL: http://api:8000
+      OMNIWEB_ENGINE_SHARED_SECRET: ${OMNIWEB_ENGINE_SHARED_SECRET:-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy

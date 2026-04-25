@@ -12,19 +12,57 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
+import { syncShopToEngine } from "../services/engine.server";
+import { ensureStorefrontAccessToken } from "../services/storefront-token.server";
 
 export async function loader({ request }: { request: Request }) {
-  const { session } = await authenticate.admin(request);
-  const shop = await prisma.shop.findUnique({
+  const { admin, session } = await authenticate.admin(request);
+  const shop = await prisma.shop.upsert({
     where: { shopDomain: session.shop },
+    update: { status: "installed" },
+    create: { shopDomain: session.shop, status: "installed" },
     include: { subscription: true, agentConfig: true },
   });
+  let engineClientId = shop.engineClientId;
+  let engineSyncError: string | null = null;
+  try {
+    const storefrontToken = await ensureStorefrontAccessToken({
+      admin,
+      shopId: shop.id,
+      shopDomain: session.shop,
+      encryptedToken: shop.encryptedStorefrontToken,
+    });
+    const engineSync = await syncShopToEngine({
+      shop_domain: session.shop,
+      engine_client_id: shop.engineClientId,
+      admin_access_token: session.accessToken,
+      storefront_access_token: storefrontToken,
+      granted_scopes: (session.scope || "").split(",").map((scope) => scope.trim()).filter(Boolean),
+      storefront_api_version: process.env.SHOPIFY_API_VERSION || "2026-07",
+      plan: shop.subscription?.plan || "starter",
+      subscription_status: shop.subscription?.status || "trialing",
+      assistant_enabled: Boolean(shop.agentConfig?.voiceEnabled ?? true),
+      agent_config: shop.agentConfig || {},
+    });
+    if (engineSync.client_id && engineSync.client_id !== shop.engineClientId) {
+      engineClientId = engineSync.client_id;
+      await prisma.shop.update({
+        where: { id: shop.id },
+        data: { engineClientId },
+      });
+    }
+  } catch (error) {
+    engineSyncError = error instanceof Error ? error.message : "Engine sync failed";
+    // The dashboard should still render if the Engine is temporarily unavailable.
+  }
 
   return json({
     shopDomain: session.shop,
     plan: shop?.subscription?.plan || "starter",
     status: shop?.subscription?.status || "trialing",
     agentConfigured: Boolean(shop?.agentConfig),
+    engineConnected: Boolean(engineClientId),
+    engineSyncError,
   });
 }
 
@@ -57,8 +95,12 @@ export default function Dashboard() {
             <Card>
               <BlockStack gap="300">
                 <Text as="h2" variant="headingMd">Storefront Widget</Text>
-                <Badge>Theme app embed</Badge>
-                <Text as="p" tone="subdued">Enable the Omniweb widget from Shopify theme app embeds.</Text>
+                <Badge tone={data.engineConnected ? "success" : "attention"}>
+                  {data.engineConnected ? "Engine synced" : "Needs sync"}
+                </Badge>
+                <Text as="p" tone="subdued">
+                  {data.engineSyncError || "Enable the Omniweb widget from Shopify theme app embeds."}
+                </Text>
                 <Button url="shopify:admin/themes/current/editor?context=apps">Open theme editor</Button>
               </BlockStack>
             </Card>

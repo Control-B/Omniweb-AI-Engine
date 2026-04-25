@@ -3,6 +3,8 @@ import { Form, useLoaderData } from "@remix-run/react";
 import { Badge, BlockStack, Button, Card, InlineGrid, Layout, Page, Text } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
+import { syncShopToEngine } from "../services/engine.server";
+import { ensureStorefrontAccessToken } from "../services/storefront-token.server";
 
 const STARTER_PLAN = "Starter";
 const GROWTH_PLAN = "Growth";
@@ -39,7 +41,7 @@ export async function loader({ request }: { request: Request }) {
 }
 
 export async function action({ request }: { request: Request }) {
-  const { session, billing } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
   const form = await request.formData();
   const plan = String(form.get("plan") || "starter") as keyof typeof PLANS;
   const selected = PLANS[plan] || PLANS.starter;
@@ -65,6 +67,30 @@ export async function action({ request }: { request: Request }) {
     update: { plan, status: "active" },
     create: { shopId: shop.id, plan, status: "active" },
   });
+  const storefrontToken = await ensureStorefrontAccessToken({
+    admin,
+    shopId: shop.id,
+    shopDomain: session.shop,
+    encryptedToken: shop.encryptedStorefrontToken,
+  });
+  const engineSync = await syncShopToEngine({
+    shop_domain: session.shop,
+    engine_client_id: shop.engineClientId,
+    admin_access_token: session.accessToken,
+    storefront_access_token: storefrontToken,
+    granted_scopes: (session.scope || "").split(",").map((scope) => scope.trim()).filter(Boolean),
+    storefront_api_version: process.env.SHOPIFY_API_VERSION || "2026-07",
+    plan,
+    subscription_status: "active",
+    assistant_enabled: true,
+    agent_config: {},
+  });
+  if (engineSync.client_id && engineSync.client_id !== shop.engineClientId) {
+    await prisma.shop.update({
+      where: { id: shop.id },
+      data: { engineClientId: engineSync.client_id },
+    });
+  }
 
   return redirect("/app/billing?billing=confirmed");
 }

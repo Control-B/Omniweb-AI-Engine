@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import uuid
 from datetime import datetime
 from typing import Any
@@ -7,13 +8,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.api.routes.deepgram import VoiceAgentBootstrapRequest, run_voice_agent_bootstrap
+from app.core.config import get_settings
 from app.core.auth import get_current_client, is_internal_staff_role
-from app.models.models import AgentConfig, ShopifyAssistantSession, ShopifyDiscountApproval, ShopifyStore
+from app.models.models import AgentConfig, Client, Lead, ShopifyAssistantSession, ShopifyDiscountApproval, ShopifyStore
 from app.services.shopify_api_service import ShopifyAPIError, ShopifyAPIService
 from app.services.shopify_billing_service import ShopifyBillingError, ShopifyBillingService
 from app.services.shopify_crypto_service import ShopifyCryptoService
@@ -26,8 +28,10 @@ from app.services.shopify_storefront_bridge_service import (
     ShopifyStorefrontBridgeError,
     ShopifyStorefrontBridgeService,
 )
+from app.services.url_knowledge_service import UrlKnowledgeService
 
 router = APIRouter(prefix="/shopify", tags=["shopify"])
+settings = get_settings()
 
 
 class ProductSignal(BaseModel):
@@ -125,6 +129,404 @@ class StorefrontEvent(BaseModel):
 
 class StorefrontEventsRequest(BaseModel):
     events: list[StorefrontEvent] = Field(default_factory=list)
+
+
+class EngineShopSyncRequest(BaseModel):
+    shop_domain: str
+    engine_client_id: str | None = None
+    shop_name: str | None = None
+    shop_email: str | None = None
+    admin_access_token: str | None = None
+    storefront_access_token: str | None = None
+    granted_scopes: list[str] = Field(default_factory=list)
+    storefront_api_version: str | None = None
+    plan: str = "starter"
+    subscription_status: str = "trialing"
+    assistant_enabled: bool = True
+    agent_config: dict[str, Any] = Field(default_factory=dict)
+
+
+class EngineSubscriptionSyncRequest(BaseModel):
+    shop_domain: str
+    plan: str = "starter"
+    subscription_status: str = "active"
+    shopify_subscription_gid: str | None = None
+
+
+class EngineStoreDisableRequest(BaseModel):
+    shop_domain: str
+    reason: str = "disabled"
+
+
+class EngineAgentConfigSyncRequest(BaseModel):
+    shop_domain: str
+    agent_config: dict[str, Any] = Field(default_factory=dict)
+
+
+class EngineKnowledgeJobRequest(BaseModel):
+    shop_domain: str
+    source_id: str | None = None
+    url: str
+
+
+def _verify_shopify_engine_secret(secret: str | None) -> None:
+    expected = (settings.SHOPIFY_ENGINE_SHARED_SECRET or settings.GADGET_ENGINE_SHARED_SECRET or "").strip()
+    if not expected:
+        raise HTTPException(503, "SHOPIFY_ENGINE_SHARED_SECRET is not configured")
+    if not secret or not hmac.compare_digest(secret, expected):
+        raise HTTPException(403, "Invalid Shopify engine shared secret")
+
+
+def _shopify_synthetic_client_email(shop_domain: str) -> str:
+    safe = shop_domain.replace("@", "").replace("/", "-")
+    return f"shopify+{safe}@omniweb.local"
+
+
+async def _get_or_create_shopify_engine_client(
+    db: AsyncSession,
+    *,
+    shop_domain: str,
+    engine_client_id: str | None = None,
+    shop_name: str | None = None,
+    shop_email: str | None = None,
+    plan: str = "starter",
+) -> Client:
+    client = None
+    if engine_client_id:
+        try:
+            client = await db.get(Client, uuid.UUID(engine_client_id))
+        except ValueError as exc:
+            raise HTTPException(400, "Invalid engine_client_id") from exc
+
+    if not client:
+        store_result = await db.execute(
+            select(ShopifyStore).where(ShopifyStore.shop_domain == shop_domain).limit(1)
+        )
+        existing_store = store_result.scalar_one_or_none()
+        if existing_store:
+            client = await db.get(Client, existing_store.client_id)
+
+    if not client:
+        email = _shopify_synthetic_client_email(shop_domain)
+        client_result = await db.execute(select(Client).where(Client.email == email).limit(1))
+        client = client_result.scalar_one_or_none()
+
+    if not client:
+        client = Client(
+            name=shop_name or shop_domain,
+            email=_shopify_synthetic_client_email(shop_domain),
+            notification_email=shop_email,
+            role="client",
+            is_active=True,
+        )
+        db.add(client)
+        await db.flush()
+
+    if shop_name:
+        client.name = shop_name
+    if shop_email:
+        client.notification_email = shop_email
+    if plan in {"starter", "growth", "pro", "agency"}:
+        client.plan = plan
+    return client
+
+
+async def _get_or_create_shopify_engine_store(
+    db: AsyncSession,
+    *,
+    client: Client,
+    shop_domain: str,
+) -> ShopifyStore:
+    result = await db.execute(select(ShopifyStore).where(ShopifyStore.shop_domain == shop_domain).limit(1))
+    store = result.scalar_one_or_none()
+    if not store:
+        store = ShopifyStore(client_id=client.id, shop_domain=shop_domain)
+        db.add(store)
+        await db.flush()
+    store.client_id = client.id
+    store.shop_domain = shop_domain
+    return store
+
+
+async def _sync_engine_agent_config(
+    db: AsyncSession,
+    *,
+    client_id: uuid.UUID,
+    shop_domain: str,
+    agent_config: dict[str, Any] | None,
+) -> AgentConfig:
+    result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == client_id).limit(1))
+    config = result.scalar_one_or_none()
+    if not config:
+        config = AgentConfig(
+            client_id=client_id,
+            agent_name="Omniweb AI",
+            business_name=shop_domain,
+            business_type="ecommerce",
+            industry="ecommerce",
+            agent_mode="ecommerce_assistant",
+        )
+        db.add(config)
+        await db.flush()
+
+    payload = agent_config or {}
+    if payload.get("agentName") is not None:
+        config.agent_name = str(payload["agentName"] or "Omniweb AI")
+    if payload.get("businessName") is not None:
+        config.business_name = str(payload["businessName"] or shop_domain)
+    if payload.get("greeting") is not None:
+        config.agent_greeting = str(payload["greeting"] or config.agent_greeting)
+    if payload.get("systemPrompt") is not None:
+        config.system_prompt = str(payload["systemPrompt"] or "")
+    if isinstance(payload.get("supportedLanguages"), list):
+        config.supported_languages = [str(lang) for lang in payload["supportedLanguages"] if str(lang).strip()] or ["en"]
+    if isinstance(payload.get("widgetSettings"), dict):
+        config.widget_config = payload["widgetSettings"]
+    if not config.business_name:
+        config.business_name = shop_domain
+    config.business_type = config.business_type or "ecommerce"
+    config.industry = "ecommerce"
+    config.agent_mode = "ecommerce_assistant"
+    return config
+
+
+@router.post("/engine/sync-shop")
+async def sync_shop_from_shopify_app(
+    body: EngineShopSyncRequest,
+    x_omniweb_shopify_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Mirror Shopify app install/config state into the AI Engine."""
+    _verify_shopify_engine_secret(x_omniweb_shopify_secret or x_engine_secret)
+    try:
+        shop_domain = ShopifyOAuthService.normalize_shop_domain(body.shop_domain)
+    except ShopifyOAuthError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    client = await _get_or_create_shopify_engine_client(
+        db,
+        shop_domain=shop_domain,
+        engine_client_id=body.engine_client_id,
+        shop_name=body.shop_name,
+        shop_email=body.shop_email,
+        plan=body.plan,
+    )
+    store = await _get_or_create_shopify_engine_store(db, client=client, shop_domain=shop_domain)
+    store.shop_name = body.shop_name or store.shop_name
+    store.shop_email = body.shop_email or store.shop_email
+    store.app_status = "installed"
+    store.installed_at = store.installed_at or utcnow()
+    store.uninstalled_at = None
+    store.assistant_enabled = body.assistant_enabled
+    if body.admin_access_token:
+        store.admin_access_token = ShopifyCryptoService.encrypt(body.admin_access_token)
+    if body.storefront_access_token:
+        store.storefront_access_token = ShopifyCryptoService.encrypt(body.storefront_access_token)
+    if body.granted_scopes:
+        store.granted_scopes = body.granted_scopes
+    if body.storefront_api_version:
+        store.storefront_api_version = body.storefront_api_version
+    store.shopify_plan = body.plan
+    store.shopify_subscription_status = body.subscription_status
+    store.shopify_billing_updated_at = utcnow()
+
+    agent_config = await _sync_engine_agent_config(
+        db,
+        client_id=client.id,
+        shop_domain=shop_domain,
+        agent_config=body.agent_config,
+    )
+    nav_config = body.agent_config.get("navConfig") if body.agent_config else None
+    if isinstance(nav_config, dict):
+        store.nav_config = nav_config
+
+    await db.flush()
+    await db.refresh(store)
+    return {
+        "ok": True,
+        "client_id": str(client.id),
+        "store_id": str(store.id),
+        "agent_config_id": str(agent_config.id),
+        "shop_domain": store.shop_domain,
+        "assistant_enabled": store.assistant_enabled,
+    }
+
+
+@router.post("/engine/sync-agent-config")
+async def sync_agent_config_from_shopify_app(
+    body: EngineAgentConfigSyncRequest,
+    x_omniweb_shopify_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    _verify_shopify_engine_secret(x_omniweb_shopify_secret or x_engine_secret)
+    store = await _get_store_by_shop_domain(db, ShopifyOAuthService.normalize_shop_domain(body.shop_domain))
+    if not store:
+        raise HTTPException(404, "Shopify store is not configured in Omniweb")
+    config = await _sync_engine_agent_config(
+        db,
+        client_id=store.client_id,
+        shop_domain=store.shop_domain,
+        agent_config=body.agent_config,
+    )
+    nav_config = body.agent_config.get("navConfig") if body.agent_config else None
+    if isinstance(nav_config, dict):
+        store.nav_config = nav_config
+    await db.flush()
+    return {"ok": True, "agent_config_id": str(config.id), "client_id": str(store.client_id)}
+
+
+@router.post("/engine/sync-subscription")
+async def sync_subscription_from_shopify_app(
+    body: EngineSubscriptionSyncRequest,
+    x_omniweb_shopify_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    _verify_shopify_engine_secret(x_omniweb_shopify_secret or x_engine_secret)
+    store = await _get_store_by_shop_domain(db, ShopifyOAuthService.normalize_shop_domain(body.shop_domain))
+    if not store:
+        raise HTTPException(404, "Shopify store is not configured in Omniweb")
+    store.shopify_plan = body.plan
+    store.shopify_subscription_status = body.subscription_status
+    store.shopify_subscription_gid = body.shopify_subscription_gid or store.shopify_subscription_gid
+    store.shopify_billing_updated_at = utcnow()
+    await db.flush()
+    return {"ok": True, "client_id": str(store.client_id), "shop_domain": store.shop_domain}
+
+
+@router.post("/engine/disable-store")
+async def disable_store_from_shopify_app(
+    body: EngineStoreDisableRequest,
+    x_omniweb_shopify_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    _verify_shopify_engine_secret(x_omniweb_shopify_secret or x_engine_secret)
+    store = await _get_store_by_shop_domain(db, ShopifyOAuthService.normalize_shop_domain(body.shop_domain))
+    if not store:
+        raise HTTPException(404, "Shopify store is not configured in Omniweb")
+
+    store.assistant_enabled = False
+    reason = (body.reason or "").lower()
+    if reason in {"uninstalled", "app_uninstalled"}:
+        store.app_status = "uninstalled"
+        store.uninstalled_at = utcnow()
+    elif reason in {"cancelled", "canceled", "subscription_cancelled"}:
+        store.shopify_subscription_status = "cancelled"
+    await db.flush()
+    return {"ok": True, "client_id": str(store.client_id), "shop_domain": store.shop_domain}
+
+
+@router.post("/engine/knowledge-jobs")
+async def enqueue_shopify_knowledge_job(
+    body: EngineKnowledgeJobRequest,
+    x_omniweb_shopify_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    _verify_shopify_engine_secret(x_omniweb_shopify_secret or x_engine_secret)
+    store = await _get_store_by_shop_domain(db, ShopifyOAuthService.normalize_shop_domain(body.shop_domain))
+    if not store:
+        raise HTTPException(404, "Shopify store is not configured in Omniweb")
+    result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == store.client_id).limit(1))
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(404, "Agent config not found for Shopify store")
+
+    try:
+        ingest = await UrlKnowledgeService.ingest_website(body.url)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, "Failed to ingest Shopify knowledge URL") from exc
+
+    summary = ingest.get("summary") or ""
+    if not summary:
+        raise HTTPException(422, "No readable knowledge extracted from URL")
+
+    existing = (config.custom_context or "").strip()
+    source_url = ingest.get("source_url") or body.url
+    section = f"Shopify knowledge source: {source_url}\n{summary}"
+    config.custom_context = f"{existing}\n\n{section}".strip() if existing else section
+    config.website_domain = source_url
+    await db.flush()
+    return {
+        "ok": True,
+        "job_id": body.source_id,
+        "url": source_url,
+        "pages_crawled": ingest.get("pages_crawled", 0),
+        "summary_chars": len(summary),
+    }
+
+
+@router.get("/engine/analytics")
+async def get_shopify_engine_analytics(
+    shop_domain: str = Query(...),
+    x_omniweb_shopify_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    _verify_shopify_engine_secret(x_omniweb_shopify_secret or x_engine_secret)
+    store = await _get_store_by_shop_domain(db, ShopifyOAuthService.normalize_shop_domain(shop_domain))
+    if not store:
+        raise HTTPException(404, "Shopify store is not configured in Omniweb")
+
+    sessions_count = await db.scalar(
+        select(func.count()).select_from(ShopifyAssistantSession).where(ShopifyAssistantSession.store_id == store.id)
+    )
+    active_sessions_count = await db.scalar(
+        select(func.count()).select_from(ShopifyAssistantSession).where(
+            ShopifyAssistantSession.store_id == store.id,
+            ShopifyAssistantSession.status == "active",
+        )
+    )
+    leads_count = await db.scalar(
+        select(func.count()).select_from(Lead).where(Lead.client_id == store.client_id)
+    )
+    discount_requests_count = await db.scalar(
+        select(func.count()).select_from(ShopifyDiscountApproval).where(ShopifyDiscountApproval.store_id == store.id)
+    )
+    approved_discounts_count = await db.scalar(
+        select(func.count()).select_from(ShopifyDiscountApproval).where(
+            ShopifyDiscountApproval.store_id == store.id,
+            ShopifyDiscountApproval.status == "approved",
+        )
+    )
+    recent_result = await db.execute(
+        select(ShopifyAssistantSession)
+        .where(ShopifyAssistantSession.store_id == store.id)
+        .order_by(ShopifyAssistantSession.last_seen_at.desc())
+        .limit(10)
+    )
+    recent_sessions = [
+        {
+            "id": str(session.id),
+            "status": session.status,
+            "shopper_email": session.shopper_email,
+            "shopper_locale": session.shopper_locale,
+            "currency": session.currency,
+            "last_intent": session.last_intent,
+            "current_page_url": (session.context or {}).get("current_page_url"),
+            "messages": len(session.transcript or []),
+            "last_seen_at": session.last_seen_at.isoformat() if session.last_seen_at else None,
+            "created_at": session.created_at.isoformat() if session.created_at else None,
+        }
+        for session in recent_result.scalars().all()
+    ]
+
+    return {
+        "ok": True,
+        "shop_domain": store.shop_domain,
+        "client_id": str(store.client_id),
+        "conversations": sessions_count or 0,
+        "active_sessions": active_sessions_count or 0,
+        "qualified_leads": leads_count or 0,
+        "discount_requests": discount_requests_count or 0,
+        "approved_discounts": approved_discounts_count or 0,
+        "recent_sessions": recent_sessions,
+    }
 
 
 @router.get("/public/bootstrap")

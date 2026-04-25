@@ -131,6 +131,7 @@ class Settings(BaseSettings):
         "read_products,read_discounts,write_discounts,read_orders,"
         "read_customers,read_themes,write_script_tags"
     )
+    SHOPIFY_ENGINE_SHARED_SECRET: str = ""
 
     # ── Gadget bridge (Shopify data intelligence) ───────────────────────
     GADGET_API_BASE_URL: str = ""

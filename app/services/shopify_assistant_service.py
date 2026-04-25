@@ -25,6 +25,7 @@ class ShopifyAssistantService:
     """Rule-based commerce assistant orchestration for Shopify storefronts."""
 
     PRODUCT_INTENTS = {"product_discovery", "product_recommendation", "cross_sell", "upsell"}
+    NAVIGATION_INTENTS = {"site_navigation", "checkout"}
     SUPPORT_INTENTS = {
         "shipping_policy",
         "returns_policy",
@@ -151,6 +152,22 @@ class ShopifyAssistantService:
     @staticmethod
     def infer_intent(message: str, context: dict[str, Any]) -> str:
         text = (message or "").strip().lower()
+        if any(
+            token in text
+            for token in [
+                "where do i find",
+                "where can i find",
+                "where is",
+                "navigate",
+                "go to",
+                "take me to",
+                "menu",
+                "collection",
+                "category",
+                "search page",
+            ]
+        ):
+            return "site_navigation"
         if any(token in text for token in ["discount", "coupon", "% off", "deal", "promo", "sale price"]):
             return "discount_request"
         if any(token in text for token in ["checkout", "ready to buy", "buy now", "place order"]):
@@ -172,6 +189,28 @@ class ShopifyAssistantService:
         if context.get("cart_lines"):
             return "upsell"
         return "product_discovery"
+
+    @staticmethod
+    def resolve_navigation_target(context: dict[str, Any], shopper_message: str) -> str | None:
+        nav_config = context.get("nav_config") or {}
+        if not isinstance(nav_config, dict):
+            return None
+        normalized = (shopper_message or "").lower().strip()
+        if not normalized:
+            return None
+        for _, value in nav_config.items():
+            if not isinstance(value, dict):
+                continue
+            label = str(value.get("label") or "").lower().strip()
+            aliases = [str(x).lower().strip() for x in (value.get("aliases") or []) if str(x).strip()]
+            url = str(value.get("url") or "").strip()
+            if not url:
+                continue
+            if label and label in normalized:
+                return url
+            if any(alias and alias in normalized for alias in aliases):
+                return url
+        return None
 
     @staticmethod
     def recommend_products(message: str, context: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
@@ -285,6 +324,8 @@ class ShopifyAssistantService:
         navigate_to = None
         checkout_url = context.get("checkout_url")
         discount_request = None
+        if not checkout_url and (context.get("checkout_config") or {}).get("checkout_url"):
+            checkout_url = (context.get("checkout_config") or {}).get("checkout_url")
 
         # ── Try LLM-powered reply ────────────────────────────────────
         llm_message = None
@@ -328,6 +369,16 @@ class ShopifyAssistantService:
                 lines.append(
                     "You're ready for checkout. I'll send you there now, and you'll complete payment securely on the store's checkout page."
                 )
+            elif intent == "site_navigation":
+                target = ShopifyAssistantService.resolve_navigation_target(context, shopper_message)
+                if target:
+                    action = "navigate_to_page"
+                    navigate_to = target
+                    lines.append("Perfect — I'll take you there now.")
+                else:
+                    lines.append(
+                        "I can guide you to products, collections, cart, checkout, or policy pages. Tell me what section you want and I'll navigate you there."
+                    )
             elif recommendations:
                 action = "navigate_to_product"
                 navigate_to = recommendations[0].get("url") or recommendations[0].get("handle")
@@ -351,6 +402,11 @@ class ShopifyAssistantService:
             elif intent == "checkout" and checkout_url:
                 action = "navigate_to_checkout"
                 navigate_to = checkout_url
+            elif intent == "site_navigation":
+                target = ShopifyAssistantService.resolve_navigation_target(context, shopper_message)
+                if target:
+                    action = "navigate_to_page"
+                    navigate_to = target
             elif recommendations:
                 action = "navigate_to_product"
                 navigate_to = recommendations[0].get("url") or recommendations[0].get("handle")
@@ -415,8 +471,11 @@ class ShopifyAssistantService:
         shop_name = store.shop_name or store.shop_domain.split(".")[0].replace("-", " ").title()
         system = (
             f"You are a friendly, knowledgeable shopping assistant for {shop_name}. "
+            "You handle both voice and text conversations naturally. "
             "Your job is to help shoppers find the right products, answer questions about shipping/returns/sizing, "
-            "and guide them toward checkout. Be concise (2-3 sentences max), warm, and helpful. "
+            "guide site navigation, and move qualified shoppers toward checkout like a top in-store sales associate. "
+            "Support multilingual shoppers by responding in the language they use and switching languages when they switch. "
+            "Be concise (2-3 sentences max), warm, and helpful. "
             "Never fabricate product details — only reference products from the recommendations list below. "
             "Never handle payment info directly — always guide to the secure checkout page. "
             "If you don't know something, say so honestly and offer to help in another way.\n\n"

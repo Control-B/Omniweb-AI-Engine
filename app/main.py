@@ -34,6 +34,7 @@ from app.api.routes import (
     chat,
     deepgram,
     embed,
+    gadget,
     industry,
     knowledge_base,
     leads,
@@ -202,7 +203,15 @@ app.add_middleware(
     allow_origin_regex=r"https?://.*",
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Internal-Key"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-API-Key",
+        "X-Internal-Key",
+        "X-Gadget-Secret",
+        "X-Engine-Secret",
+        "X-Tool-Secret",
+    ],
 )
 
 
@@ -332,6 +341,7 @@ app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
 app.include_router(retell.router, prefix=API_PREFIX)
 app.include_router(deepgram.router, prefix=API_PREFIX)
+app.include_router(gadget.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
 app.include_router(shopify.router, prefix=API_PREFIX)
 app.include_router(shopify_webhooks.router, prefix=API_PREFIX)

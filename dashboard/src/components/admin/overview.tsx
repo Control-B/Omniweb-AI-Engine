@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { adminGetStats } from "@/lib/api";
+import { WidgetTester } from "@/components/widget-tester";
 import { cn, formatDuration, formatPhone, timeAgo } from "@/lib/utils";
 import {
   Users,
@@ -129,6 +130,13 @@ export function AdminOverview() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">
+        <WidgetTester
+          title="Test AI Agent"
+          description="Preview the same voice widget used on the landing page right from admin. Enter a client UUID and talk to the agent here."
+          className="rounded-2xl border border-border bg-card p-6"
+          previewClassName="w-full min-h-[min(75vh,640px)] bg-transparent"
+        />
+
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold text-foreground">Platform Overview</h1>

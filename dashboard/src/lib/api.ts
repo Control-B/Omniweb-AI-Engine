@@ -5,12 +5,10 @@ function normalizeApiBase(url: string): string {
 }
 
 function resolveApiBase(): string {
-  // Prefer explicit engine URL (same as widget) so admin API calls never infer
-  // from the dashboard origin — the Next app and FastAPI are usually different hosts.
-  const configured =
-    process.env.NEXT_PUBLIC_API_URL?.trim() ||
-    process.env.NEXT_PUBLIC_ENGINE_URL?.trim();
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (configured) return normalizeApiBase(configured);
+  const engineUrl = process.env.NEXT_PUBLIC_ENGINE_URL?.trim();
+  if (engineUrl) return normalizeApiBase(engineUrl);
   if (process.env.NODE_ENV === "development") return "http://localhost:8000";
   return DEFAULT_PRODUCTION_API_BASE;
 }
@@ -24,27 +22,15 @@ const API_PREFIX = "/api";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem("omniweb_token");
-  } catch {
-    return null;
-  }
+  return localStorage.getItem("omniweb_token");
 }
 
 export function setToken(token: string) {
-  try {
-    localStorage.setItem("omniweb_token", token);
-  } catch {
-    /* quota / private mode */
-  }
+  localStorage.setItem("omniweb_token", token);
 }
 
 export function clearToken() {
-  try {
-    localStorage.removeItem("omniweb_token");
-  } catch {
-    /* ignore */
-  }
+  localStorage.removeItem("omniweb_token");
 }
 
 // ── Admin token stash (for demo round-tripping) ──────────────────────────────
@@ -53,49 +39,32 @@ const ADMIN_TOKEN_KEY = "omniweb_admin_token_stash";
 
 /** Save the current token before entering demo mode so we can restore it later. */
 export function stashAdminToken() {
-  try {
-    const current = getToken();
-    if (current) {
-      localStorage.setItem(ADMIN_TOKEN_KEY, current);
-    }
-  } catch {
-    /* ignore */
+  const current = getToken();
+  if (current) {
+    localStorage.setItem(ADMIN_TOKEN_KEY, current);
   }
 }
 
 /** Restore the admin token stashed before demo mode. Returns true if restored. */
 export function restoreAdminToken(): boolean {
-  try {
-    const stashed = localStorage.getItem(ADMIN_TOKEN_KEY);
-    if (stashed) {
-      setToken(stashed);
-      localStorage.removeItem(ADMIN_TOKEN_KEY);
-      return true;
-    }
-  } catch {
-    /* ignore */
+  const stashed = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (stashed) {
+    setToken(stashed);
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    return true;
   }
   return false;
 }
 
 /** Check if there's a stashed admin session (i.e. we're in demo mode). */
 export function hasStashedAdminToken(): boolean {
-  try {
-    return !!localStorage.getItem(ADMIN_TOKEN_KEY);
-  } catch {
-    return false;
-  }
+  return !!localStorage.getItem(ADMIN_TOKEN_KEY);
 }
 
 export function parseJwt(token: string): Record<string, any> | null {
   try {
-    const segment = token.split(".")[1];
-    if (!segment) return null;
-    // JWT uses base64url; atob() expects standard base64.
-    let b64 = segment.replace(/-/g, "+").replace(/_/g, "/");
-    const pad = b64.length % 4;
-    if (pad) b64 += "=".repeat(4 - pad);
-    return JSON.parse(atob(b64));
+    const payload = token.split(".")[1];
+    return JSON.parse(atob(payload));
   } catch {
     return null;
   }
@@ -118,12 +87,7 @@ async function apiFetch<T = any>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const rawDetail = body.detail;
-    const message = Array.isArray(rawDetail)
-      ? rawDetail.map((d: unknown) => (typeof d === "object" && d && "msg" in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d))).join("; ")
-      : rawDetail
-        ? String(rawDetail)
-        : `API error ${res.status}`;
+    const message = body.detail || `API error ${res.status}`;
 
     // For 401 on non-auth endpoints, clear token and redirect to login
     if (res.status === 401 && !path.startsWith("/auth/")) {
@@ -144,30 +108,9 @@ export interface AuthResponse {
   token_type: string;
   client_id: string;
   email: string;
-  name?: string;
-  first_name?: string;
   plan: string;
   role: string;
   permissions?: string[];
-}
-
-export async function exchangeClerkSession(clerkToken: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}${API_PREFIX}/auth/clerk-session`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${clerkToken}`,
-    },
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ? String(body.detail) : `Clerk session exchange failed (${res.status})`);
-  }
-
-  const data = await res.json() as AuthResponse;
-  setToken(data.access_token);
-  return data;
 }
 
 export async function login(
@@ -189,7 +132,6 @@ export async function signup(body: {
   password: string;
   business_name?: string;
   business_type?: string;
-  website_domain?: string;
   template_id?: string;
 }): Promise<AuthResponse> {
   const data = await apiFetch<AuthResponse>("/auth/signup", {
@@ -210,17 +152,7 @@ export async function demoLogin(): Promise<AuthResponse> {
 
 export function logout() {
   clearToken();
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("omniweb_setup_complete");
-    localStorage.removeItem(ADMIN_TOKEN_KEY);
-    window.location.replace("/logout");
-  }
-}
-
-export async function deleteAccount() {
-  return apiFetch<{ ok: boolean; message: string }>("/auth/account", {
-    method: "DELETE",
-  });
+  if (typeof window !== "undefined") window.location.href = "/login";
 }
 
 // ── Profile ──────────────────────────────────────────────────────────────────
@@ -271,16 +203,6 @@ export interface AdminUser {
   created_at: string | null;
   invited_at: string | null;
   invite_accepted_at: string | null;
-  invite_url?: string | null;
-  invite_code?: string | null;
-  reset_url?: string | null;
-  reset_code?: string | null;
-}
-
-export interface AdminBootstrapStatus {
-  bootstrap_open: boolean;
-  has_owner: boolean;
-  internal_user_count: number;
 }
 
 export async function requestPasswordReset(body: {
@@ -305,24 +227,6 @@ export async function acceptInvite(token: string, password: string, name?: strin
     method: "POST",
     body: JSON.stringify({ token, password, name }),
   });
-}
-
-export async function getAdminBootstrapStatus(): Promise<AdminBootstrapStatus> {
-  return apiFetch<AdminBootstrapStatus>("/auth/admin-bootstrap-status");
-}
-
-export async function adminSignup(body: {
-  name: string;
-  email: string;
-  password: string;
-  admin_code?: string;
-}): Promise<AuthResponse> {
-  const data = await apiFetch<AuthResponse>("/auth/admin-signup", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-  setToken(data.access_token);
-  return data;
 }
 
 export async function getAdminUsers(): Promise<AdminUser[]> {
@@ -464,20 +368,12 @@ export async function updateAgentConfig(clientId: string, body: Record<string, a
   });
 }
 
-export interface WidgetEmbedResponse {
-  agent_id: string;
-  embed_code: string;
-  // Keep legacy fields nullable so older API payloads/types do not break dashboard builds.
-  legacy_embed_code?: string | null;
-  talk_url?: string | null;
-  widget_url?: string | null;
-  retell_agent_id?: string | null;
-  embed_domain?: string | null;
-  embed_expires_at?: string | null;
-}
-
 export async function getWidgetEmbed(clientId: string) {
-  return apiFetch<WidgetEmbedResponse>(`/agent-config/${clientId}/widget`);
+  return apiFetch<{
+    agent_id: string;
+    embed_code: string;
+    talk_url: string;
+  }>(`/agent-config/${clientId}/widget`);
 }
 
 export async function getNumbers(clientId?: string) {

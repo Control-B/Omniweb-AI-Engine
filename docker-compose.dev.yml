@@ -21,7 +21,8 @@ services:
 
   shopify-app:
     build:
-      context: ./frontend/shopify-app
+      context: .
+      dockerfile: frontend/shopify-app/Dockerfile
       target: dev
     ports:
       - "3001:3000"

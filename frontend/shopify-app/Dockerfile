@@ -7,17 +7,17 @@ RUN apt-get update -y \
 
 FROM base AS deps
 RUN corepack enable && corepack prepare pnpm@9.6.0 --activate
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY frontend/shopify-app/package.json frontend/shopify-app/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod=false
 
 FROM deps AS build
-COPY . .
+COPY frontend/shopify-app/ ./
 RUN pnpm prisma:generate && pnpm build
 
 FROM deps AS dev
 WORKDIR /app
 ENV NODE_ENV=development
-COPY . .
+COPY frontend/shopify-app/ ./
 RUN pnpm prisma:generate
 EXPOSE 3000
 CMD ["pnpm", "dev"]

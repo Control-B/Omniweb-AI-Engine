@@ -368,12 +368,19 @@ export async function updateAgentConfig(clientId: string, body: Record<string, a
   });
 }
 
+export interface WidgetEmbedResponse {
+  agent_id: string;
+  embed_code: string;
+  legacy_embed_code?: string | null;
+  talk_url?: string | null;
+  widget_url?: string | null;
+  retell_agent_id?: string | null;
+  embed_domain?: string | null;
+  embed_expires_at?: string | null;
+}
+
 export async function getWidgetEmbed(clientId: string) {
-  return apiFetch<{
-    agent_id: string;
-    embed_code: string;
-    talk_url: string;
-  }>(`/agent-config/${clientId}/widget`);
+  return apiFetch<WidgetEmbedResponse>(`/agent-config/${clientId}/widget`);
 }
 
 export async function getNumbers(clientId?: string) {

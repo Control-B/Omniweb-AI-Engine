@@ -1,22 +1,25 @@
 """Agent Config API — manage per-client AI agent settings.
 
-When config is updated, the changes are synced to the ElevenLabs agent.
-The prompt engine automatically composes the system prompt from the
-tenant's industry, agent mode, business context, and custom instructions.
+When config is updated, high-level fields are synced to the linked Retell agent
+(voice language, display name). Full prompts and tools are edited in Retell;
+this service keeps business context aligned where the API allows.
 """
+import secrets
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
-from app.core.auth import get_current_client, has_permission, is_internal_staff_role
+from app.core.auth import get_current_client
+from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.models import AgentConfig
-from app.services import elevenlabs_service
+from app.models.models import AgentConfig, Client
+from app.services import retell_service
 from app.services.prompt_engine import compose_system_prompt, compose_greeting
 from app.services.industry_config import (
     get_industry,
@@ -27,22 +30,30 @@ from app.services.industry_config import (
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/agent-config", tags=["agent-config"])
+settings = get_settings()
 
 
-def _can_view_client_config(current_client: dict, client_id: str) -> bool:
-    if is_internal_staff_role(current_client.get("role")):
-        return True
-    return client_id == current_client["client_id"]
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
-def _can_update_client_config(current_client: dict, client_id: str) -> bool:
-    if is_internal_staff_role(current_client.get("role")):
-        return has_permission(current_client, "clients.write")
-    return client_id == current_client["client_id"]
+def _build_loader_snippet(*, embed_code: str, client_id: str) -> tuple[str, str]:
+    platform_url = settings.PLATFORM_URL.rstrip("/")
+    engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL).rstrip("/")
+    widget_url = f"{platform_url}/widget/{client_id}"
+    snippet = f"""<!-- Omniweb AI Widget -->
+<script
+  src="{platform_url}/widget/loader.js"
+  data-embed-code="{embed_code}"
+  data-agent-id="{client_id}"
+  data-engine-url="{engine_url}"
+  async
+></script>"""
+    return snippet, widget_url
 
 
 class AgentConfigUpdate(BaseModel):
-    elevenlabs_agent_id: Optional[str] = None
+    retell_agent_id: Optional[str] = None
     agent_name: Optional[str] = None
     agent_greeting: Optional[str] = None
     voice_id: Optional[str] = None
@@ -75,6 +86,52 @@ class AgentConfigUpdate(BaseModel):
     handoff_phone: Optional[str] = None
     handoff_email: Optional[str] = None
     handoff_message: Optional[str] = None
+    website_domain: Optional[str] = None
+
+
+class BuildProvidersRequest(BaseModel):
+    retell_agent_id: Optional[str] = None
+    language: Optional[str] = None
+
+
+@router.get("/setup-status/{client_id}")
+async def setup_status(
+    client_id: str,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Check whether the client has completed required onboarding fields.
+
+    Returns setup_complete=True only when business_name and website_domain are set.
+    Any frontend can call this to decide whether to show onboarding.
+    """
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
+        raise HTTPException(403, "Access denied")
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client_id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        return {
+            "setup_complete": False,
+            "missing": ["business_name", "website_domain", "industry"],
+            "has_config": False,
+        }
+    missing = []
+    if not config.business_name:
+        missing.append("business_name")
+    if not config.website_domain:
+        missing.append("website_domain")
+    if not config.industry:
+        missing.append("industry")
+    return {
+        "setup_complete": len(missing) == 0,
+        "missing": missing,
+        "has_config": True,
+        "business_name": config.business_name,
+        "website_domain": config.website_domain,
+        "industry": config.industry,
+    }
 
 
 @router.get("/{client_id}")
@@ -83,7 +140,8 @@ async def get_config(
     current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    if not _can_view_client_config(current_client, client_id):
+    # Tenant isolation: non-admin can only see own config
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
         raise HTTPException(403, "Access denied")
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client_id)
@@ -91,7 +149,10 @@ async def get_config(
     config = result.scalar_one_or_none()
     if not config:
         raise HTTPException(404, f"No agent config for client {client_id}")
-    return {f: getattr(config, f) for f in AgentConfig.__table__.columns.keys()}
+    data = {f: getattr(config, f) for f in AgentConfig.__table__.columns.keys()}
+    # Flag indicating all required fields are present
+    data["setup_complete"] = bool(config.business_name and config.website_domain)
+    return data
 
 
 @router.put("/{client_id}")
@@ -103,10 +164,10 @@ async def upsert_config(
 ) -> dict:
     """Create or update the agent config for a client.
 
-    If the client has an ElevenLabs agent, sync the changes to it.
-    If no ElevenLabs agent exists yet, create one.
+    If ``retell_agent_id`` is set, patches the Retell agent (language, name).
     """
-    if not _can_update_client_config(current_client, client_id):
+    # Tenant isolation
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
         raise HTTPException(403, "Access denied")
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client_id)
@@ -117,6 +178,23 @@ async def upsert_config(
         db.add(config)
 
     for field, value in body.model_dump(exclude_none=True).items():
+        if field == "website_domain" and value:
+            # Normalize domain
+            domain = value.strip().lower()
+            for prefix in ("https://", "http://", "www."):
+                if domain.startswith(prefix):
+                    domain = domain[len(prefix):]
+            domain = domain.rstrip("/")
+            # Check uniqueness (excluding this config)
+            dup = await db.execute(
+                select(AgentConfig).where(
+                    AgentConfig.website_domain == domain,
+                    AgentConfig.client_id != config.client_id,
+                )
+            )
+            if dup.scalar_one_or_none():
+                raise HTTPException(409, "An agent already exists for this domain")
+            value = domain
         setattr(config, field, value)
 
     await db.flush()
@@ -152,57 +230,54 @@ async def upsert_config(
             custom_greeting=config.agent_greeting if body.agent_greeting else None,
         )
 
-    # Sync to ElevenLabs (skip if only elevenlabs_agent_id was changed)
-    fields_that_sync = {"agent_name", "agent_greeting", "voice_id", "voice_stability",
-                        "voice_similarity_boost", "system_prompt", "business_name",
-                        "max_call_duration", "supported_languages", "language_presets",
-                        "industry", "agent_mode", "custom_guardrails",
-                        "custom_escalation_triggers", "custom_context", "use_prompt_engine",
-                        "services", "business_hours", "timezone", "booking_url",
-                        "after_hours_message"}
+    fields_that_sync = {
+        "agent_name",
+        "business_name",
+        "supported_languages",
+        "retell_agent_id",
+        "industry",
+        "agent_mode",
+        "system_prompt",
+        "use_prompt_engine",
+        "services",
+        "business_hours",
+        "timezone",
+        "booking_url",
+        "after_hours_message",
+        "custom_guardrails",
+        "custom_escalation_triggers",
+        "custom_context",
+    }
     has_sync_fields = bool(fields_that_sync & set(body.model_dump(exclude_none=True).keys()))
     try:
-        if config.elevenlabs_agent_id and has_sync_fields:
-            # Update existing agent
-            await elevenlabs_service.update_agent(
-                config.elevenlabs_agent_id,
-                name=f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -"),
-                first_message=effective_greeting,
-                system_prompt=effective_prompt,
-                voice_id=config.voice_id,
-                voice_stability=config.voice_stability,
-                voice_similarity_boost=config.voice_similarity_boost,
-                max_duration_seconds=config.max_call_duration,
-                supported_languages=config.supported_languages if body.supported_languages is not None else None,
-                language_presets_override=config.language_presets if body.language_presets is not None else None,
-                business_name=config.business_name or "",
+        if config.retell_agent_id and has_sync_fields:
+            lang = retell_service.map_locale_to_retell_language(
+                list(config.supported_languages or ["en"])
             )
-            logger.info(f"Synced config to ElevenLabs agent {config.elevenlabs_agent_id}")
-        elif not config.elevenlabs_agent_id and has_sync_fields:
-            # Create new ElevenLabs agent
-            result_el = await elevenlabs_service.create_agent(
-                name=f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -"),
-                first_message=effective_greeting,
-                system_prompt=effective_prompt,
-                voice_id=config.voice_id,
-                voice_stability=config.voice_stability,
-                voice_similarity_boost=config.voice_similarity_boost,
-                max_duration_seconds=config.max_call_duration,
-                supported_languages=config.supported_languages,
-                business_name=config.business_name or "",
+            display = f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -") or (
+                config.agent_name or "Omniweb Agent"
             )
-            config.elevenlabs_agent_id = result_el["agent_id"]
-            logger.info(f"Created ElevenLabs agent: {config.elevenlabs_agent_id}")
+            await retell_service.patch_agent(
+                config.retell_agent_id,
+                {
+                    "agent_name": display[:120],
+                    "language": lang,
+                    "max_call_duration_ms": min(
+                        max(int(config.max_call_duration) * 1000, 60_000),
+                        3_600_000,
+                    ),
+                },
+            )
+            logger.info("Synced config to Retell agent", retell_agent_id=config.retell_agent_id)
     except Exception as exc:
-        logger.error(f"Failed to sync config to ElevenLabs: {exc}")
-        # Don't fail the request — save config locally even if ElevenLabs is down
+        logger.error(f"Failed to sync config to Retell: {exc}")
 
     await db.commit()
     await db.refresh(config)
     return {
         "ok": True,
         "client_id": client_id,
-        "elevenlabs_agent_id": config.elevenlabs_agent_id,
+        "retell_agent_id": config.retell_agent_id,
         "industry": config.industry,
         "agent_mode": config.agent_mode,
         "use_prompt_engine": config.use_prompt_engine,
@@ -212,27 +287,51 @@ async def upsert_config(
 @router.get("/{client_id}/widget")
 async def get_widget_embed(
     client_id: str,
+    current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Get the embeddable chat widget code for the client's agent.
+    """Get the embeddable widget code for the authenticated client's site."""
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
+        raise HTTPException(403, "Access denied")
 
-    Public endpoint — no auth required (used by client websites).
-    """
+    client = await db.get(Client, client_id)
+    if not client:
+        raise HTTPException(404, "Client not found")
+
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client_id)
     )
     config = result.scalar_one_or_none()
-    if not config or not config.elevenlabs_agent_id:
-        raise HTTPException(404, "No ElevenLabs agent configured")
+    if not config:
+        raise HTTPException(404, "No agent configuration found")
 
-    embed_data = elevenlabs_service.get_widget_embed_code(config.elevenlabs_agent_id)
+    if not client.embed_code:
+        client.embed_code = secrets.token_hex(16)
+        if config.website_domain and not client.embed_domain:
+            client.embed_domain = config.website_domain
+
+        if client.stripe_subscription_id:
+            client.embed_expires_at = None
+        elif client.trial_ends_at:
+            client.embed_expires_at = client.trial_ends_at
+        else:
+            client.embed_expires_at = _utcnow() + timedelta(days=14)
+
+        await db.commit()
+        await db.refresh(client)
+
+    embed_snippet, widget_url = _build_loader_snippet(
+        embed_code=client.embed_code,
+        client_id=str(client.id),
+    )
 
     return {
-        "agent_id": config.elevenlabs_agent_id,
-        "embed_code": embed_data["iframe"],
-        "legacy_embed_code": embed_data["legacy"],
-        "widget_url": embed_data["widget_url"],
-        "talk_url": f"https://elevenlabs.io/app/talk-to/{config.elevenlabs_agent_id}",
+        "agent_id": str(client.id),
+        "embed_code": embed_snippet,
+        "retell_agent_id": config.retell_agent_id,
+        "widget_url": widget_url,
+        "embed_domain": client.embed_domain,
+        "embed_expires_at": client.embed_expires_at.isoformat() if client.embed_expires_at else None,
     }
 
 
@@ -267,7 +366,7 @@ async def preview_composed_prompt(
 
     Useful for debugging and reviewing what the agent will actually see.
     """
-    if not _can_view_client_config(current_client, client_id):
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
         raise HTTPException(403, "Access denied")
 
     result = await db.execute(
@@ -308,4 +407,140 @@ async def preview_composed_prompt(
         "agent_mode": config.agent_mode,
         "use_prompt_engine": config.use_prompt_engine,
         "prompt_length_chars": len(composed),
+    }
+
+
+@router.post("/{client_id}/build-providers")
+async def build_providers(
+    client_id: str,
+    body: BuildProvidersRequest,
+    current_client: dict = Depends(get_current_client),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Build provider-ready settings from tenant config.
+
+    - Deepgram: returns a SettingsConfiguration payload your frontend/backend can use.
+    - Retell: patches a linked agent if `retell_agent_id` exists.
+    """
+    if current_client.get("role") != "admin" and client_id != current_client["client_id"]:
+        raise HTTPException(403, "Access denied")
+
+    result = await db.execute(
+        select(AgentConfig).where(AgentConfig.client_id == client_id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(404, f"No agent config for client {client_id}")
+
+    supported_languages = list(config.supported_languages or ["en"])
+    requested_language = (body.language or "").strip().lower()
+    if requested_language:
+        effective_langs = [requested_language]
+    else:
+        effective_langs = supported_languages
+
+    # Build composed prompt from the same source your runtime uses.
+    composed_prompt = compose_system_prompt(
+        agent_name=config.agent_name or "Alex",
+        business_name=config.business_name or "",
+        industry_slug=config.industry or "general",
+        agent_mode=config.agent_mode,
+        business_type=config.business_type,
+        services=config.services or [],
+        business_hours=config.business_hours or {},
+        timezone=config.timezone or "America/New_York",
+        booking_url=config.booking_url,
+        after_hours_message=config.after_hours_message or "",
+        custom_prompt=config.system_prompt,
+        custom_guardrails=config.custom_guardrails or [],
+        custom_escalation_triggers=config.custom_escalation_triggers or [],
+        custom_context=config.custom_context,
+    )
+
+    deepgram_settings: dict[str, Any] | None = None
+    if settings.deepgram_configured:
+        deepgram_settings = {
+            "type": "SettingsConfiguration",
+            "audio": {
+                "input": {"encoding": "linear16", "sample_rate": 16000},
+                "output": {"encoding": "linear16", "sample_rate": 24000, "container": "none"},
+            },
+            "agent": {
+                "listen": {"model": settings.DEEPGRAM_STT_MODEL},
+                "think": {
+                    "provider": {"type": "open_ai"},
+                    "model": settings.DEEPGRAM_AGENT_MODEL,
+                    "instructions": composed_prompt,
+                },
+                "speak": {"model": config.voice_id or settings.DEEPGRAM_TTS_VOICE},
+            },
+            "metadata": {
+                "client_id": client_id,
+                "business_name": config.business_name or "",
+                "language": (
+                    "multi"
+                    if len(effective_langs) > 1
+                    else retell_service.map_locale_to_retell_language(effective_langs)
+                ),
+                "project_id": settings.DEEPGRAM_PROJECT_ID or None,
+            },
+        }
+
+    retell_agent_id = body.retell_agent_id or config.retell_agent_id
+    retell_patch_result: dict[str, Any] | None = None
+    if settings.retell_configured and retell_agent_id:
+        language = retell_service.map_locale_to_retell_language(effective_langs)
+        display_name = (
+            f"{config.business_name or ''} - {config.agent_name or ''}".strip(" -")
+            or config.agent_name
+            or "Omniweb Agent"
+        )
+        patch_payload = {
+            "agent_name": display_name[:120],
+            "language": language,
+            "max_call_duration_ms": min(
+                max(int(config.max_call_duration or 1800) * 1000, 60_000),
+                3_600_000,
+            ),
+        }
+        retell_patch_result = await retell_service.patch_agent(
+            retell_agent_id,
+            patch_payload,
+        )
+        if not config.retell_agent_id:
+            config.retell_agent_id = retell_agent_id
+
+    # Store latest provider build metadata.
+    widget = dict(config.widget_config or {})
+    widget["provider_build"] = {
+        "updated_at": _utcnow().isoformat(),
+        "deepgram": {
+            "configured": settings.deepgram_configured,
+            "project_id": settings.DEEPGRAM_PROJECT_ID or None,
+            "stt_model": settings.DEEPGRAM_STT_MODEL,
+            "tts_voice": config.voice_id or settings.DEEPGRAM_TTS_VOICE,
+        },
+        "retell": {
+            "configured": settings.retell_configured,
+            "agent_id": retell_agent_id,
+        },
+    }
+    config.widget_config = widget
+
+    await db.commit()
+    await db.refresh(config)
+
+    return {
+        "ok": True,
+        "client_id": client_id,
+        "deepgram": {
+            "configured": settings.deepgram_configured,
+            "project_id": settings.DEEPGRAM_PROJECT_ID or None,
+            "settings": deepgram_settings,
+        },
+        "retell": {
+            "configured": settings.retell_configured,
+            "agent_id": retell_agent_id,
+            "patch_result": retell_patch_result,
+        },
     }

@@ -1,7 +1,8 @@
 services:
   dashboard:
     build:
-      context: ./dashboard
+      context: .
+      dockerfile: dashboard/Dockerfile
       target: dev
     ports:
       - "3000:3000"

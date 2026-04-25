@@ -2,7 +2,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.6.0 --activate
-COPY package.json pnpm-lock.yaml ./
+COPY dashboard/package.json dashboard/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # ── Dev runtime: isolated container without macOS bind-mount file locks ──────
@@ -10,7 +10,7 @@ FROM deps AS dev
 WORKDIR /app
 ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1
-COPY . .
+COPY dashboard/ ./
 EXPOSE 3000
 CMD ["pnpm", "dev"]
 
@@ -19,7 +19,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.6.0 --activate
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY dashboard/ ./
 
 # Baked into the client bundle at build time (set on the dashboard component in DO).
 ARG NEXT_PUBLIC_API_URL

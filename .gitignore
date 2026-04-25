@@ -31,9 +31,11 @@ Thumbs.db
 
 # Node / Dashboard
 dashboard/node_modules/
+dashboard/.pnpm-store/
 dashboard/.next/
 dashboard/out/
 frontend/**/node_modules/
+frontend/**/.pnpm-store/
 frontend/**/.next/
 frontend/**/build/
 frontend/**/dist/

@@ -84,7 +84,7 @@ services:
         value: ""
       - key: CORS_ORIGINS
         scope: RUN_AND_BUILD_TIME
-        value: '["https://omniweb.ai","https://www.omniweb.ai","https://omniweb-engine-rs6fr.ondigitalocean.app","https://roadcall.ai","https://www.roadcall.ai"]'
+        value: '["https://omniweb.ai","https://www.omniweb.ai","https://omniweb-engine-rs6fr.ondigitalocean.app","http://localhost:3000","https://roadcall.ai","https://www.roadcall.ai"]'
       - key: DEEPGRAM_API_KEY
         scope: RUN_AND_BUILD_TIME
         type: SECRET
@@ -116,13 +116,14 @@ services:
     instance_count: 1
     instance_size_slug: basic-xxs
     envs:
-      # Public API (FastAPI) — use this host so the dashboard/widget call /api/... in production.
+      # Public API (FastAPI) — same DO origin so the browser doesn't hit CORS or DNS issues.
+      # When api.omniweb.ai DNS is confirmed, swap these back to https://api.omniweb.ai.
       - key: NEXT_PUBLIC_API_URL
         scope: BUILD_TIME
-        value: "https://api.omniweb.ai"
+        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
       - key: NEXT_PUBLIC_ENGINE_URL
         scope: BUILD_TIME
-        value: "https://api.omniweb.ai"
+        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
       # Next.js pages + /widget + /landing (not the marketing site at omniweb.ai).
       - key: NEXT_PUBLIC_PLATFORM_URL
         scope: BUILD_TIME

@@ -223,13 +223,12 @@ export default function VoiceWidgetPage() {
   }
 
   return (
-    <div className="min-h-dvh w-full bg-slate-950 relative">
-      <div className="fixed inset-0 z-[9999] pointer-events-none font-sans">
+    <div className="min-h-dvh w-full bg-slate-950">
       {/* Floating orb — overflow clips glow so it reads as one control (no “double” halo). */}
       <button
         type="button"
         onClick={() => setPanelOpen((o) => !o)}
-        className="pointer-events-auto absolute bottom-6 right-6 h-16 w-16 rounded-full relative overflow-hidden shadow-[0_8px_28px_rgba(56,189,248,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 focus-visible:ring-offset-0 transition-transform hover:scale-105 active:scale-95"
+        className="fixed bottom-6 right-6 z-[9999] h-16 w-16 rounded-full relative overflow-hidden shadow-[0_8px_28px_rgba(56,189,248,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 focus-visible:ring-offset-0 transition-transform hover:scale-105 active:scale-95"
         style={{
           background:
             "conic-gradient(from 200deg at 50% 50%, #0ea5e9 0deg, #e0f2fe 80deg, #0369a1 200deg, #7dd3fc 320deg, #0ea5e9 360deg)",
@@ -246,7 +245,7 @@ export default function VoiceWidgetPage() {
 
       {/* Panel */}
       {panelOpen && (
-        <div className="pointer-events-auto absolute bottom-24 right-6 w-[min(100vw-2rem,22rem)] max-h-[min(85vh,32rem)] flex flex-col rounded-2xl border border-white/10 bg-[#0b1220] shadow-2xl text-slate-100 overflow-hidden">
+        <div className="fixed bottom-24 right-6 z-[9998] w-[min(100vw-2rem,22rem)] max-h-[min(85vh,32rem)] flex flex-col rounded-2xl border border-white/10 bg-[#0b1220] shadow-2xl text-slate-100 overflow-hidden">
           <header className="flex items-start gap-3 px-4 pt-4 pb-3 border-b border-white/5">
             <div
               className="h-10 w-10 shrink-0 rounded-full"
@@ -416,7 +415,6 @@ export default function VoiceWidgetPage() {
           )}
         </div>
       )}
-      </div>
     </div>
   );
 }

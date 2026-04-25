@@ -10,11 +10,5 @@ export default function WidgetLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <html lang="en" className="dark">
-      <body className="m-0 p-0 overflow-hidden">
-        {children}
-      </body>
-    </html>
-  );
+  return <>{children}</>;
 }

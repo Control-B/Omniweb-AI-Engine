@@ -64,11 +64,17 @@ async def run_voice_agent_bootstrap(
         token_payload = await deepgram_service.grant_temporary_token(ttl_seconds=600)
     except Exception as exc:
         logger.error("Deepgram grant token failed", error=str(exc))
-        raise HTTPException(502, detail="Failed to mint Deepgram session token") from exc
+        raise HTTPException(
+            503,
+            detail=(
+                "Deepgram token grant failed. Check DEEPGRAM_API_KEY is valid, "
+                "active, and has Member access."
+            ),
+        ) from exc
 
     access_token = token_payload.get("access_token")
     if not access_token:
-        raise HTTPException(502, detail="Deepgram grant response missing access_token")
+        raise HTTPException(500, detail="Deepgram grant response missing access_token")
 
     try:
         voice_settings = deepgram_service.build_voice_agent_settings(

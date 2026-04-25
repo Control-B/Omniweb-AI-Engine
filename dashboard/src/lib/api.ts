@@ -17,20 +17,20 @@ function uniqueBases(bases: string[]): string[] {
 }
 
 function resolveApiBases(): string[] {
-  // Prefer explicit backend URL, but keep origin + default as runtime fallbacks.
+  // Prefer same-origin /api in browsers so admin pages avoid cross-origin preflight issues.
   const configured =
     process.env.NEXT_PUBLIC_API_URL?.trim() ||
     process.env.NEXT_PUBLIC_ENGINE_URL?.trim() ||
     "";
   const bases: string[] = [];
+  if (typeof window !== "undefined" && window.location.origin) {
+    bases.push(window.location.origin);
+  }
   if (configured) bases.push(configured);
   if (process.env.NODE_ENV === "development") {
     bases.push("http://localhost:8000");
   } else {
     bases.push(DEFAULT_PRODUCTION_API_BASE);
-  }
-  if (typeof window !== "undefined" && window.location.origin) {
-    bases.push(window.location.origin);
   }
   return uniqueBases(bases);
 }

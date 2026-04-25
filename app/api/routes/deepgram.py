@@ -65,10 +65,10 @@ async def run_voice_agent_bootstrap(
     except Exception as exc:
         logger.error("Deepgram grant token failed", error=str(exc))
         raise HTTPException(
-            503,
+            400,
             detail=(
-                "Deepgram token grant failed. Check DEEPGRAM_API_KEY is valid, "
-                "active, and has Member access."
+                "Deepgram token grant failed: invalid credentials. "
+                "Replace DEEPGRAM_API_KEY with an active Deepgram API key that has Member access."
             ),
         ) from exc
 

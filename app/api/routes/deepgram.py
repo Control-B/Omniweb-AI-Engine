@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
@@ -57,11 +57,12 @@ async def voice_agent_bootstrap(
             detail="client_id is required (or set LANDING_PAGE_CLIENT_ID for anonymous widget)",
         )
     else:
-        # Use min(client_id) so Postgres can satisfy this via the client_id index. Ordering by
-        # created_at has been observed to hang behind locks on some managed-Postgres setups.
-        min_cid_sq = select(func.min(AgentConfig.client_id)).scalar_subquery()
-        result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == min_cid_sq))
-        config = result.scalar_one_or_none()
+        # Deterministic default tenant: smallest client_id (matches former min() behavior).
+        # Avoid scalar_subquery + equality — some stacks surface it as a DB/API 500.
+        result = await db.execute(
+            select(AgentConfig).order_by(AgentConfig.client_id.asc()).limit(1)
+        )
+        config = result.scalars().first()
         if not config:
             raise HTTPException(404, detail="No agent configuration in database")
 
@@ -75,10 +76,21 @@ async def voice_agent_bootstrap(
     if not access_token:
         raise HTTPException(502, detail="Deepgram grant response missing access_token")
 
-    voice_settings = deepgram_service.build_voice_agent_settings(
-        config,
-        language=req.language,
-    )
+    try:
+        voice_settings = deepgram_service.build_voice_agent_settings(
+            config,
+            language=req.language,
+        )
+    except Exception as exc:
+        logger.exception(
+            "Voice agent settings build failed",
+            client_id=str(config.client_id),
+            error=str(exc),
+        )
+        raise HTTPException(
+            500,
+            detail="Failed to build voice agent settings (check agent JSON fields in DB)",
+        ) from exc
 
     return {
         "ok": True,

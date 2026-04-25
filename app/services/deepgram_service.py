@@ -18,6 +18,49 @@ DEEPGRAM_GRANT_URL = "https://api.deepgram.com/v1/auth/grant"
 DEEPGRAM_AGENT_WS_URL = "wss://agent.deepgram.com/v1/agent/converse"
 
 
+def _coerce_services(raw: Any) -> list[str]:
+    """JSONB may be a list, legacy dict map, or empty; prompt code expects list[str]."""
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    if isinstance(raw, dict):
+        return [str(k).strip() for k in raw if str(k).strip()]
+    if isinstance(raw, str) and raw.strip():
+        return [raw.strip()]
+    return []
+
+
+def _coerce_business_hours(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    return {}
+
+
+def _coerce_supported_languages(raw: Any) -> list[str]:
+    if raw is None:
+        return ["en"]
+    if isinstance(raw, str):
+        s = raw.strip().lower()
+        return [s] if s else ["en"]
+    if isinstance(raw, list):
+        out = [str(x).lower().strip() for x in raw if str(x).strip()]
+        return out if out else ["en"]
+    return ["en"]
+
+
+def _coerce_str_list(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        return [raw.strip()] if raw.strip() else []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    if isinstance(raw, dict):
+        return [str(v).strip() for v in raw.values() if str(v).strip()]
+    return []
+
+
 async def grant_temporary_token(*, ttl_seconds: int = 600) -> dict[str, Any]:
     """Mint a short-lived JWT for browser Voice Agent / streaming APIs.
 
@@ -59,7 +102,7 @@ def _tts_voice_for_config(config: AgentConfig) -> str:
 
 def _agent_language_tag(config: AgentConfig, requested: str | None) -> str:
     """BCP-47-ish tag for Voice Agent ``agent.language`` (``multi`` when appropriate)."""
-    supported = [str(x).lower().strip() for x in (config.supported_languages or ["en"])]
+    supported = _coerce_supported_languages(config.supported_languages)
     if requested:
         r = requested.lower().strip()
         if r == "multi":
@@ -83,14 +126,14 @@ def build_voice_agent_settings(
         industry_slug=config.industry or "general",
         agent_mode=config.agent_mode,
         business_type=config.business_type,
-        services=config.services or [],
-        business_hours=config.business_hours or {},
+        services=_coerce_services(config.services),
+        business_hours=_coerce_business_hours(config.business_hours),
         timezone=config.timezone or "America/New_York",
         booking_url=config.booking_url,
         after_hours_message=config.after_hours_message or "",
         custom_prompt=config.system_prompt,
-        custom_guardrails=config.custom_guardrails or [],
-        custom_escalation_triggers=config.custom_escalation_triggers or [],
+        custom_guardrails=_coerce_str_list(config.custom_guardrails),
+        custom_escalation_triggers=_coerce_str_list(config.custom_escalation_triggers),
         custom_context=config.custom_context,
     )
     lang_tag = _agent_language_tag(config, language)

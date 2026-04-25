@@ -49,7 +49,7 @@ def _build_widget_embed_snippet(*, embed_code: str, client_id: str) -> tuple[str
 <iframe
   src="{widget_url}"
   title="Omniweb AI"
-  allow="microphone"
+  allow="microphone; autoplay"
   style="position:fixed;bottom:0;right:0;width:min(100vw - 1rem, 420px);height:min(100dvh - 1rem, 640px);max-width:420px;max-height:640px;border:0;border-radius:12px;z-index:99999;box-shadow:0 12px 48px rgba(0,0,0,0.35)"
 ></iframe>"""
     return snippet, widget_url

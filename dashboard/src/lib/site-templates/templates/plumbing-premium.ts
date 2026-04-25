@@ -149,6 +149,6 @@ export const plumbingPremiumTemplate: SiteTemplate = {
     buttonLabel: "Preview agent experience",
     placementHint: "Recommended placement: lower-right sticky bubble + hero CTA inline preview card.",
     embedSnippet: `<!-- Replace YOUR_DASHBOARD_ORIGIN with your Omniweb engine dashboard URL (not omniweb.ai marketing). -->
-<iframe src=\"https://YOUR_DASHBOARD_ORIGIN/widget/{{CLIENT_ID}}\" title=\"Omniweb AI\" allow=\"microphone\" style=\"position:fixed;bottom:0;right:0;width:420px;height:640px;border:0;z-index:99999\"></iframe>`,
+<iframe src=\"https://YOUR_DASHBOARD_ORIGIN/widget/{{CLIENT_ID}}\" title=\"Omniweb AI\" allow=\"microphone; autoplay\" style=\"position:fixed;bottom:0;right:0;width:420px;height:640px;border:0;z-index:99999\"></iframe>`,
   },
 };

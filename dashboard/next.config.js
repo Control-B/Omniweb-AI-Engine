@@ -64,7 +64,7 @@ const nextConfig = {
       },
       {
         key: "Permissions-Policy",
-        value: "microphone=(self)",
+        value: "microphone=(self), autoplay=(self)",
       },
     ];
     return [
@@ -73,7 +73,7 @@ const nextConfig = {
         headers: widgetEmbedHeaders,
       },
       {
-        // Embeddable on customer sites: CSP allows framing; mic still needs allow="microphone" on the iframe.
+        // Embeddable on customer sites: CSP allows framing; iframe should include allow="microphone; autoplay".
         source: "/widget/:path*",
         headers: widgetEmbedHeaders,
       },

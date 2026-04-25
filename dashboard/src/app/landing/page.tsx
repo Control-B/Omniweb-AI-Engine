@@ -63,7 +63,7 @@ export default function LandingPage() {
 <iframe
   src="${origin}/widget/${id}"
   title="Omniweb AI"
-  allow="microphone"
+  allow="microphone; autoplay"
   style="position:fixed;bottom:0;right:0;width:420px;height:640px;border:0;z-index:99999"
 ></iframe>`;
     void (async () => {
@@ -192,7 +192,7 @@ export default function LandingPage() {
             <iframe
               title="Omniweb AI widget"
               src={iframeSrc}
-              allow="microphone"
+              allow="microphone; autoplay"
               className="w-full min-h-[min(85vh,720px)] bg-transparent"
             />
           </div>

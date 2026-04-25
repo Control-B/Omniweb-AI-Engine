@@ -86,7 +86,7 @@ export function OnboardingFlow({ onComplete }: OnboardingProps) {
 <iframe
   src="${origin}/widget/${clientId}"
   title="Omniweb AI"
-  allow="microphone"
+  allow="microphone; autoplay"
   style="position:fixed;bottom:0;right:0;width:420px;height:640px;border:0;z-index:99999"
 ></iframe>`
         );

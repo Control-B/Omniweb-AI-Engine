@@ -129,26 +129,11 @@ services:
         scope: BUILD_TIME
         value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
 
+# Route /api and / to components on ANY hostname (default *.ondigitalocean.app + custom domains).
+# Do NOT add redirects to api.omniweb.ai here until that hostname resolves in DNS — otherwise
+# the browser would follow a 307 to a dead host and login/widget/bootstrap would all fail.
 ingress:
   rules:
-    - match:
-        authority:
-          exact: omniweb-engine-rs6fr.ondigitalocean.app
-        path:
-          prefix: /api
-      redirect:
-        authority: api.omniweb.ai
-        scheme: https
-        redirect_code: 307
-    - match:
-        authority:
-          exact: omniweb-engine-rs6fr.ondigitalocean.app
-        path:
-          exact: /health
-      redirect:
-        authority: api.omniweb.ai
-        scheme: https
-        redirect_code: 307
     - component:
         name: api
         preserve_path_prefix: true

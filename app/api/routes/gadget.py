@@ -171,17 +171,12 @@ def _synthetic_client_email(shop_domain: str) -> str:
     return f"shopify+{safe}@omniweb.local"
 
 
-def _is_voice_subscription_active(store: ShopifyStore) -> bool:
-    status = (store.shopify_subscription_status or "").strip().lower()
-    return status in {"active", "trialing"}
-
-
 def _voice_allowed(store: ShopifyStore) -> tuple[bool, str | None]:
     app_status = (store.app_status or "").strip().lower()
     if app_status != "installed":
         return False, "Shopify app is not installed"
-    if not _is_voice_subscription_active(store):
-        return False, "Shopify subscription is not active or trialing"
+    # Billing verification is owned by Gadget/Shopify. Omniweb enforces access
+    # using Gadget-synced entitlement flags (installed + assistant_enabled).
     return True, None
 
 

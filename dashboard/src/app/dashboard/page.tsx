@@ -100,7 +100,7 @@ export default function ClientDashboard() {
   return (
     <div className="flex h-screen overflow-hidden">
       <ClientSidebar activePage={activePage} onNavigate={setActivePage} />
-      <main className="flex-1 overflow-y-auto">
+      <main className="min-w-0 flex-1 overflow-y-auto">
         {activePage === "dashboard" && <DashboardPage />}
         {activePage === "calls" && <CallsPage />}
         {activePage === "leads" && <LeadsPage />}

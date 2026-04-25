@@ -293,7 +293,7 @@ export function AgentConfigPage() {
   ];
 
   return (
-    <div className="p-6 space-y-4 max-w-[900px]">
+    <div className="w-full p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">AI Agent Configuration</h1>

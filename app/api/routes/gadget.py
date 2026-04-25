@@ -12,7 +12,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,10 +38,28 @@ router = APIRouter(prefix="/gadget", tags=["gadget"])
 
 
 class GadgetVoiceSessionRequest(BaseModel):
-    shop_domain: str | None = Field(None, description="Shopify .myshopify.com domain")
-    gadget_store_id: str | None = Field(None, description="Optional Gadget/Shopify store id")
-    storefront_session_id: str | None = Field(None, description="Optional storefront/browser session id")
-    client_id: str | None = Field(None, description="Fallback Omniweb client UUID")
+    model_config = ConfigDict(populate_by_name=True)
+
+    shop_domain: str | None = Field(
+        None,
+        validation_alias=AliasChoices("shop_domain", "shopDomain", "shop", "myshopifyDomain"),
+        description="Shopify .myshopify.com domain",
+    )
+    gadget_store_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("gadget_store_id", "gadgetStoreId", "store_id", "storeId", "shop_id", "shopId"),
+        description="Optional Gadget/Shopify store id",
+    )
+    storefront_session_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("storefront_session_id", "storefrontSessionId", "session_id", "sessionId"),
+        description="Optional storefront/browser session id",
+    )
+    client_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("client_id", "clientId"),
+        description="Fallback Omniweb client UUID",
+    )
     language: str | None = Field("en", description="Requested language code")
     agent_id: str | None = Field(None, description="Optional external/Gadget agent id")
     shopper_email: str | None = None
@@ -69,10 +87,20 @@ class GadgetStoreSettingsPayload(BaseModel):
 
 
 class GadgetStoreSyncRequest(BaseModel):
-    shop_domain: str = Field(..., description="Shopify .myshopify.com domain")
-    gadget_store_id: str | None = Field(None, description="Gadget/Shopify store id")
-    shop_name: str | None = None
-    shop_email: str | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    shop_domain: str = Field(
+        ...,
+        validation_alias=AliasChoices("shop_domain", "shopDomain", "shop", "myshopifyDomain"),
+        description="Shopify .myshopify.com domain",
+    )
+    gadget_store_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("gadget_store_id", "gadgetStoreId", "store_id", "storeId", "shop_id", "shopId"),
+        description="Gadget/Shopify store id",
+    )
+    shop_name: str | None = Field(None, validation_alias=AliasChoices("shop_name", "shopName", "name"))
+    shop_email: str | None = Field(None, validation_alias=AliasChoices("shop_email", "shopEmail", "email"))
     app_status: str | None = "installed"
     subscription_status: str | None = None
     plan: str | None = None
@@ -82,22 +110,48 @@ class GadgetStoreSyncRequest(BaseModel):
 
 
 class GadgetVoiceToggleRequest(BaseModel):
-    shop_domain: str = Field(..., description="Shopify .myshopify.com domain")
-    gadget_store_id: str | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    shop_domain: str = Field(
+        ...,
+        validation_alias=AliasChoices("shop_domain", "shopDomain", "shop", "myshopifyDomain"),
+        description="Shopify .myshopify.com domain",
+    )
+    gadget_store_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("gadget_store_id", "gadgetStoreId", "store_id", "storeId", "shop_id", "shopId"),
+    )
     assistant_enabled: bool
 
 
 class GadgetStoreDisableRequest(BaseModel):
-    shop_domain: str = Field(..., description="Shopify .myshopify.com domain")
-    gadget_store_id: str | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    shop_domain: str = Field(
+        ...,
+        validation_alias=AliasChoices("shop_domain", "shopDomain", "shop", "myshopifyDomain"),
+        description="Shopify .myshopify.com domain",
+    )
+    gadget_store_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("gadget_store_id", "gadgetStoreId", "store_id", "storeId", "shop_id", "shopId"),
+    )
     reason: str | None = "disabled"
 
 
 class GadgetCaptureLeadRequest(CaptureLeadRequest):
-    shop_domain: str | None = None
-    gadget_store_id: str | None = None
-    session_id: str | None = None
-    client_id: str | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    shop_domain: str | None = Field(
+        None,
+        validation_alias=AliasChoices("shop_domain", "shopDomain", "shop", "myshopifyDomain"),
+    )
+    gadget_store_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("gadget_store_id", "gadgetStoreId", "store_id", "storeId", "shop_id", "shopId"),
+    )
+    session_id: str | None = Field(None, validation_alias=AliasChoices("session_id", "sessionId", "voice_session_id", "voiceSessionId"))
+    client_id: str | None = Field(None, validation_alias=AliasChoices("client_id", "clientId"))
 
 
 def _verify_gadget_secret(secret: str | None) -> None:
@@ -416,6 +470,38 @@ async def sync_shopify_store(
     return _serialize_gadget_store(store)
 
 
+@router.post("/stores/register")
+async def register_store_alias(
+    body: GadgetStoreSyncRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Compatibility alias for Gadget naming: register/update a store."""
+    return await sync_shopify_store(
+        body=body,
+        x_gadget_secret=x_gadget_secret,
+        x_engine_secret=x_engine_secret,
+        db=db,
+    )
+
+
+@router.post("/stores/sync")
+async def sync_store_alias(
+    body: GadgetStoreSyncRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Compatibility alias for Gadget naming: sync a store."""
+    return await sync_shopify_store(
+        body=body,
+        x_gadget_secret=x_gadget_secret,
+        x_engine_secret=x_engine_secret,
+        db=db,
+    )
+
+
 @router.post("/shopify/voice-toggle")
 async def toggle_shopify_voice(
     body: GadgetVoiceToggleRequest,
@@ -443,6 +529,22 @@ async def toggle_shopify_voice(
     await db.flush()
     await db.refresh(store)
     return _serialize_gadget_store(store)
+
+
+@router.post("/stores/voice-toggle")
+async def toggle_store_voice_alias(
+    body: GadgetVoiceToggleRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Compatibility alias for Gadget naming: toggle voice access."""
+    return await toggle_shopify_voice(
+        body=body,
+        x_gadget_secret=x_gadget_secret,
+        x_engine_secret=x_engine_secret,
+        db=db,
+    )
 
 
 @router.post("/shopify/store-disable")
@@ -473,6 +575,22 @@ async def disable_shopify_store(
     await db.flush()
     await db.refresh(store)
     return _serialize_gadget_store(store)
+
+
+@router.post("/stores/disable")
+async def disable_store_alias(
+    body: GadgetStoreDisableRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Compatibility alias for Gadget naming: disable a store."""
+    return await disable_shopify_store(
+        body=body,
+        x_gadget_secret=x_gadget_secret,
+        x_engine_secret=x_engine_secret,
+        db=db,
+    )
 
 
 @router.post("/voice/session")

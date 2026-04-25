@@ -10,6 +10,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 DEFAULT_ENGINE_BASE_URL = "https://omniweb-engine-rs6fr.ondigitalocean.app"
+# Next.js admin + /landing + /widget — same App Platform app default URL; not the public marketing site.
+DEFAULT_PLATFORM_URL = DEFAULT_ENGINE_BASE_URL
 DEFAULT_DEVELOPMENT_DATABASE_URL = "postgresql+asyncpg://omniweb:password@localhost:5432/omniweb_engine"
 
 
@@ -27,7 +29,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"  # legacy alias
     APP_BASE_URL: str = DEFAULT_ENGINE_BASE_URL
     ENGINE_BASE_URL: str = DEFAULT_ENGINE_BASE_URL
-    PLATFORM_URL: str = "https://omniweb.ai"
+    PLATFORM_URL: str = DEFAULT_PLATFORM_URL
     NON_CANONICAL_ENGINE_HOSTS: list[str] = [
         "api.omniweb.ai",
         "omniweb-engine-rs6fr.ondigitalocean.app",
@@ -45,6 +47,7 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "https://omniweb.ai",
         "https://www.omniweb.ai",
+        "https://omniweb-engine-rs6fr.ondigitalocean.app",
         "https://roadcall.ai",
         "https://www.roadcall.ai",
     ]

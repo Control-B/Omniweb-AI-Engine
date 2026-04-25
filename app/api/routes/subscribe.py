@@ -61,9 +61,9 @@ async def create_checkout_session(
     if not client:
         raise HTTPException(404, "Client not found")
 
-    platform_url = getattr(settings, "PLATFORM_URL", "https://omniweb.ai")
-    success_url = body.success_url or f"{platform_url}/dashboard?subscribed=true"
-    cancel_url = body.cancel_url or f"{platform_url}/pricing"
+    base = settings.PLATFORM_URL.rstrip("/")
+    success_url = body.success_url or f"{base}/dashboard?subscribed=true"
+    cancel_url = body.cancel_url or f"{base}/pricing"
 
     # Create or reuse Stripe customer
     if not client.stripe_customer_id:
@@ -111,8 +111,7 @@ async def create_billing_portal(
     if not client or not client.stripe_customer_id:
         raise HTTPException(404, "No billing account found. Subscribe first.")
 
-    platform_url = getattr(settings, "PLATFORM_URL", "https://omniweb.ai")
-    return_url = body.return_url or f"{platform_url}/dashboard"
+    return_url = body.return_url or f"{settings.PLATFORM_URL.rstrip('/')}/dashboard"
 
     session = stripe.billing_portal.Session.create(
         customer=client.stripe_customer_id,

@@ -347,7 +347,7 @@ app.include_router(admin.router, prefix=API_PREFIX)
 @app.get("/")
 async def root_redirect():
     """Redirect bare engine URL to the Omniweb admin dashboard."""
-    return RedirectResponse("https://omniweb.ai/admin", status_code=302)
+    return RedirectResponse(f"{settings.PLATFORM_URL.rstrip('/')}/admin", status_code=302)
 
 
 @app.get("/health")

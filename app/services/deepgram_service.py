@@ -93,6 +93,8 @@ def build_voice_agent_settings(
     tts = _tts_voice_for_config(config)
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
 
+    # Shape must match Deepgram Voice Agent v1 Settings (see voice-agent-settings docs):
+    # listen/speak/think use nested { "provider": { "type", "model", ... } }.
     return {
         "type": "Settings",
         "audio": {
@@ -101,12 +103,26 @@ def build_voice_agent_settings(
         },
         "agent": {
             "language": lang_tag,
-            "listen": {"model": settings.DEEPGRAM_STT_MODEL},
+            "listen": {
+                "provider": {
+                    "type": "deepgram",
+                    "model": settings.DEEPGRAM_STT_MODEL,
+                    "smart_format": False,
+                }
+            },
             "think": {
-                "provider": {"type": "open_ai"},
-                "model": think_model,
+                "provider": {
+                    "type": "open_ai",
+                    "model": think_model,
+                    "temperature": 0.7,
+                },
                 "prompt": composed,
             },
-            "speak": {"model": tts},
+            "speak": {
+                "provider": {
+                    "type": "deepgram",
+                    "model": tts,
+                }
+            },
         },
     }

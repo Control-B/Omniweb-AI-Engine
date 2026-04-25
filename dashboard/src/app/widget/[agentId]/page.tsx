@@ -119,8 +119,17 @@ export default function VoiceWidgetPage() {
       }),
     });
     if (!res.ok) {
-      const t = await res.text();
-      throw new Error(t || `HTTP ${res.status}`);
+      const raw = await res.text();
+      let msg = raw || `HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(raw) as { detail?: unknown };
+        if (j.detail != null) {
+          msg = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+        }
+      } catch {
+        /* keep text */
+      }
+      throw new Error(msg);
     }
     return (await res.json()) as BootstrapPayload;
   }, [agentId, selectedLang?.code]);
@@ -204,21 +213,23 @@ export default function VoiceWidgetPage() {
   return (
     <div className="min-h-dvh w-full bg-slate-950 relative">
       <div className="fixed inset-0 z-[9999] pointer-events-none font-sans">
-      {/* Floating orb */}
+      {/* Floating orb — overflow clips glow so it reads as one control (no “double” halo). */}
       <button
         type="button"
         onClick={() => setPanelOpen((o) => !o)}
-        className="pointer-events-auto absolute bottom-6 right-6 h-16 w-16 rounded-full shadow-[0_8px_32px_rgba(56,189,248,0.45)] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/80 ring-offset-2 ring-offset-slate-950 transition-transform hover:scale-105 active:scale-95"
+        className="pointer-events-auto absolute bottom-6 right-6 h-16 w-16 rounded-full relative overflow-hidden shadow-[0_8px_28px_rgba(56,189,248,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 focus-visible:ring-offset-0 transition-transform hover:scale-105 active:scale-95"
         style={{
           background:
             "conic-gradient(from 200deg at 50% 50%, #0ea5e9 0deg, #e0f2fe 80deg, #0369a1 200deg, #7dd3fc 320deg, #0ea5e9 360deg)",
           boxShadow:
-            "inset 0 2px 12px rgba(255,255,255,0.35), 0 0 0 1px rgba(255,255,255,0.12), 0 12px 40px rgba(14,165,233,0.35)",
+            "inset 0 2px 10px rgba(255,255,255,0.32), 0 0 0 1px rgba(255,255,255,0.1)",
         }}
         aria-label={panelOpen ? "Close assistant" : "Open Omniweb AI"}
       >
-        <span className="absolute inset-1 rounded-full bg-gradient-to-br from-white/25 to-transparent opacity-80" />
-        <span className="absolute inset-0 rounded-full animate-pulse opacity-30 bg-cyan-400/40 blur-md" />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-white/20 to-transparent opacity-75"
+        />
       </button>
 
       {/* Panel */}

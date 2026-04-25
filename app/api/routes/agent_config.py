@@ -466,13 +466,27 @@ async def build_providers(
                 "output": {"encoding": "linear16", "sample_rate": 24000, "container": "none"},
             },
             "agent": {
-                "listen": {"model": settings.DEEPGRAM_STT_MODEL},
-                "think": {
-                    "provider": {"type": "open_ai"},
-                    "model": settings.DEEPGRAM_AGENT_MODEL,
-                    "instructions": composed_prompt,
+                "listen": {
+                    "provider": {
+                        "type": "deepgram",
+                        "model": settings.DEEPGRAM_STT_MODEL,
+                        "smart_format": False,
+                    }
                 },
-                "speak": {"model": config.voice_id or settings.DEEPGRAM_TTS_VOICE},
+                "think": {
+                    "provider": {
+                        "type": "open_ai",
+                        "model": settings.DEEPGRAM_AGENT_MODEL,
+                        "temperature": 0.7,
+                    },
+                    "prompt": composed_prompt,
+                },
+                "speak": {
+                    "provider": {
+                        "type": "deepgram",
+                        "model": config.voice_id or settings.DEEPGRAM_TTS_VOICE,
+                    }
+                },
             },
             "metadata": {
                 "client_id": client_id,

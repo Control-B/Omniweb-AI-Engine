@@ -5,8 +5,18 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // Embeddable on customer sites: CSP allows framing; mic still needs allow="microphone" on the iframe.
         source: "/widget/:path*",
-        headers: [{ key: "X-Frame-Options", value: "SAMEORIGIN" }],
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors *",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "microphone=(self)",
+          },
+        ],
       },
       {
         source: "/landing",

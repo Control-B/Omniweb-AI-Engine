@@ -198,8 +198,8 @@ async def get_embed_snippet(
     agent_config = result.scalar_one_or_none()
     retell_agent_id = agent_config.retell_agent_id if agent_config else None
 
-    platform_url = getattr(settings, "PLATFORM_URL", "https://omniweb.ai")
-    engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL)
+    platform_url = settings.PLATFORM_URL.rstrip("/")
+    engine_url = settings.ENGINE_BASE_URL.rstrip("/")
 
     snippet = f"""<!-- Omniweb AI Widget -->
 <script

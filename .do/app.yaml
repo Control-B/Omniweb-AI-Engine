@@ -1,10 +1,10 @@
 name: omniweb-engine
 region: nyc
 
+# Apex `omniweb.ai` is the public marketing site (separate from this app). Do not attach it here.
+# Dashboard, admin, and widget test pages: use the App Platform default
+# `https://omniweb-engine-rs6fr.ondigitalocean.app` (or add a CNAME in DO, e.g. `app.omniweb.ai`, and list it as an extra domain).
 domains:
-  - domain: omniweb.ai
-    type: PRIMARY
-    minimum_tls_version: "1.2"
   - domain: api.omniweb.ai
     type: ALIAS
     minimum_tls_version: "1.2"
@@ -37,6 +37,9 @@ services:
       - key: ENVIRONMENT
         scope: RUN_AND_BUILD_TIME
         value: production
+      - key: PLATFORM_URL
+        scope: RUN_AND_BUILD_TIME
+        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
       - key: SECRET_KEY
         scope: RUN_AND_BUILD_TIME
         type: SECRET
@@ -81,7 +84,7 @@ services:
         value: ""
       - key: CORS_ORIGINS
         scope: RUN_AND_BUILD_TIME
-        value: '["https://omniweb.ai","https://www.omniweb.ai","https://roadcall.ai","https://www.roadcall.ai"]'
+        value: '["https://omniweb.ai","https://www.omniweb.ai","https://omniweb-engine-rs6fr.ondigitalocean.app","https://roadcall.ai","https://www.roadcall.ai"]'
       - key: DEEPGRAM_API_KEY
         scope: RUN_AND_BUILD_TIME
         type: SECRET
@@ -113,14 +116,13 @@ services:
     instance_count: 1
     instance_size_slug: basic-xxs
     envs:
-      # Required for Next `npm run build`: admin `fetch()` + widget (see dashboard/Dockerfile ARGs).
-      # Use https://api.omniweb.ai here instead if that domain is live and preferred.
+      # Public API (FastAPI) — use this host so the dashboard/widget call /api/... in production.
       - key: NEXT_PUBLIC_API_URL
         scope: BUILD_TIME
-        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
+        value: "https://api.omniweb.ai"
       - key: NEXT_PUBLIC_ENGINE_URL
         scope: BUILD_TIME
-        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
+        value: "https://api.omniweb.ai"
 
 ingress:
   rules:
@@ -142,16 +144,6 @@ ingress:
         authority: api.omniweb.ai
         scheme: https
         redirect_code: 307
-    - match:
-        authority:
-          exact: omniweb-engine-rs6fr.ondigitalocean.app
-        path:
-          prefix: /
-      redirect:
-        authority: omniweb.ai
-        scheme: https
-        uri: /admin
-        redirect_code: 302
     - component:
         name: api
         preserve_path_prefix: true

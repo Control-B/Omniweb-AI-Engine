@@ -593,6 +593,7 @@ async def create_voice_session(
     body: GadgetVoiceSessionRequest,
     x_gadget_secret: str | None = Header(None),
     x_engine_secret: str | None = Header(None),
+    x_tool_secret: str | None = Header(None),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Create a Deepgram Voice Agent session payload for Gadget.
@@ -600,7 +601,8 @@ async def create_voice_session(
     Gadget should call this server-to-server with ``X-Gadget-Secret`` set to the
     shared value stored in ``GADGET_ENGINE_SHARED_SECRET``.
     """
-    _verify_gadget_secret(x_gadget_secret or x_engine_secret)
+    # Accept legacy header variants so Gadget can migrate without breakage.
+    _verify_gadget_secret(x_gadget_secret or x_engine_secret or x_tool_secret)
 
     client_id, store = await _resolve_client_id_for_gadget_voice(db, body)
 
@@ -611,11 +613,17 @@ async def create_voice_session(
     session = await _create_shopify_voice_session(db, store=store, body=body)
 
     base_url = _gadget_base_url()
+    voice_session_id = str(session.id if session else uuid.uuid4())
+    websocket_url = payload["websocket_url"]
+    access_token = payload["access_token"]
+    expires_in = payload.get("expires_in")
+    shop_domain = store.shop_domain if store else body.shop_domain
+
     return {
         **payload,
-        "voice_session_id": str(session.id if session else uuid.uuid4()),
+        "voice_session_id": voice_session_id,
         "voice_provider": "deepgram",
-        "shop_domain": store.shop_domain if store else body.shop_domain,
+        "shop_domain": shop_domain,
         "gadget_store_id": body.gadget_store_id,
         "session_endpoint": f"{base_url}/api/gadget/voice/session",
         "auth": {
@@ -637,6 +645,23 @@ async def create_voice_session(
             "capture_lead": f"{base_url}/api/gadget/tools/capture-lead",
         },
         "metadata": body.metadata,
+        # CamelCase / legacy compatibility for Gadget broker and widget runtimes.
+        "websocketUrl": websocket_url,
+        "accessToken": access_token,
+        "expiresIn": expires_in,
+        "voiceSessionId": voice_session_id,
+        "sessionEndpoint": f"{base_url}/api/gadget/voice/session",
+        "shopDomain": shop_domain,
+        "gadgetStoreId": body.gadget_store_id,
+        "deepgram": {
+            "websocket_url": websocket_url,
+            "access_token": access_token,
+            "expires_in": expires_in,
+            "settings": payload["settings"],
+            "websocketUrl": websocket_url,
+            "accessToken": access_token,
+            "expiresIn": expires_in,
+        },
     }
 
 
@@ -645,6 +670,7 @@ async def create_voice_session_alias(
     body: GadgetVoiceSessionRequest,
     x_gadget_secret: str | None = Header(None),
     x_engine_secret: str | None = Header(None),
+    x_tool_secret: str | None = Header(None),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Compatibility alias for clients looking for ``/voice-session``."""
@@ -652,6 +678,25 @@ async def create_voice_session_alias(
         body=body,
         x_gadget_secret=x_gadget_secret,
         x_engine_secret=x_engine_secret,
+        x_tool_secret=x_tool_secret,
+        db=db,
+    )
+
+
+@router.post("/voice/omniweb-session")
+async def create_voice_session_legacy_alias(
+    body: GadgetVoiceSessionRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    x_tool_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Legacy alias for Gadget routes still using ``/voice/omniweb-session`` naming."""
+    return await create_voice_session(
+        body=body,
+        x_gadget_secret=x_gadget_secret,
+        x_engine_secret=x_engine_secret,
+        x_tool_secret=x_tool_secret,
         db=db,
     )
 

@@ -159,6 +159,17 @@ async def start_public_storefront_session(
 ) -> dict:
     store, _payload = await _authenticate_public_storefront_request(db, authorization, body.context.shop_domain)
     context = body.context.model_dump(exclude_none=True)
+    context = ShopifyAssistantService.merge_context(
+        context,
+        {
+            "nav_config": store.nav_config or {},
+            "support_context": {
+                **(store.support_policy or {}),
+                **(context.get("support_context") or {}),
+            },
+            "checkout_config": store.checkout_config or {},
+        },
+    )
     session = ShopifyAssistantSession(
         client_id=store.client_id,
         store_id=store.id,
@@ -195,6 +206,17 @@ async def start_public_storefront_voice_session(
         db, authorization, body.context.shop_domain
     )
     context = body.context.model_dump(exclude_none=True)
+    context = ShopifyAssistantService.merge_context(
+        context,
+        {
+            "nav_config": store.nav_config or {},
+            "support_context": {
+                **(store.support_policy or {}),
+                **(context.get("support_context") or {}),
+            },
+            "checkout_config": store.checkout_config or {},
+        },
+    )
     session = ShopifyAssistantSession(
         client_id=store.client_id,
         store_id=store.id,
@@ -243,6 +265,14 @@ async def update_public_storefront_context(
         session.context,
         body.context.model_dump(exclude_none=True),
     )
+    session.context = ShopifyAssistantService.merge_context(
+        session.context,
+        {
+            "nav_config": store.nav_config or {},
+            "support_context": store.support_policy or {},
+            "checkout_config": store.checkout_config or {},
+        },
+    )
     session.shopper_email = body.context.shopper_email or session.shopper_email
     session.shopper_locale = body.context.shopper_locale or session.shopper_locale
     session.currency = body.context.currency or session.currency
@@ -268,6 +298,14 @@ async def create_public_storefront_reply(
     session.context = ShopifyAssistantService.merge_context(
         session.context,
         body.context.model_dump(exclude_none=True),
+    )
+    session.context = ShopifyAssistantService.merge_context(
+        session.context,
+        {
+            "nav_config": store.nav_config or {},
+            "support_context": store.support_policy or {},
+            "checkout_config": store.checkout_config or {},
+        },
     )
     session.shopper_email = body.context.shopper_email or session.shopper_email
     session.shopper_locale = body.context.shopper_locale or session.shopper_locale
@@ -720,9 +758,10 @@ async def _build_welcome_message(
         business_name=business_name,
     )
     behavior_summary = ShopifyAssistantService.build_behavior_summary(context.model_dump(exclude_none=True))
+    greeting = f"Hi! Welcome to {business_name}. {base} How can I help you today?"
     if behavior_summary:
-        return f"{behavior_summary} {base} What are you looking for today?"
-    return f"{base} What are you looking for today?"
+        return f"{greeting} {behavior_summary}"
+    return greeting
 
 
 def _serialize_store(store: ShopifyStore) -> dict[str, Any]:

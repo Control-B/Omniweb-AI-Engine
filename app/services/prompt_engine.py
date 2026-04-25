@@ -176,6 +176,42 @@ def _goals_block(agent_mode: str, industry: IndustryConfig) -> str:
 - CONFUSED: Simplify it \u2014 say something like: Think of it as a 24/7 salesperson that talks to your visitors and turns them into customers."""
 
 
+def _orchestration_block(*, industry_slug: str, agent_mode: str) -> str:
+    return f"""## Revenue Agent Orchestration Layer
+
+You are a multi-skill revenue agent with specialist collaboration behavior.
+
+- **Current lead specialist role:** {agent_mode}
+- **Industry pack:** {industry_slug}
+
+### Specialist map
+- Sales Agent: conversion strategy, objections, upsell/cross-sell.
+- Product Expert Agent: product/service details, comparisons, fit guidance.
+- Support Agent: policies, order help, post-purchase support.
+- Site Navigation Agent: guide visitors to the right page or flow.
+- Lead Qualification Agent: collect contact + qualification signals.
+- Voice Concierge Agent: natural spoken interaction and interruption handling.
+
+### Routing policy
+1. Detect intent and purchase stage before answering.
+2. High confidence -> answer + recommended next action.
+3. Medium confidence -> ask one clarifying question.
+4. Low confidence -> safe fallback + optional human handoff.
+5. Never reveal routing internals; respond as one unified assistant.
+
+### Revenue behavior
+- Educate before qualifying.
+- Lead with benefits and business outcomes.
+- Drive conversion with contextual next steps.
+- Recommend products/services and relevant navigation paths.
+- Stay concise and action-oriented.
+
+### Welcome-on-open behavior
+- On first open, send exactly one welcome message and ask how you can help today.
+- After that, wait for user input and avoid repeated unsolicited prompts.
+"""
+
+
 def _qualification_block(fields: list[dict[str, Any]]) -> str:
     if not fields:
         return ""
@@ -395,32 +431,35 @@ def compose_system_prompt(
     # 4. Goals
     blocks.append(_goals_block(mode, industry))
 
-    # 5. Qualification fields
+    # 5. Orchestration layer
+    blocks.append(_orchestration_block(industry_slug=industry.slug, agent_mode=mode))
+
+    # 6. Qualification fields
     qual = _qualification_block(industry.qualification_fields)
     if qual:
         blocks.append(qual)
 
-    # 6. Guardrails
+    # 7. Guardrails
     guard = _guardrails_block(industry, custom_guardrails)
     if guard:
         blocks.append(guard)
 
-    # 7. Escalation
+    # 8. Escalation
     esc = _escalation_block(industry.escalation_triggers, custom_escalation_triggers)
     if esc:
         blocks.append(esc)
 
-    # 8. Tools
+    # 9. Tools
     tools = _tools_block(industry.available_tools)
     if tools:
         blocks.append(tools)
 
-    # 9. Custom instructions (tenant-authored)
+    # 10. Custom instructions (tenant-authored)
     custom = _custom_instructions_block(custom_prompt)
     if custom:
         blocks.append(custom)
 
-    # 10. Universal rules (always last, always present)
+    # 11. Universal rules (always last, always present)
     blocks.append(UNIVERSAL_RULES.format(
         agent_name=agent_name,
         agent_role=agent_role,

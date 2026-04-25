@@ -5,14 +5,17 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.models.models import (
+    AgentConfig,
     ShopifyAssistantSession,
     ShopifyDiscountApproval,
     ShopifyStore,
 )
+from app.services.prompt_engine import compose_system_prompt
 
 logger = get_logger(__name__)
 
@@ -33,6 +36,21 @@ class ShopifyAssistantService:
         "size_help",
         "payment_guardrail",
         "general_support",
+    }
+    SPECIALIST_BY_INTENT = {
+        "product_discovery": "Product Expert Agent",
+        "product_recommendation": "Product Expert Agent",
+        "cross_sell": "Sales Agent",
+        "upsell": "Sales Agent",
+        "discount_request": "Sales Agent",
+        "checkout": "Sales Agent",
+        "site_navigation": "Site Navigation Agent",
+        "shipping_policy": "Support Agent",
+        "returns_policy": "Support Agent",
+        "order_status": "Support Agent",
+        "size_help": "Product Expert Agent",
+        "payment_guardrail": "Support Agent",
+        "general_support": "Support Agent",
     }
 
     @staticmethod
@@ -213,6 +231,10 @@ class ShopifyAssistantService:
         return None
 
     @staticmethod
+    def specialist_for_intent(intent: str) -> str:
+        return ShopifyAssistantService.SPECIALIST_BY_INTENT.get(intent, "Voice Concierge Agent")
+
+    @staticmethod
     def recommend_products(message: str, context: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
         candidates = [
             ShopifyAssistantService.normalize_product(item)
@@ -303,9 +325,15 @@ class ShopifyAssistantService:
     ) -> dict[str, Any]:
         context = session.context or {}
         intent = ShopifyAssistantService.infer_intent(shopper_message, context)
+        active_specialist = ShopifyAssistantService.specialist_for_intent(intent)
         behavior_summary = ShopifyAssistantService.build_behavior_summary(context)
         recommendations = ShopifyAssistantService.recommend_products(shopper_message, context)
         support_response = ShopifyAssistantService.build_support_response(intent, context, store)
+        cfg_result = await db.execute(
+            select(AgentConfig).where(AgentConfig.client_id == session.client_id).limit(1)
+        )
+        agent_config = cfg_result.scalar_one_or_none()
+        tenant_context = (agent_config.custom_context or "").strip() if agent_config else ""
 
         # ── Try to enrich with live Storefront API products ──────────
         if intent in ShopifyAssistantService.PRODUCT_INTENTS and not recommendations:
@@ -338,6 +366,7 @@ class ShopifyAssistantService:
                 behavior_summary=behavior_summary,
                 recommendations=recommendations,
                 support_response=support_response if intent in ShopifyAssistantService.SUPPORT_INTENTS else None,
+                tenant_context=tenant_context,
             )
         except Exception as llm_err:
             logger.warning(f"LLM reply failed, falling back to rule-based: {llm_err}")
@@ -438,6 +467,7 @@ class ShopifyAssistantService:
         return {
             "message": message,
             "intent": intent,
+            "active_specialist": active_specialist,
             "action": action,
             "navigate_to": navigate_to,
             "recommended_products": recommendations,
@@ -457,6 +487,7 @@ class ShopifyAssistantService:
         behavior_summary: str | None,
         recommendations: list[dict[str, Any]],
         support_response: str | None,
+        tenant_context: str | None,
     ) -> str | None:
         """Use OpenAI to generate a natural commerce assistant reply."""
         from app.core.config import get_settings
@@ -467,18 +498,23 @@ class ShopifyAssistantService:
         import openai
         client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-        # Build system prompt
         shop_name = store.shop_name or store.shop_domain.split(".")[0].replace("-", " ").title()
-        system = (
-            f"You are a friendly, knowledgeable shopping assistant for {shop_name}. "
-            "You handle both voice and text conversations naturally. "
-            "Your job is to help shoppers find the right products, answer questions about shipping/returns/sizing, "
-            "guide site navigation, and move qualified shoppers toward checkout like a top in-store sales associate. "
-            "Support multilingual shoppers by responding in the language they use and switching languages when they switch. "
-            "Be concise (2-3 sentences max), warm, and helpful. "
-            "Never fabricate product details — only reference products from the recommendations list below. "
-            "Never handle payment info directly — always guide to the secure checkout page. "
-            "If you don't know something, say so honestly and offer to help in another way.\n\n"
+        system = compose_system_prompt(
+            agent_name="Ava",
+            business_name=shop_name,
+            industry_slug="ecommerce",
+            agent_mode="ecommerce_assistant",
+            business_type="shopify_store",
+            services=[],
+            business_hours={},
+            timezone="UTC",
+            booking_url=None,
+            custom_context=tenant_context,
+        )
+        system += (
+            "\n\nUse concise conversational responses (2-3 short sentences). "
+            "Act as a multilingual digital sales associate. "
+            "If you cite policy/factual details, ground them in provided context."
         )
 
         if recommendations:

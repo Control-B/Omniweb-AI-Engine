@@ -210,6 +210,9 @@
       if (data.navigate_to && data.action === "navigate_to_product") {
         appendAction("View product →", data.navigate_to)
       }
+      if (data.navigate_to && data.action === "navigate_to_page") {
+        appendAction("Go there →", data.navigate_to)
+      }
       if (data.checkout_url && data.action === "navigate_to_checkout") {
         appendAction("Go to checkout →", data.checkout_url)
       }

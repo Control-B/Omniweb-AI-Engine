@@ -18,6 +18,7 @@ import {
  * Omniweb embeddable widget — Deepgram Voice Agent (orb + panel).
  *
  * URL: ``/widget/{clientId}`` — ``clientId`` is the Omniweb ``client_id`` (UUID).
+ * Query: ``?panel=1`` opens the chat panel on load (easier widget-only testing).
  */
 
 type LangOption = { code: string; label: string; retell: string; flag?: string };
@@ -67,6 +68,17 @@ export default function VoiceWidgetPage() {
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [textDraft, setTextDraft] = useState("");
   const sessionRef = useRef<DeepgramVoiceAgentSession | null>(null);
+
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get("panel") === "1" || q.get("open") === "1") {
+        setPanelOpen(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

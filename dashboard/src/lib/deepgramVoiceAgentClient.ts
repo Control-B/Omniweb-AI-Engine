@@ -29,6 +29,26 @@ function floatToInt16Buffer(channel: Float32Array): ArrayBuffer {
   return buf.buffer;
 }
 
+/** Deepgram Voice Agent ``audio.input`` is linear16 @ 16 kHz — browser mic is usually 44.1/48 kHz. */
+function float32To16kHzPcm(input: Float32Array, inputSampleRate: number): ArrayBuffer {
+  if (!input.length) return new ArrayBuffer(0);
+  if (inputSampleRate === 16000) {
+    return floatToInt16Buffer(input);
+  }
+  const ratio = inputSampleRate / 16000;
+  const outLen = Math.max(1, Math.floor(input.length / ratio));
+  const out = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i += 1) {
+    const srcPos = i * ratio;
+    const i0 = Math.floor(srcPos);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    const frac = srcPos - i0;
+    const s = (input[i0] ?? 0) * (1 - frac) + (input[i1] ?? 0) * frac;
+    out[i] = Math.min(1, Math.max(-1, s)) * 0x7fff;
+  }
+  return out.buffer;
+}
+
 export class DeepgramVoiceAgentSession {
   private ws: WebSocket | null = null;
   private micContext: AudioContext | null = null;
@@ -118,10 +138,12 @@ export class DeepgramVoiceAgentSession {
       this.processor = this.micContext.createScriptProcessor(4096, 1, 1);
       this.micSource.connect(this.processor);
       this.processor.connect(this.micContext.destination);
+      const inRate = this.micContext.sampleRate;
       this.processor.onaudioprocess = (ev) => {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.settingsApplied) return;
-        const pcm = floatToInt16Buffer(ev.inputBuffer.getChannelData(0));
-        this.ws.send(pcm);
+        const ch = ev.inputBuffer.getChannelData(0);
+        const pcm = float32To16kHzPcm(ch, inRate);
+        if (pcm.byteLength) this.ws.send(pcm);
       };
     }
 

@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 import { AuthProvider } from "@/lib/auth-context";
 
 function isPublicPath(path: string): boolean {
-  if (!path) return false;
+  // If middleware did not set x-omniweb-path, avoid forcing AuthProvider (prevents odd SSR/500 edge cases).
+  if (!path) return true;
   if (path === "/landing" || path === "/login" || path === "/demo" || path === "/health") return true;
   if (path === "/register" || path === "/logout" || path === "/sso-callback") return true;
   if (path === "/widget" || path.startsWith("/widget/")) return true;

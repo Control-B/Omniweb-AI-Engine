@@ -4,18 +4,44 @@ function normalizeApiBase(url: string): string {
   return url.replace(/\/$/, "");
 }
 
-function resolveApiBase(): string {
-  // Prefer explicit engine URL (same as widget) so admin API calls never infer
-  // from the dashboard origin — the Next app and FastAPI are usually different hosts.
-  const configured =
-    process.env.NEXT_PUBLIC_API_URL?.trim() ||
-    process.env.NEXT_PUBLIC_ENGINE_URL?.trim();
-  if (configured) return normalizeApiBase(configured);
-  if (process.env.NODE_ENV === "development") return "http://localhost:8000";
-  return DEFAULT_PRODUCTION_API_BASE;
+function uniqueBases(bases: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const b of bases) {
+    const n = normalizeApiBase(b);
+    if (!n || seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+  return out;
 }
 
-const API_BASE = resolveApiBase();
+function resolveApiBases(): string[] {
+  // Prefer explicit backend URL, but keep origin + default as runtime fallbacks.
+  const configured =
+    process.env.NEXT_PUBLIC_API_URL?.trim() ||
+    process.env.NEXT_PUBLIC_ENGINE_URL?.trim() ||
+    "";
+  const bases: string[] = [];
+  if (configured) bases.push(configured);
+  if (typeof window !== "undefined" && window.location.origin) {
+    bases.push(window.location.origin);
+  }
+  if (process.env.NODE_ENV === "development") {
+    bases.push("http://localhost:8000");
+  } else {
+    bases.push(DEFAULT_PRODUCTION_API_BASE);
+  }
+  return uniqueBases(bases);
+}
+
+function getApiBases(): string[] {
+  return resolveApiBases();
+}
+
+function getPrimaryApiBase(): string {
+  return getApiBases()[0] || DEFAULT_PRODUCTION_API_BASE;
+}
 
 // All backend routes live under /api
 const API_PREFIX = "/api";
@@ -114,27 +140,44 @@ async function apiFetch<T = any>(
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${API_PREFIX}${path}`, { ...options, headers });
+  const bases = getApiBases();
+  let lastError: Error | null = null;
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const rawDetail = body.detail;
-    const message = Array.isArray(rawDetail)
-      ? rawDetail.map((d: unknown) => (typeof d === "object" && d && "msg" in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d))).join("; ")
-      : rawDetail
-        ? String(rawDetail)
-        : `API error ${res.status}`;
+  for (const base of bases) {
+    try {
+      const res = await fetch(`${base}${API_PREFIX}${path}`, { ...options, headers });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const rawDetail = body.detail;
+        const message = Array.isArray(rawDetail)
+          ? rawDetail.map((d: unknown) => (typeof d === "object" && d && "msg" in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d))).join("; ")
+          : rawDetail
+            ? String(rawDetail)
+            : `API error ${res.status}`;
 
-    // For 401 on non-auth endpoints, clear token and redirect to login
-    if (res.status === 401 && !path.startsWith("/auth/")) {
-      clearToken();
-      if (typeof window !== "undefined") window.location.href = "/login";
+        // Retry on infra-ish errors with next base.
+        if (res.status === 502 || res.status === 503 || res.status === 504) {
+          lastError = new Error(message);
+          continue;
+        }
+
+        // For 401 on non-auth endpoints, clear token and redirect to login.
+        if (res.status === 401 && !path.startsWith("/auth/")) {
+          clearToken();
+          if (typeof window !== "undefined") window.location.href = "/login";
+        }
+        throw new Error(message);
+      }
+      return res.json();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error("Load failed");
+      // Try next base only for transport-level failures.
+      if (!(lastError instanceof TypeError)) {
+        throw lastError;
+      }
     }
-
-    throw new Error(message);
   }
-
-  return res.json();
+  throw lastError || new Error("Load failed");
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -152,7 +195,7 @@ export interface AuthResponse {
 }
 
 export async function exchangeClerkSession(clerkToken: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}${API_PREFIX}/auth/clerk-session`, {
+  const res = await fetch(`${getPrimaryApiBase()}${API_PREFIX}/auth/clerk-session`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -712,7 +755,7 @@ export async function deleteSiteTemplateInstance(id: string) {
 }
 
 export async function getPublicSiteTemplateInstance(publicSlug: string) {
-  const res = await fetch(`${API_BASE}${API_PREFIX}/site-templates/public/${publicSlug}`, {
+  const res = await fetch(`${getPrimaryApiBase()}${API_PREFIX}/site-templates/public/${publicSlug}`, {
     cache: "no-store",
   });
 
@@ -757,7 +800,7 @@ export async function uploadKbFile(file: File, name?: string) {
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${API_PREFIX}/knowledge-base/file`, {
+  const res = await fetch(`${getPrimaryApiBase()}${API_PREFIX}/knowledge-base/file`, {
     method: "POST",
     headers,
     body: formData,

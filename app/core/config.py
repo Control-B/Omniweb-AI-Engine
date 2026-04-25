@@ -68,7 +68,8 @@ class Settings(BaseSettings):
     DEEPGRAM_PROJECT_ID: str = ""
     DEEPGRAM_AGENT_MODEL: str = "gpt-4o-mini"
     DEEPGRAM_STT_MODEL: str = "nova-3"
-    DEEPGRAM_TTS_VOICE: str = "aura-asteria-en"
+    # Voice Agent speak model (v2 line — see Deepgram TTS / Voice Agent docs)
+    DEEPGRAM_TTS_VOICE: str = "aura-2-asteria-en"
 
     # ── Twilio (Phone Numbers + SMS) ─────────────────────────
     TWILIO_ACCOUNT_SID: str = ""

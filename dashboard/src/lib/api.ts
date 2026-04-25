@@ -158,6 +158,7 @@ export async function exchangeClerkSession(clerkToken: string): Promise<AuthResp
       "Content-Type": "application/json",
       Authorization: `Bearer ${clerkToken}`,
     },
+    body: "{}",
   });
 
   if (!res.ok) {

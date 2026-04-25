@@ -48,6 +48,10 @@ async def grant_temporary_token(*, ttl_seconds: int = 600) -> dict[str, Any]:
 
 def _tts_voice_for_config(config: AgentConfig) -> str:
     vid = (config.voice_id or "").strip()
+    if not vid:
+        return settings.DEEPGRAM_TTS_VOICE
+    if vid.lower() == "aura-asteria-en":
+        return "aura-2-asteria-en"
     if "aura" in vid.lower():
         return vid
     return settings.DEEPGRAM_TTS_VOICE

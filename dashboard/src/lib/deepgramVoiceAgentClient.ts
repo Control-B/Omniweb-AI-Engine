@@ -57,11 +57,14 @@ export class DeepgramVoiceAgentSession {
   private processor: ScriptProcessorNode | null = null;
   private ttsAnalyser: AnalyserNode | null = null;
   private handlers: VoiceAgentHandlers;
+  /** Queued until server sends Welcome (Deepgram Voice Agent message flow). */
+  private pendingSettingsJson: string | null = null;
   private settingsApplied = false;
   private pendingInjects: string[] = [];
   private scheduledSources = new Set<AudioBufferSourceNode>();
   private playHead = 0;
   private readonly outputSampleRate = 24000;
+  private welcomeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(handlers: VoiceAgentHandlers) {
     this.handlers = handlers;
@@ -74,6 +77,7 @@ export class DeepgramVoiceAgentSession {
     enableMic: boolean;
   }): Promise<void> {
     await this.disconnect();
+    this.pendingSettingsJson = null;
     this.settingsApplied = false;
 
     const scheme = "bearer";
@@ -101,13 +105,18 @@ export class DeepgramVoiceAgentSession {
     });
 
     this.ws = socket;
+    this.pendingSettingsJson = JSON.stringify(params.settings);
     socket.addEventListener("message", this.onMessage);
     socket.addEventListener("close", () => {
       this.handlers.onClose?.();
     });
 
-    const settingsStr = JSON.stringify(params.settings);
-    socket.send(settingsStr);
+    this.welcomeTimer = setTimeout(() => {
+      this.welcomeTimer = null;
+      this.handlers.onError?.(
+        "Voice service did not send Welcome. Check the Deepgram token, network, and that the Voice Agent WebSocket URL is correct.",
+      );
+    }, 12_000);
 
     const AudioContextClass = getAudioContextClass();
     if (!AudioContextClass) {
@@ -152,12 +161,23 @@ export class DeepgramVoiceAgentSession {
 
   private onMessage = (ev: MessageEvent) => {
     if (ev.data instanceof ArrayBuffer) {
-      this.playPcm(ev.data);
+      if (this.settingsApplied) {
+        this.playPcm(ev.data);
+      }
       return;
     }
     try {
       const data = JSON.parse(String(ev.data)) as Record<string, unknown>;
       this.handlers.onStructuredMessage?.(data);
+
+      if (data.type === "Welcome" && this.ws && this.pendingSettingsJson) {
+        if (this.welcomeTimer) {
+          clearTimeout(this.welcomeTimer);
+          this.welcomeTimer = null;
+        }
+        this.ws.send(this.pendingSettingsJson);
+        this.pendingSettingsJson = null;
+      }
 
       if (data.type === "SettingsApplied") {
         this.settingsApplied = true;
@@ -236,6 +256,11 @@ export class DeepgramVoiceAgentSession {
   }
 
   async disconnect(): Promise<void> {
+    if (this.welcomeTimer) {
+      clearTimeout(this.welcomeTimer);
+      this.welcomeTimer = null;
+    }
+    this.pendingSettingsJson = null;
     this.settingsApplied = false;
     this.pendingInjects = [];
     if (this.ws) {

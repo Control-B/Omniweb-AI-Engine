@@ -31,6 +31,7 @@ from app.core.logging import get_logger
 from app.models.models import AgentConfig, Client, Lead, ShopifyAssistantSession, ShopifyStore
 from app.services.shopify_assistant_service import ShopifyAssistantService, utcnow
 from app.services.shopify_oauth_service import ShopifyOAuthError, ShopifyOAuthService
+from app.services.shopify_storefront_bridge_service import ShopifyStorefrontBridgeService
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -137,6 +138,33 @@ class GadgetStoreDisableRequest(BaseModel):
         validation_alias=AliasChoices("gadget_store_id", "gadgetStoreId", "store_id", "storeId", "shop_id", "shopId"),
     )
     reason: str | None = "disabled"
+
+
+class GadgetStorefrontAccessRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    shop_domain: str = Field(
+        ...,
+        validation_alias=AliasChoices("shop_domain", "shopDomain", "shop", "myshopifyDomain"),
+        description="Shopify .myshopify.com domain",
+    )
+    gadget_store_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("gadget_store_id", "gadgetStoreId", "store_id", "storeId", "shop_id", "shopId"),
+        description="Optional Gadget/Shopify store id",
+    )
+    client_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("client_id", "clientId"),
+        description="Optional Omniweb client UUID fallback",
+    )
+    storefront_session_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("storefront_session_id", "storefrontSessionId", "session_id", "sessionId"),
+        description="Optional storefront/browser session id",
+    )
+    language: str | None = Field("en", description="Preferred language code")
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class GadgetCaptureLeadRequest(CaptureLeadRequest):
@@ -584,6 +612,107 @@ async def disable_store_alias(
         body=body,
         x_gadget_secret=x_gadget_secret,
         x_engine_secret=x_engine_secret,
+        db=db,
+    )
+
+
+@router.post("/shopify/access")
+async def request_shopify_storefront_access(
+    body: GadgetStorefrontAccessRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    x_tool_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Authorize Shopify storefront runtime while Gadget remains source-of-truth.
+
+    Gadget handles Shopify admin/auth/billing, then requests runtime access from Omniweb.
+    """
+    _verify_gadget_secret(x_gadget_secret or x_engine_secret or x_tool_secret)
+    store = await _resolve_store(
+        db,
+        shop_domain=body.shop_domain,
+        gadget_store_id=body.gadget_store_id,
+        client_id=body.client_id,
+        require_enabled=True,
+    )
+    if not store:
+        raise HTTPException(404, "Shopify store is not configured in Omniweb")
+
+    base_url = _gadget_base_url()
+    public_token = ShopifyStorefrontBridgeService.issue_public_token(store)
+    client_id = str(store.client_id)
+    widget_url = f"{base_url}/widget/{client_id}"
+    voice_bootstrap_path = "/api/chat/voice-agent/bootstrap"
+
+    return {
+        "ok": True,
+        "shop_domain": store.shop_domain,
+        "gadget_store_id": store.shop_id or body.gadget_store_id,
+        "client_id": client_id,
+        "assistant_enabled": bool(store.assistant_enabled),
+        "voice_allowed": True,
+        "voice_provider": "deepgram",
+        "engine_base_url": base_url,
+        "widget_url": widget_url,
+        "widget_iframe_allow": "microphone; autoplay",
+        "public_token": public_token["token"],
+        "public_token_expires_at": public_token["expires_at"],
+        "endpoints": {
+            "widget": widget_url,
+            "chat_languages": f"{base_url}/api/chat/languages",
+            "voice_bootstrap": f"{base_url}{voice_bootstrap_path}",
+            "storefront_bootstrap": f"{base_url}/api/shopify/public/bootstrap",
+            "storefront_session_start": f"{base_url}/api/shopify/public/sessions",
+            "storefront_reply": f"{base_url}/api/shopify/public/sessions/{{session_id}}/reply",
+            "storefront_context": f"{base_url}/api/shopify/public/sessions/{{session_id}}/context",
+            "storefront_events": f"{base_url}/api/shopify/public/sessions/{{session_id}}/events",
+            "storefront_voice_session": f"{base_url}/api/shopify/public/voice/session",
+        },
+        "metadata": body.metadata,
+        "session_hint": {
+            "storefront_session_id": body.storefront_session_id,
+            "language": body.language or "en",
+        },
+        "auth": {
+            "gadget_to_omniweb_header": "X-Gadget-Secret",
+            "browser_to_omniweb_header": "Authorization: Bearer <public_token>",
+        },
+    }
+
+
+@router.post("/shopify/access-request")
+async def request_shopify_storefront_access_alias(
+    body: GadgetStorefrontAccessRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    x_tool_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Compatibility alias for Gadget naming: request storefront runtime access."""
+    return await request_shopify_storefront_access(
+        body=body,
+        x_gadget_secret=x_gadget_secret,
+        x_engine_secret=x_engine_secret,
+        x_tool_secret=x_tool_secret,
+        db=db,
+    )
+
+
+@router.post("/stores/access")
+async def request_store_access_alias(
+    body: GadgetStorefrontAccessRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    x_tool_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Compatibility alias for Gadget naming: request store access."""
+    return await request_shopify_storefront_access(
+        body=body,
+        x_gadget_secret=x_gadget_secret,
+        x_engine_secret=x_engine_secret,
+        x_tool_secret=x_tool_secret,
         db=db,
     )
 

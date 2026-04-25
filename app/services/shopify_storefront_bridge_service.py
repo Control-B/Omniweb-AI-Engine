@@ -92,6 +92,7 @@ class ShopifyStorefrontBridgeService:
             "public_token_expires_at": public_token["expires_at"],
             "endpoints": {
                 "start_session": "/api/shopify/public/sessions",
+                "voice_session": "/api/shopify/public/voice/session",
                 "update_context": "/api/shopify/public/sessions/{session_id}/context",
                 "send_message": "/api/shopify/public/sessions/{session_id}/reply",
                 "track_event": "/api/shopify/public/sessions/{session_id}/events",

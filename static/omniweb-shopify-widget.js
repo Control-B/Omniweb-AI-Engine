@@ -26,10 +26,12 @@
   /* ── State ────────────────────────────────────────────────────── */
   let token = null
   let tokenExp = 0
+  let clientId = null
   let sessionId = null
   let endpoints = {}
   let greeting = ""
   let minimised = true
+  let voiceOpen = false
   let messages = []
   let sending = false
 
@@ -42,6 +44,14 @@
       box-shadow:0 4px 14px rgba(0,0,0,.25);transition:transform .2s}
     #omniweb-chat-fab:hover{transform:scale(1.08)}
     #omniweb-chat-fab svg{width:28px;height:28px;fill:currentColor}
+    #omniweb-voice-fab{position:fixed;bottom:24px;right:96px;z-index:99999;
+      height:44px;border-radius:999px;background:#0f172a;color:#fff;border:1px solid rgba(148,163,184,.3);
+      cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 14px;
+      font:600 13px/1 system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.22)}
+    #omniweb-voice-fab:hover{background:#1e293b}
+    #omniweb-voice-panel{position:fixed;bottom:96px;right:24px;z-index:99999;
+      width:min(100vw - 1rem,420px);height:min(100dvh - 1rem,640px);border:0;border-radius:12px;
+      box-shadow:0 12px 48px rgba(0,0,0,.35);background:#0b1220;display:none}
     #omniweb-chat-window{position:fixed;bottom:96px;right:24px;z-index:99999;
       width:380px;max-height:520px;border-radius:16px;background:#fff;
       display:flex;flex-direction:column;overflow:hidden;
@@ -70,7 +80,8 @@
       transition:opacity .15s}
     #omniweb-chat-send:disabled{opacity:.5;cursor:default}
     @media(max-width:480px){#omniweb-chat-window{right:8px;left:8px;
-      bottom:80px;width:auto}}
+      bottom:80px;width:auto}#omniweb-voice-fab{right:84px;bottom:18px}
+      #omniweb-voice-panel{right:8px;left:8px;bottom:80px;width:auto;height:min(100dvh - 96px,680px)}}
   `
   document.head.appendChild(STYLE)
 
@@ -78,6 +89,10 @@
   const fab = el("button", { id: "omniweb-chat-fab" })
   fab.innerHTML = `<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/></svg>`
   fab.onclick = toggleChat
+  const voiceFab = el("button", { id: "omniweb-voice-fab", textContent: "Voice" })
+  voiceFab.onclick = toggleVoice
+  const voicePanel = el("iframe", { id: "omniweb-voice-panel", title: "Omniweb Voice Assistant" })
+  voicePanel.setAttribute("allow", "microphone; autoplay")
 
   const win = el("div", { id: "omniweb-chat-window", className: "hidden" })
   const header = el("div", { id: "omniweb-chat-header" })
@@ -95,7 +110,7 @@
   })
   inputRow.append(input, sendBtn)
   win.append(header, msgBox, inputRow)
-  document.body.append(fab, win)
+  document.body.append(fab, voiceFab, voicePanel, win)
 
   document.getElementById("omniweb-chat-close").onclick = toggleChat
   sendBtn.onclick = sendMessage
@@ -118,10 +133,12 @@
       const data = await res.json()
       token = data.public_token
       tokenExp = Date.now() + 28 * 60 * 1000 // refresh 2 min early
+      clientId = data.client_id || null
       endpoints = data.endpoints || {}
       greeting = data.greeting || "Hi! How can I help you today?"
       if (!data.assistant_enabled) {
         fab.style.display = "none"
+        voiceFab.style.display = "none"
         return
       }
     } catch (err) {
@@ -134,6 +151,21 @@
     minimised = !minimised
     win.classList.toggle("hidden", minimised)
     if (!minimised && !sessionId) startSession()
+  }
+
+  function toggleVoice() {
+    voiceOpen = !voiceOpen
+    if (!voiceOpen) {
+      voicePanel.style.display = "none"
+      return
+    }
+    if (!clientId) {
+      appendMsg("system", "Voice is not configured for this store.")
+      voiceOpen = false
+      return
+    }
+    voicePanel.src = `${ENGINE.replace(/\/$/, "")}/widget/${encodeURIComponent(clientId)}?panel=1`
+    voicePanel.style.display = "block"
   }
 
   async function startSession() {

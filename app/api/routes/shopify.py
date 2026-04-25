@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
+from app.api.routes.deepgram import VoiceAgentBootstrapRequest, run_voice_agent_bootstrap
 from app.core.auth import get_current_client, is_internal_staff_role
 from app.models.models import AgentConfig, ShopifyAssistantSession, ShopifyDiscountApproval, ShopifyStore
 from app.services.shopify_api_service import ShopifyAPIError, ShopifyAPIService
@@ -111,6 +112,11 @@ class PublicSessionRequest(BaseModel):
     context: StorefrontContext
 
 
+class PublicVoiceSessionRequest(BaseModel):
+    context: StorefrontContext
+    language: str | None = "en"
+
+
 class StorefrontEvent(BaseModel):
     type: str
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -175,6 +181,50 @@ async def start_public_storefront_session(
         "welcome_message": welcome_message,
         "assistant_enabled": store.assistant_enabled,
         "context_summary": ShopifyStorefrontBridgeService.summarize_context(session),
+    }
+
+
+@router.post("/public/voice/session")
+async def start_public_storefront_voice_session(
+    body: PublicVoiceSessionRequest,
+    authorization: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Create a direct Omniweb voice session for Shopify storefront widgets."""
+    store, _payload = await _authenticate_public_storefront_request(
+        db, authorization, body.context.shop_domain
+    )
+    context = body.context.model_dump(exclude_none=True)
+    session = ShopifyAssistantSession(
+        client_id=store.client_id,
+        store_id=store.id,
+        storefront_session_id=body.context.storefront_session_id,
+        shopper_email=body.context.shopper_email,
+        shopper_locale=body.context.shopper_locale,
+        currency=body.context.currency,
+        context=ShopifyAssistantService.merge_context({}, context),
+        transcript=[],
+        last_recommendations=[],
+        last_seen_at=utcnow(),
+    )
+    db.add(session)
+    await db.flush()
+    await db.refresh(session)
+
+    voice_payload = await run_voice_agent_bootstrap(
+        VoiceAgentBootstrapRequest(
+            client_id=str(store.client_id),
+            language=body.language,
+        ),
+        db,
+    )
+    return {
+        **voice_payload,
+        "voice_provider": "deepgram",
+        "voice_session_id": str(session.id),
+        "shop_domain": store.shop_domain,
+        "store_id": str(store.id),
+        "storefront_session_id": body.context.storefront_session_id,
     }
 
 

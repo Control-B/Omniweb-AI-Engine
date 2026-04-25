@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
+  ArrowUp,
   Save,
   Volume2,
   Brain,
   MessageSquare,
+  MessageCircle,
   Code,
   Copy,
   Check,
@@ -22,6 +24,7 @@ import {
   Plus,
   X,
   Mic,
+  Square,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +32,10 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea, Label } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import {
+  DeepgramVoiceAgentSession,
+  type TranscriptLine,
+} from "@/lib/deepgramVoiceAgentClient";
 import {
   getAgentConfig,
   updateAgentConfig,
@@ -293,7 +300,9 @@ export function AgentConfigPage() {
   ];
 
   return (
-    <div className="w-full p-6 space-y-4">
+    <div className="w-full p-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,460px)]">
+        <section className="min-w-0 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">AI Agent Configuration</h1>
@@ -823,6 +832,279 @@ export function AgentConfigPage() {
           )}
         </div>
       )}
+        </section>
+
+        <aside className="xl:sticky xl:top-6 xl:self-start">
+          <AgentVoiceTestPanel
+            clientId={clientId}
+            agentName={config.agent_name || "your agent"}
+            widgetUrl={widget?.widget_url || (clientId ? `/widget/${encodeURIComponent(clientId)}?panel=1` : "")}
+          />
+        </aside>
+      </div>
     </div>
+  );
+}
+
+type VoiceStatus = "idle" | "connecting" | "listening" | "text";
+
+type VoiceBootstrapPayload = {
+  websocket_url: string;
+  access_token: string;
+  settings: Record<string, unknown>;
+};
+
+function AgentVoiceTestPanel({
+  clientId,
+  agentName,
+  widgetUrl,
+}: {
+  clientId: string;
+  agentName: string;
+  widgetUrl: string;
+}) {
+  const sessionRef = useRef<DeepgramVoiceAgentSession | null>(null);
+  const [status, setStatus] = useState<VoiceStatus>("idle");
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [lines, setLines] = useState<TranscriptLine[]>([]);
+  const [textDraft, setTextDraft] = useState("");
+  const [error, setError] = useState("");
+
+  const sessionActive = status === "listening" || status === "text";
+
+  const stopSession = useCallback(async () => {
+    await sessionRef.current?.disconnect();
+    sessionRef.current = null;
+    setStatus("idle");
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      void stopSession();
+    };
+  }, [stopSession]);
+
+  const bootstrap = useCallback(async (): Promise<VoiceBootstrapPayload> => {
+    const res = await fetch("/api/chat/voice-agent/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: clientId,
+        language: selectedLanguage,
+      }),
+    });
+
+    if (!res.ok) {
+      const raw = await res.text();
+      let message = raw || `HTTP ${res.status}`;
+      try {
+        const parsed = JSON.parse(raw) as { detail?: unknown };
+        if (parsed.detail) {
+          message = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
+        }
+      } catch {
+        /* keep raw body */
+      }
+      throw new Error(message);
+    }
+
+    return (await res.json()) as VoiceBootstrapPayload;
+  }, [clientId, selectedLanguage]);
+
+  const startSession = useCallback(
+    async (mode: "voice" | "text") => {
+      if (!clientId) {
+        setError("No client ID is available for this demo account.");
+        return;
+      }
+
+      setError("");
+      setStatus("connecting");
+      try {
+        await stopSession();
+        const payload = await bootstrap();
+        const session = new DeepgramVoiceAgentSession({
+          onTranscript: (line) => setLines((prev) => [...prev, line]),
+          onError: (message) => setError(message),
+          onClose: () => setStatus("idle"),
+        });
+        sessionRef.current = session;
+        await session.connect({
+          websocketUrl: payload.websocket_url,
+          accessToken: payload.access_token,
+          settings: payload.settings,
+          enableMic: mode === "voice",
+        });
+        setStatus(mode === "voice" ? "listening" : "text");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to connect to the agent.");
+        await stopSession();
+      }
+    },
+    [bootstrap, clientId, stopSession],
+  );
+
+  const sendText = useCallback(async () => {
+    const message = textDraft.trim();
+    if (!message) return;
+
+    if (!sessionRef.current) {
+      await startSession("text");
+    }
+
+    sessionRef.current?.injectUserMessage(message);
+    setTextDraft("");
+  }, [startSession, textDraft]);
+
+  const statusLabel =
+    status === "connecting"
+      ? "Connecting..."
+      : status === "listening"
+        ? "Listening..."
+        : status === "text"
+          ? "Text chat active"
+          : "Ready to test";
+
+  return (
+    <Card className="overflow-hidden border-primary/20 bg-card/95">
+      <CardHeader className="border-b border-border">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>Test Your Agent</CardTitle>
+            <CardDescription>
+              Uses your last saved configuration. Click Save & Deploy before testing new instructions.
+            </CardDescription>
+          </div>
+          {widgetUrl && (
+            <Button size="sm" variant="outline" onClick={() => window.open(widgetUrl, "_blank")}>
+              Open Full Page
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 p-4">
+        <div className="rounded-2xl border border-border bg-background/70 p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{agentName}</p>
+              <p className="text-xs text-muted-foreground">{statusLabel}</p>
+            </div>
+            {sessionActive && (
+              <Button size="sm" variant="outline" onClick={() => void stopSession()}>
+                <Square className="h-3.5 w-3.5" />
+                Stop
+              </Button>
+            )}
+          </div>
+
+          <div className="flex min-h-[220px] flex-col items-center justify-center gap-5 rounded-2xl bg-black/40 p-6">
+            <div
+              className={cn(
+                "relative h-32 w-32 rounded-full",
+                sessionActive && "animate-pulse"
+              )}
+              style={{
+                background:
+                  "conic-gradient(from 180deg, #22d3ee, #a855f7, #ec4899, #22d3ee)",
+                boxShadow: "0 0 44px rgba(34, 211, 238, 0.2)",
+              }}
+            >
+              <div className="absolute inset-3 rounded-full bg-background" />
+              <div className="absolute inset-5 rounded-full border border-white/20" />
+            </div>
+
+            <Button
+              className="h-12 min-w-56 bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+              disabled={status === "connecting"}
+              onClick={() => void startSession("voice")}
+            >
+              <Mic className="h-4 w-4" />
+              {status === "listening" ? "Restart Voice Test" : "Talk To Your Agent"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Language</Label>
+          <select
+            value={selectedLanguage}
+            disabled={sessionActive || status === "connecting"}
+            onChange={(event) => setSelectedLanguage(event.target.value)}
+            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+          >
+            {LANGUAGE_OPTIONS.map((language) => (
+              <option key={language.code} value={language.code}>
+                {language.flag} {language.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {error}
+          </div>
+        )}
+
+        <div className="max-h-56 min-h-24 space-y-2 overflow-y-auto rounded-xl border border-border bg-background/50 p-3">
+          {lines.length === 0 ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Start a voice test or type a message. The transcript will appear here so you can confirm the agent follows your greeting, personality, language, and knowledge instructions.
+            </p>
+          ) : (
+            lines.map((line, index) => (
+              <div
+                key={`${index}-${line.role}`}
+                className={cn(
+                  "rounded-lg px-3 py-2 text-sm",
+                  line.role === "user"
+                    ? "ml-5 bg-secondary text-foreground"
+                    : "mr-5 border border-primary/15 bg-primary/10 text-foreground"
+                )}
+              >
+                <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {line.role === "user" ? "You" : "Agent"}
+                </p>
+                <p className="whitespace-pre-wrap break-words">{line.content}</p>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="flex items-end gap-2">
+          <Textarea
+            rows={2}
+            value={textDraft}
+            onChange={(event) => setTextDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void sendText();
+              }
+            }}
+            placeholder="Type a test message..."
+            className="resize-none"
+          />
+          <Button
+            className="h-10 w-10 shrink-0 rounded-full p-0"
+            disabled={status === "connecting" || !textDraft.trim()}
+            onClick={() => void sendText()}
+            aria-label="Send test message"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <Button
+          variant="outline"
+          className="w-full"
+          disabled={status === "connecting"}
+          onClick={() => void startSession("text")}
+        >
+          <MessageCircle className="h-4 w-4" />
+          Start Text-Only Test
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

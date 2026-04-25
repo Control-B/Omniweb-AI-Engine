@@ -101,11 +101,11 @@ export function AdminSidebar({ activePage, onNavigate }: AdminSidebarProps) {
       {/* Bottom */}
       <div className="px-2 py-3 border-t border-border space-y-0.5">
         <a
-          href="/demo"
+          href="/demo?target=agent"
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
         >
           <ExternalLink className="w-[18px] h-[18px]" />
-          {!collapsed && <span>Demo Dashboard</span>}
+          {!collapsed && <span>Demo / Test Agent</span>}
         </a>
         <button
           onClick={logout}

@@ -16,8 +16,10 @@ export default function DemoPage() {
         stashAdminToken();
         await demoLogin();
         if (!cancelled) {
+          const target = new URLSearchParams(window.location.search).get("target");
+          const page = target === "agent" ? "?page=agent" : "";
           // Full page navigation so auth context picks up the token
-          window.location.href = "/dashboard";
+          window.location.href = `/dashboard${page}`;
         }
       } catch (err: any) {
         if (!cancelled) {

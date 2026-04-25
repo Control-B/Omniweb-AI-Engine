@@ -26,6 +26,17 @@ export type ClientPageId =
   | "automations"
   | "settings";
 
+const CLIENT_PAGES: ClientPageId[] = [
+  "dashboard",
+  "calls",
+  "leads",
+  "agent",
+  "numbers",
+  "sites",
+  "automations",
+  "settings",
+];
+
 export default function ClientDashboard() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -33,6 +44,13 @@ export default function ClientDashboard() {
   const [authChecked, setAuthChecked] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  useEffect(() => {
+    const requestedPage = new URLSearchParams(window.location.search).get("page") as ClientPageId | null;
+    if (requestedPage && CLIENT_PAGES.includes(requestedPage)) {
+      setActivePage(requestedPage);
+    }
+  }, []);
 
   useEffect(() => {
     if (loading) return;

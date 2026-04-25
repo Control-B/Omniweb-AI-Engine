@@ -1,4 +1,5 @@
 api_version = "2026-07"
+uid = "371dec6a-f1ff-03cb-1e98-b710de7f86abac3953a5"
 
 [[extensions]]
   name = "Omniweb Widget"

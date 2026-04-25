@@ -16,6 +16,44 @@ settings = get_settings()
 
 DEEPGRAM_GRANT_URL = "https://api.deepgram.com/v1/auth/grant"
 DEEPGRAM_AGENT_WS_URL = "wss://agent.deepgram.com/v1/agent/converse"
+SUPPORTED_VOICE_LANGUAGE_CODES = {
+    "en",
+    "es",
+    "fr",
+    "de",
+    "it",
+    "pt",
+    "ja",
+    "ko",
+    "zh",
+    "hi",
+    "ar",
+    "nl",
+    "pl",
+    "ru",
+    "tr",
+    "uk",
+    "multi",
+}
+LANGUAGE_NAMES = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "zh": "Chinese",
+    "hi": "Hindi",
+    "ar": "Arabic",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "ru": "Russian",
+    "tr": "Turkish",
+    "uk": "Ukrainian",
+    "multi": "the visitor's language",
+}
 
 
 def _coerce_services(raw: Any) -> list[str]:
@@ -105,13 +143,27 @@ def _agent_language_tag(config: AgentConfig, requested: str | None) -> str:
     supported = _coerce_supported_languages(config.supported_languages)
     if requested:
         r = requested.lower().strip()
-        if r == "multi":
-            return "multi"
-        if r in supported or any(s.startswith(r) for s in supported):
+        if r in SUPPORTED_VOICE_LANGUAGE_CODES:
+            return r[:8] if len(r) > 2 else r
+        if any(s.startswith(r) for s in supported):
             return r[:8] if len(r) > 2 else r
     if len(supported) > 1:
         return "multi"
     return (supported[0] if supported else "en")[:8]
+
+
+def _language_name(lang_tag: str) -> str:
+    return LANGUAGE_NAMES.get(lang_tag.lower().split("-")[0], lang_tag)
+
+
+def _opening_greeting(config: AgentConfig) -> str:
+    greeting = (config.agent_greeting or "").strip()
+    if greeting:
+        return greeting
+
+    agent_name = (config.agent_name or "your AI assistant").strip()
+    business_name = (config.business_name or "our business").strip()
+    return f"Hello, this is {agent_name} from {business_name}. How can I help you today?"
 
 
 def build_voice_agent_settings(
@@ -137,6 +189,16 @@ def build_voice_agent_settings(
         custom_context=config.custom_context,
     )
     lang_tag = _agent_language_tag(config, language)
+    opening_greeting = _opening_greeting(config)
+    language_instruction = (
+        f"\n\n## Voice Session Opening\n"
+        f"The voice session must begin with this complete welcome message. Do not shorten it, "
+        f"skip the agent name, skip the business name, or replace it with a generic greeting:\n"
+        f"\"{opening_greeting}\"\n\n"
+        f"If the selected language is not English, translate the full meaning of that welcome "
+        f"message into {_language_name(lang_tag)} while preserving every identity and business detail. "
+        f"After the welcome message, wait for the user."
+    )
     tts = _tts_voice_for_config(config)
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
 
@@ -150,6 +212,7 @@ def build_voice_agent_settings(
         },
         "agent": {
             "language": lang_tag,
+            "greeting": opening_greeting,
             "listen": {
                 "provider": {
                     "type": "deepgram",
@@ -163,7 +226,7 @@ def build_voice_agent_settings(
                     "model": think_model,
                     "temperature": 0.7,
                 },
-                "prompt": composed,
+                "prompt": f"{composed}{language_instruction}",
             },
             "speak": {
                 "provider": {

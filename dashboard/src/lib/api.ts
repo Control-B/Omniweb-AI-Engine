@@ -24,13 +24,13 @@ function resolveApiBases(): string[] {
     "";
   const bases: string[] = [];
   if (configured) bases.push(configured);
-  if (typeof window !== "undefined" && window.location.origin) {
-    bases.push(window.location.origin);
-  }
   if (process.env.NODE_ENV === "development") {
     bases.push("http://localhost:8000");
   } else {
     bases.push(DEFAULT_PRODUCTION_API_BASE);
+  }
+  if (typeof window !== "undefined" && window.location.origin) {
+    bases.push(window.location.origin);
   }
   return uniqueBases(bases);
 }
@@ -155,8 +155,8 @@ async function apiFetch<T = any>(
             ? String(rawDetail)
             : `API error ${res.status}`;
 
-        // Retry on infra-ish errors with next base.
-        if (res.status === 502 || res.status === 503 || res.status === 504) {
+        // Retry on routing/infra-ish errors with next base.
+        if (res.status === 404 || res.status === 502 || res.status === 503 || res.status === 504) {
           lastError = new Error(message);
           continue;
         }

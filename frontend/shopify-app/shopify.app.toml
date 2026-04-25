@@ -1,0 +1,53 @@
+client_id = ""
+name = "Omniweb AI"
+handle = "omniweb-ai"
+application_url = "https://app.omniweb.ai"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = ""
+
+[access_scopes]
+scopes = "read_products,read_orders,read_customers,read_themes"
+
+[auth]
+redirect_urls = [
+  "https://app.omniweb.ai/auth/callback",
+  "https://app.omniweb.ai/auth/shopify/callback",
+  "https://app.omniweb.ai/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app_subscriptions/update" ]
+  uri = "/webhooks/app/subscriptions/update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/data_request" ]
+  uri = "/webhooks/customers/data_request"
+  compliance_topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/redact" ]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  topics = [ "shop/redact" ]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = [ "shop/redact" ]
+
+[app_proxy]
+url = "https://api.omniweb.ai/api/shopify/public"
+subpath = "omniweb"
+prefix = "apps"
+
+[pos]
+embedded = false

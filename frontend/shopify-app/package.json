@@ -1,0 +1,39 @@
+{
+  "name": "omniweb-shopify-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "shopify app dev",
+    "build": "remix vite:build",
+    "start": "remix-serve ./build/server/index.js",
+    "deploy": "shopify app deploy",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "latest",
+    "@remix-run/node": "latest",
+    "@remix-run/react": "latest",
+    "@remix-run/serve": "latest",
+    "@shopify/app-bridge-react": "latest",
+    "@shopify/polaris": "latest",
+    "@shopify/shopify-app-session-storage-prisma": "latest",
+    "@shopify/shopify-app-remix": "latest",
+    "@shopify/shopify-api": "latest",
+    "isbot": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@remix-run/dev": "latest",
+    "@shopify/cli": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "prisma": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}

@@ -33,6 +33,12 @@ Thumbs.db
 dashboard/node_modules/
 dashboard/.next/
 dashboard/out/
+frontend/**/node_modules/
+frontend/**/.next/
+frontend/**/build/
+frontend/**/dist/
+frontend/**/.shopify/
+frontend/**/.turbo/
 
 # Alembic
 alembic/versions/__pycache__/

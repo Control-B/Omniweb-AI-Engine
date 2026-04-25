@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String   @id
+  shop          String
+  state         String
+  isOnline      Boolean  @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean  @default(false)
+  locale        String?
+  collaborator  Boolean? @default(false)
+  emailVerified Boolean? @default(false)
+}
+
+model Shop {
+  id                    String   @id @default(cuid())
+  shopDomain            String   @unique
+  shopName              String?
+  email                 String?
+  currencyCode          String?
+  timezone              String?
+  installedAt           DateTime @default(now())
+  uninstalledAt         DateTime?
+  status                String   @default("installed")
+  engineClientId         String?
+  encryptedAdminToken    String?
+  encryptedStorefrontToken String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  subscription          Subscription?
+  agentConfig           AgentConfig?
+  knowledgeSources      KnowledgeSource[]
+  conversations         Conversation[]
+  usageMeters           UsageMeter[]
+}
+
+model Subscription {
+  id                     String   @id @default(cuid())
+  shopId                 String   @unique
+  plan                   String   @default("starter")
+  status                 String   @default("trialing")
+  trialEndsAt            DateTime?
+  currentPeriodEndsAt    DateTime?
+  shopifySubscriptionGid String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model AgentConfig {
+  id                 String   @id @default(cuid())
+  shopId             String   @unique
+  agentName          String   @default("Omniweb AI")
+  businessName       String?
+  greeting           String   @default("Hi, welcome in. How can I help you today?")
+  systemPrompt       String   @default("")
+  supportedLanguages String[] @default(["en"])
+  voiceEnabled       Boolean  @default(true)
+  textEnabled        Boolean  @default(true)
+  widgetSettings     Json     @default("{}")
+  navConfig          Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model KnowledgeSource {
+  id          String   @id @default(cuid())
+  shopId      String
+  type        String
+  url         String?
+  title       String?
+  status      String   @default("pending")
+  lastIndexedAt DateTime?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id            String   @id @default(cuid())
+  shopId        String
+  storefrontId  String?
+  channel       String
+  language      String?
+  shopperEmail  String?
+  transcript    Json     @default("[]")
+  leadScore     Int?
+  revenueImpact Decimal? @db.Decimal(12, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model UsageMeter {
+  id        String   @id @default(cuid())
+  shopId    String
+  period    String
+  metric    String
+  quantity  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, period, metric])
+}

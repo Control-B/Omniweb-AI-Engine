@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Shared secret for agent tool webhooks (Retell custom tools → Omniweb)
     TOOL_WEBHOOK_SECRET: str = "change-me"
     LANDING_PAGE_CLIENT_ID: str = ""  # client UUID for landing-page leads
+    # If True, ``/deepgram/voice-agent/bootstrap`` may omit client_id when LANDING_PAGE_CLIENT_ID is unset,
+    # using the oldest AgentConfig row (single-tenant / demo only — disable in multi-tenant production).
+    WIDGET_ANONYMOUS_FIRST_AGENT: bool = False
     # Allowed CORS origins for the dashboard frontend
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",

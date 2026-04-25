@@ -28,7 +28,7 @@ from app.api.routes.webhooks_tools import (
 )
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.models import Lead, ShopifyAssistantSession, ShopifyStore
+from app.models.models import AgentConfig, Client, Lead, ShopifyAssistantSession, ShopifyStore
 from app.services.shopify_assistant_service import ShopifyAssistantService, utcnow
 from app.services.shopify_oauth_service import ShopifyOAuthError, ShopifyOAuthService
 
@@ -50,6 +50,49 @@ class GadgetVoiceSessionRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class GadgetAgentConfigPayload(BaseModel):
+    agent_name: str | None = None
+    business_name: str | None = None
+    business_type: str | None = None
+    system_prompt: str | None = None
+    voice_id: str | None = None
+    supported_languages: list[str] | None = None
+    timezone: str | None = None
+    custom_context: str | None = None
+
+
+class GadgetStoreSettingsPayload(BaseModel):
+    support_email: str | None = None
+    support_policy: dict[str, Any] | None = None
+    nav_config: dict[str, Any] | None = None
+    checkout_config: dict[str, Any] | None = None
+
+
+class GadgetStoreSyncRequest(BaseModel):
+    shop_domain: str = Field(..., description="Shopify .myshopify.com domain")
+    gadget_store_id: str | None = Field(None, description="Gadget/Shopify store id")
+    shop_name: str | None = None
+    shop_email: str | None = None
+    app_status: str | None = "installed"
+    subscription_status: str | None = None
+    plan: str | None = None
+    assistant_enabled: bool | None = None
+    agent_config: GadgetAgentConfigPayload | None = None
+    settings: GadgetStoreSettingsPayload | None = None
+
+
+class GadgetVoiceToggleRequest(BaseModel):
+    shop_domain: str = Field(..., description="Shopify .myshopify.com domain")
+    gadget_store_id: str | None = None
+    assistant_enabled: bool
+
+
+class GadgetStoreDisableRequest(BaseModel):
+    shop_domain: str = Field(..., description="Shopify .myshopify.com domain")
+    gadget_store_id: str | None = None
+    reason: str | None = "disabled"
+
+
 class GadgetCaptureLeadRequest(CaptureLeadRequest):
     shop_domain: str | None = None
     gadget_store_id: str | None = None
@@ -69,6 +112,41 @@ def _gadget_base_url() -> str:
     return settings.ENGINE_BASE_URL.rstrip("/") or settings.APP_BASE_URL.rstrip("/")
 
 
+def _synthetic_client_email(shop_domain: str) -> str:
+    safe = shop_domain.replace("@", "").replace("/", "-")
+    return f"shopify+{safe}@omniweb.local"
+
+
+def _is_voice_subscription_active(store: ShopifyStore) -> bool:
+    status = (store.shopify_subscription_status or "").strip().lower()
+    return status in {"active", "trialing"}
+
+
+def _voice_allowed(store: ShopifyStore) -> tuple[bool, str | None]:
+    app_status = (store.app_status or "").strip().lower()
+    if app_status != "installed":
+        return False, "Shopify app is not installed"
+    if not _is_voice_subscription_active(store):
+        return False, "Shopify subscription is not active or trialing"
+    return True, None
+
+
+def _serialize_gadget_store(store: ShopifyStore) -> dict:
+    allowed, reason = _voice_allowed(store)
+    return {
+        "ok": True,
+        "client_id": str(store.client_id),
+        "shop_domain": store.shop_domain,
+        "gadget_store_id": store.shop_id,
+        "assistant_enabled": store.assistant_enabled,
+        "voice_allowed": bool(allowed and store.assistant_enabled),
+        "voice_blocked_reason": reason,
+        "app_status": store.app_status,
+        "subscription_status": store.shopify_subscription_status,
+        "plan": store.shopify_plan,
+    }
+
+
 def _normalize_shop_domain(shop_domain: str | None) -> str | None:
     if not shop_domain:
         return None
@@ -76,6 +154,96 @@ def _normalize_shop_domain(shop_domain: str | None) -> str | None:
         return ShopifyOAuthService.normalize_shop_domain(shop_domain)
     except ShopifyOAuthError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+async def _get_or_create_client_for_shop(
+    db: AsyncSession,
+    *,
+    shop_domain: str,
+    shop_name: str | None = None,
+    shop_email: str | None = None,
+) -> Client:
+    result = await db.execute(
+        select(ShopifyStore).where(ShopifyStore.shop_domain == shop_domain).limit(1)
+    )
+    existing_store = result.scalar_one_or_none()
+    if existing_store:
+        client = await db.get(Client, existing_store.client_id)
+        if client:
+            if shop_name:
+                client.name = shop_name
+            if shop_email:
+                client.notification_email = shop_email
+            return client
+
+    email = _synthetic_client_email(shop_domain)
+    result = await db.execute(select(Client).where(Client.email == email).limit(1))
+    client = result.scalar_one_or_none()
+    if client:
+        if shop_name:
+            client.name = shop_name
+        if shop_email:
+            client.notification_email = shop_email
+        return client
+
+    client = Client(
+        name=shop_name or shop_domain,
+        email=email,
+        notification_email=shop_email,
+        role="client",
+        is_active=True,
+    )
+    db.add(client)
+    await db.flush()
+    return client
+
+
+async def _get_or_create_agent_config(
+    db: AsyncSession,
+    *,
+    client_id: uuid.UUID,
+    shop_domain: str,
+    shop_name: str | None = None,
+    payload: GadgetAgentConfigPayload | None = None,
+) -> AgentConfig:
+    result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == client_id))
+    config = result.scalar_one_or_none()
+    if not config:
+        config = AgentConfig(
+            client_id=client_id,
+            agent_name=(payload.agent_name if payload else None) or "Ava",
+            business_name=(payload.business_name if payload else None) or shop_name or shop_domain,
+            business_type=(payload.business_type if payload else None) or "ecommerce",
+            industry="ecommerce",
+            agent_mode="ecommerce_assistant",
+            system_prompt=(payload.system_prompt if payload else None) or "",
+            supported_languages=(payload.supported_languages if payload else None) or ["en"],
+        )
+        db.add(config)
+        await db.flush()
+
+    if payload:
+        for field in (
+            "agent_name",
+            "business_name",
+            "business_type",
+            "system_prompt",
+            "voice_id",
+            "timezone",
+            "custom_context",
+        ):
+            value = getattr(payload, field)
+            if value is not None:
+                setattr(config, field, value)
+        if payload.supported_languages is not None:
+            config.supported_languages = payload.supported_languages or ["en"]
+
+    if not config.business_name:
+        config.business_name = shop_name or shop_domain
+    if not config.business_type:
+        config.business_type = "ecommerce"
+    config.industry = config.industry or "ecommerce"
+    return config
 
 
 async def _resolve_store(
@@ -106,8 +274,10 @@ async def _resolve_store(
     store = result.scalar_one_or_none()
     if not store:
         raise HTTPException(404, "Shopify store is not configured in Omniweb")
-    if require_enabled and (not store.assistant_enabled or store.app_status != "installed"):
-        raise HTTPException(403, "Storefront assistant is not enabled for this shop")
+    if require_enabled:
+        allowed, reason = _voice_allowed(store)
+        if not store.assistant_enabled or not allowed:
+            raise HTTPException(403, reason or "Storefront assistant is not enabled for this shop")
     return store
 
 
@@ -165,6 +335,144 @@ async def _create_shopify_voice_session(
     await db.flush()
     await db.refresh(session)
     return session
+
+
+@router.post("/shopify/store-sync")
+async def sync_shopify_store(
+    body: GadgetStoreSyncRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Create/update Omniweb's mirrored Shopify store entitlement record.
+
+    Gadget remains the Shopify source of truth. This endpoint mirrors install,
+    billing, toggle, and optional agent config into Omniweb so voice sessions can
+    be authorized automatically per store.
+    """
+    _verify_gadget_secret(x_gadget_secret or x_engine_secret)
+    shop_domain = _normalize_shop_domain(body.shop_domain)
+    if not shop_domain:
+        raise HTTPException(400, "shop_domain is required")
+
+    client = await _get_or_create_client_for_shop(
+        db,
+        shop_domain=shop_domain,
+        shop_name=body.shop_name,
+        shop_email=body.shop_email,
+    )
+
+    result = await db.execute(select(ShopifyStore).where(ShopifyStore.shop_domain == shop_domain))
+    store = result.scalar_one_or_none()
+    if not store and body.gadget_store_id:
+        result = await db.execute(select(ShopifyStore).where(ShopifyStore.shop_id == body.gadget_store_id))
+        store = result.scalar_one_or_none()
+
+    if not store:
+        store = ShopifyStore(client_id=client.id, shop_domain=shop_domain)
+        db.add(store)
+        await db.flush()
+
+    store.client_id = client.id
+    store.shop_domain = shop_domain
+    if body.gadget_store_id is not None:
+        store.shop_id = body.gadget_store_id
+    if body.shop_name is not None:
+        store.shop_name = body.shop_name
+    if body.shop_email is not None:
+        store.shop_email = body.shop_email
+    if body.app_status is not None:
+        store.app_status = body.app_status
+    if body.subscription_status is not None:
+        store.shopify_subscription_status = body.subscription_status
+    if body.plan is not None:
+        store.shopify_plan = body.plan
+
+    if body.settings:
+        for field in ("support_email", "support_policy", "nav_config", "checkout_config"):
+            value = getattr(body.settings, field)
+            if value is not None:
+                setattr(store, field, value)
+
+    await _get_or_create_agent_config(
+        db,
+        client_id=client.id,
+        shop_domain=shop_domain,
+        shop_name=body.shop_name,
+        payload=body.agent_config,
+    )
+
+    if body.assistant_enabled is not None:
+        if body.assistant_enabled:
+            allowed, reason = _voice_allowed(store)
+            if not allowed:
+                store.assistant_enabled = False
+                await db.flush()
+                raise HTTPException(403, reason or "Store is not eligible for voice")
+        store.assistant_enabled = body.assistant_enabled
+
+    await db.flush()
+    await db.refresh(store)
+    return _serialize_gadget_store(store)
+
+
+@router.post("/shopify/voice-toggle")
+async def toggle_shopify_voice(
+    body: GadgetVoiceToggleRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Enable/disable voice for a Shopify store after Gadget validates merchant intent."""
+    _verify_gadget_secret(x_gadget_secret or x_engine_secret)
+    store = await _resolve_store(
+        db,
+        shop_domain=body.shop_domain,
+        gadget_store_id=body.gadget_store_id,
+        require_enabled=False,
+    )
+    if not store:
+        raise HTTPException(404, "Shopify store is not configured in Omniweb")
+
+    if body.assistant_enabled:
+        allowed, reason = _voice_allowed(store)
+        if not allowed:
+            raise HTTPException(403, reason or "Store is not eligible for voice")
+
+    store.assistant_enabled = body.assistant_enabled
+    await db.flush()
+    await db.refresh(store)
+    return _serialize_gadget_store(store)
+
+
+@router.post("/shopify/store-disable")
+async def disable_shopify_store(
+    body: GadgetStoreDisableRequest,
+    x_gadget_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Disable voice access when Gadget sees uninstall/cancel/revocation."""
+    _verify_gadget_secret(x_gadget_secret or x_engine_secret)
+    store = await _resolve_store(
+        db,
+        shop_domain=body.shop_domain,
+        gadget_store_id=body.gadget_store_id,
+        require_enabled=False,
+    )
+    if not store:
+        raise HTTPException(404, "Shopify store is not configured in Omniweb")
+
+    store.assistant_enabled = False
+    if (body.reason or "").lower() in {"uninstalled", "app_uninstalled"}:
+        store.app_status = "uninstalled"
+        store.uninstalled_at = utcnow()
+    elif (body.reason or "").lower() in {"cancelled", "canceled", "subscription_cancelled"}:
+        store.shopify_subscription_status = "cancelled"
+
+    await db.flush()
+    await db.refresh(store)
+    return _serialize_gadget_store(store)
 
 
 @router.post("/voice/session")

@@ -57,20 +57,25 @@ const nextConfig = {
 
   // Allow embedding the widget in an iframe on the same origin (e.g. /landing preview).
   async headers() {
+    const widgetEmbedHeaders = [
+      {
+        key: "Content-Security-Policy",
+        value: "frame-ancestors *",
+      },
+      {
+        key: "Permissions-Policy",
+        value: "microphone=(self)",
+      },
+    ];
     return [
+      {
+        source: "/widget",
+        headers: widgetEmbedHeaders,
+      },
       {
         // Embeddable on customer sites: CSP allows framing; mic still needs allow="microphone" on the iframe.
         source: "/widget/:path*",
-        headers: [
-          {
-            key: "Content-Security-Policy",
-            value: "frame-ancestors *",
-          },
-          {
-            key: "Permissions-Policy",
-            value: "microphone=(self)",
-          },
-        ],
+        headers: widgetEmbedHeaders,
       },
       {
         source: "/landing",

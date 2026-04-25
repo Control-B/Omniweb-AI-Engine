@@ -32,6 +32,12 @@ function engineBaseUrl(): string {
   return raw.replace(/\/$/, "");
 }
 
+/** Baked at build time — same UUID as API ``LANDING_PAGE_CLIENT_ID`` for anonymous ``/widget``. */
+function publicLandingClientId(): string | undefined {
+  const v = process.env.NEXT_PUBLIC_LANDING_PAGE_CLIENT_ID?.trim();
+  return v || undefined;
+}
+
 const LANG_FLAGS: Record<string, string> = {
   en: "🇺🇸", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪", it: "🇮🇹",
   pt: "🇧🇷", ja: "🇯🇵", ko: "🇰🇷", zh: "🇨🇳", hi: "🇮🇳", multi: "🌐",
@@ -117,8 +123,11 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
     const body: { client_id?: string; language: string } = {
       language: selectedLang?.code || "en",
     };
+    const landingClientId = publicLandingClientId();
     if (agentId?.trim()) {
       body.client_id = agentId.trim();
+    } else if (landingClientId) {
+      body.client_id = landingClientId;
     }
     const res = await fetch(`${engineBaseUrl()}/api/deepgram/voice-agent/bootstrap`, {
       method: "POST",
@@ -128,13 +137,20 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
     if (!res.ok) {
       const raw = await res.text();
       let msg = raw || `HTTP ${res.status}`;
+      const ctype = res.headers.get("content-type") || "";
+      const looksHtml =
+        ctype.includes("html") ||
+        raw.trimStart().toLowerCase().startsWith("<!doctype") ||
+        raw.includes("App Platform failed to forward");
       try {
         const j = JSON.parse(raw) as { detail?: unknown };
         if (j.detail != null) {
           msg = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
         }
       } catch {
-        /* keep text */
+        if (looksHtml) {
+          msg = `Engine unreachable or timed out (HTTP ${res.status}). Check /health and API logs.`;
+        }
       }
       throw new Error(msg);
     }

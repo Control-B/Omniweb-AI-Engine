@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
@@ -33,8 +33,8 @@ async def voice_agent_bootstrap(
     """Return a short-lived Deepgram JWT + Voice Agent ``Settings`` for the browser.
 
     Mirrors ``POST /api/retell/web-call``: ``client_id`` selects the tenant; if omitted,
-    ``LANDING_PAGE_CLIENT_ID`` is used when set. If both are empty, the oldest ``AgentConfig`` row
-    is used unless ``WIDGET_REQUIRE_CLIENT_ID`` is true (strict multi-tenant).
+    ``LANDING_PAGE_CLIENT_ID`` is used when set. If both are empty, a default tenant is chosen by
+    ``min(client_id)`` (index-friendly) unless ``WIDGET_REQUIRE_CLIENT_ID`` is true.
     """
     if not settings.deepgram_configured:
         raise HTTPException(503, detail="Deepgram is not configured")
@@ -57,9 +57,10 @@ async def voice_agent_bootstrap(
             detail="client_id is required (or set LANDING_PAGE_CLIENT_ID for anonymous widget)",
         )
     else:
-        result = await db.execute(
-            select(AgentConfig).order_by(AgentConfig.created_at.asc()).limit(1)
-        )
+        # Use min(client_id) so Postgres can satisfy this via the client_id index. Ordering by
+        # created_at has been observed to hang behind locks on some managed-Postgres setups.
+        min_cid_sq = select(func.min(AgentConfig.client_id)).scalar_subquery()
+        result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == min_cid_sq))
         config = result.scalar_one_or_none()
         if not config:
             raise HTTPException(404, detail="No agent configuration in database")

@@ -362,6 +362,9 @@ async def health() -> dict:
         "openai_configured": settings.openai_configured,
         "database_configured": settings.database_configured,
         "database_ok": False,
+        "landing_page_client_configured": bool(
+            (settings.LANDING_PAGE_CLIENT_ID or "").strip()
+        ),
     }
 
     database_ok, database_error = await probe_database()

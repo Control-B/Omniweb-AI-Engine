@@ -128,6 +128,10 @@ services:
       - key: NEXT_PUBLIC_PLATFORM_URL
         scope: BUILD_TIME
         value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
+      # Same UUID as API LANDING_PAGE_CLIENT_ID — widget sends it in bootstrap body (avoids fragile default-tenant query).
+      - key: NEXT_PUBLIC_LANDING_PAGE_CLIENT_ID
+        scope: BUILD_TIME
+        value: ""
 
 # Route /api and / to components on ANY hostname (default *.ondigitalocean.app + custom domains).
 # Do NOT add redirects to api.omniweb.ai here until that hostname resolves in DNS — otherwise

@@ -104,10 +104,6 @@ services:
       - key: LANDING_PAGE_CLIENT_ID
         scope: RUN_AND_BUILD_TIME
         value: ""
-      # Demo / single-tenant: allow /widget bootstrap without client UUID (disable when serving many tenants).
-      - key: WIDGET_ANONYMOUS_FIRST_AGENT
-        scope: RUN_AND_BUILD_TIME
-        value: "true"
 
   - name: dashboard
     github:

@@ -33,18 +33,13 @@ async def voice_agent_bootstrap(
     """Return a short-lived Deepgram JWT + Voice Agent ``Settings`` for the browser.
 
     Mirrors ``POST /api/retell/web-call``: ``client_id`` selects the tenant; if omitted,
-    ``LANDING_PAGE_CLIENT_ID`` is used when set. If both are empty, the oldest ``AgentConfig``
-    may be used when ``WIDGET_ANONYMOUS_FIRST_AGENT`` is true or ``ENVIRONMENT`` is development.
+    ``LANDING_PAGE_CLIENT_ID`` is used when set. If both are empty, the oldest ``AgentConfig`` row
+    is used unless ``WIDGET_REQUIRE_CLIENT_ID`` is true (strict multi-tenant).
     """
     if not settings.deepgram_configured:
         raise HTTPException(503, detail="Deepgram is not configured")
 
     raw_id = (req.client_id or settings.LANDING_PAGE_CLIENT_ID or "").strip()
-    env_lower = (settings.ENVIRONMENT or "").lower()
-    allow_anonymous_first = settings.WIDGET_ANONYMOUS_FIRST_AGENT or env_lower in (
-        "development",
-        "dev",
-    )
 
     config: AgentConfig | None = None
     if raw_id:
@@ -56,18 +51,18 @@ async def voice_agent_bootstrap(
         config = result.scalar_one_or_none()
         if not config:
             raise HTTPException(404, detail="No agent configuration for this client")
-    elif allow_anonymous_first:
+    elif settings.WIDGET_REQUIRE_CLIENT_ID:
+        raise HTTPException(
+            400,
+            detail="client_id is required (or set LANDING_PAGE_CLIENT_ID for anonymous widget)",
+        )
+    else:
         result = await db.execute(
             select(AgentConfig).order_by(AgentConfig.created_at.asc()).limit(1)
         )
         config = result.scalar_one_or_none()
         if not config:
             raise HTTPException(404, detail="No agent configuration in database")
-    else:
-        raise HTTPException(
-            400,
-            detail="client_id is required (or set LANDING_PAGE_CLIENT_ID for anonymous widget)",
-        )
 
     try:
         token_payload = await deepgram_service.grant_temporary_token(ttl_seconds=600)

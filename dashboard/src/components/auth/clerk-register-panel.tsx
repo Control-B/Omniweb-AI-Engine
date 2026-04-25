@@ -8,7 +8,8 @@ export function ClerkRegisterPanel() {
   if (!clerkEnabled) {
     return (
       <div className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground">
-        Clerk is not configured yet. Set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` to enable self-serve sign up.
+        Clerk is not configured yet. Set `CLERK_PUBLISHABLE_KEY` (or `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`) in
+        your env to enable self-serve sign up.
       </div>
     );
   }

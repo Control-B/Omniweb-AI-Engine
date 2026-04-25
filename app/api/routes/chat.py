@@ -8,11 +8,24 @@ from app.core.auth import get_current_client
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig
+from app.api.routes.deepgram import VoiceAgentBootstrapRequest, run_voice_agent_bootstrap
 from app.services import retell_service
 
 logger = get_logger(__name__)
 settings = get_settings()
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# Canonical browser path for Deepgram bootstrap (some CDNs/WAFs block ``/api/deepgram/...`` POST).
+_VOICE_BOOTSTRAP_PATH = "/api/chat/voice-agent/bootstrap"
+
+
+@router.post("/voice-agent/bootstrap")
+async def voice_agent_bootstrap_public(
+    req: VoiceAgentBootstrapRequest,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Mint Deepgram JWT + Voice Agent settings for the embed widget (alias of deepgram route)."""
+    return await run_voice_agent_bootstrap(req, db)
 
 
 @router.post("/welcome-audio")
@@ -54,7 +67,7 @@ async def get_widget(
     }
     if settings.deepgram_configured:
         out["voice_provider"] = "deepgram"
-        out["deepgram_bootstrap_path"] = "/api/deepgram/voice-agent/bootstrap"
+        out["deepgram_bootstrap_path"] = _VOICE_BOOTSTRAP_PATH
     if config.retell_agent_id:
         out["retell_agent_id"] = config.retell_agent_id
         out["web_call_path"] = "/api/retell/web-call"
@@ -88,7 +101,7 @@ async def get_chat_config(
     }
     if settings.deepgram_configured:
         out["voice_provider"] = "deepgram"
-        out["deepgram_bootstrap_path"] = "/api/deepgram/voice-agent/bootstrap"
+        out["deepgram_bootstrap_path"] = _VOICE_BOOTSTRAP_PATH
     if config.retell_agent_id:
         out["web_call_path"] = "/api/retell/web-call"
     return out

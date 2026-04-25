@@ -129,7 +129,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
     } else if (landingClientId) {
       body.client_id = landingClientId;
     }
-    const res = await fetch(`${engineBaseUrl()}/api/deepgram/voice-agent/bootstrap`, {
+    const res = await fetch(`${engineBaseUrl()}/api/chat/voice-agent/bootstrap`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

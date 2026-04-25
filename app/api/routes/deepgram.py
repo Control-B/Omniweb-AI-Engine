@@ -25,17 +25,11 @@ class VoiceAgentBootstrapRequest(BaseModel):
     language: str | None = None
 
 
-@router.post("/voice-agent/bootstrap")
-async def voice_agent_bootstrap(
+async def run_voice_agent_bootstrap(
     req: VoiceAgentBootstrapRequest,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession,
 ) -> dict:
-    """Return a short-lived Deepgram JWT + Voice Agent ``Settings`` for the browser.
-
-    Mirrors ``POST /api/retell/web-call``: ``client_id`` selects the tenant; if omitted,
-    ``LANDING_PAGE_CLIENT_ID`` is used when set. If both are empty, a default tenant is chosen by
-    ``min(client_id)`` (index-friendly) unless ``WIDGET_REQUIRE_CLIENT_ID`` is true.
-    """
+    """Shared implementation for ``POST .../voice-agent/bootstrap`` (see routers below)."""
     if not settings.deepgram_configured:
         raise HTTPException(503, detail="Deepgram is not configured")
 
@@ -101,3 +95,20 @@ async def voice_agent_bootstrap(
         "expires_in": token_payload.get("expires_in"),
         "settings": voice_settings,
     }
+
+
+@router.post("/voice-agent/bootstrap")
+async def voice_agent_bootstrap(
+    req: VoiceAgentBootstrapRequest,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Return a short-lived Deepgram JWT + Voice Agent ``Settings`` for the browser.
+
+    Mirrors ``POST /api/retell/web-call``: ``client_id`` selects the tenant; if omitted,
+    ``LANDING_PAGE_CLIENT_ID`` is used when set. If both are empty, a default tenant is chosen by
+    ``min(client_id)`` (index-friendly) unless ``WIDGET_REQUIRE_CLIENT_ID`` is true.
+
+    Prefer ``POST /api/chat/voice-agent/bootstrap`` from browsers: some edge networks block
+    ``/api/deepgram/...`` while ``/api/chat/...`` POST succeeds.
+    """
+    return await run_voice_agent_bootstrap(req, db)

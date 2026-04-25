@@ -148,6 +148,7 @@ export const plumbingPremiumTemplate: SiteTemplate = {
       "This slot becomes the live voice/chat assistant for the selected client site. The code snippet below is intentionally data-driven so it can be swapped per customer.",
     buttonLabel: "Preview agent experience",
     placementHint: "Recommended placement: lower-right sticky bubble + hero CTA inline preview card.",
-    embedSnippet: `<script src=\"https://omniweb.ai/widget.js\" data-client=\"{{CLIENT_ID}}\" data-template=\"plumbing-premium\" async></script>`,
+    embedSnippet: `<!-- Replace YOUR_DASHBOARD_ORIGIN with your Omniweb engine dashboard URL (not omniweb.ai marketing). -->
+<iframe src=\"https://YOUR_DASHBOARD_ORIGIN/widget/{{CLIENT_ID}}\" title=\"Omniweb AI\" allow=\"microphone\" style=\"position:fixed;bottom:0;right:0;width:420px;height:640px;border:0;z-index:99999\"></iframe>`,
   },
 };

@@ -37,18 +37,21 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _build_loader_snippet(*, embed_code: str, client_id: str) -> tuple[str, str]:
+def _build_widget_embed_snippet(*, embed_code: str, client_id: str) -> tuple[str, str]:
+    """HTML for third-party sites (e.g. marketing omniweb.ai): iframe loads the Next.js widget route.
+
+    Do not point at omniweb.ai — that is a separate app (seahorse). Use PLATFORM_URL (dashboard /widget host).
+    There is no ``/widget/loader.js``; the voice UI is ``/widget/{client_id}`` with API at ENGINE_BASE_URL.
+    """
     platform_url = settings.PLATFORM_URL.rstrip("/")
-    engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL).rstrip("/")
     widget_url = f"{platform_url}/widget/{client_id}"
-    snippet = f"""<!-- Omniweb AI Widget -->
-<script
-  src="{platform_url}/widget/loader.js"
-  data-embed-code="{embed_code}"
-  data-agent-id="{client_id}"
-  data-engine-url="{engine_url}"
-  async
-></script>"""
+    snippet = f"""<!-- Omniweb AI Widget — Deepgram voice UI (iframe). embed_code={embed_code} (domain lock / analytics). -->
+<iframe
+  src="{widget_url}"
+  title="Omniweb AI"
+  allow="microphone"
+  style="position:fixed;bottom:0;right:0;width:min(100vw - 1rem, 420px);height:min(100dvh - 1rem, 640px);max-width:420px;max-height:640px;border:0;border-radius:12px;z-index:99999;box-shadow:0 12px 48px rgba(0,0,0,0.35)"
+></iframe>"""
     return snippet, widget_url
 
 
@@ -320,7 +323,7 @@ async def get_widget_embed(
         await db.commit()
         await db.refresh(client)
 
-    embed_snippet, widget_url = _build_loader_snippet(
+    embed_snippet, widget_url = _build_widget_embed_snippet(
         embed_code=client.embed_code,
         client_id=str(client.id),
     )

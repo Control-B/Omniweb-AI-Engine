@@ -76,9 +76,19 @@ export function OnboardingFlow({ onComplete }: OnboardingProps) {
         const w = await getWidgetEmbed(clientId);
         setEmbedCode(w.embed_code || "");
       } catch {
-        // Generate a simple embed snippet as fallback
+        // Marketing site (omniweb.ai) is a different app — widget lives on the dashboard/engine host.
+        const origin = (
+          process.env.NEXT_PUBLIC_PLATFORM_URL ||
+          (typeof window !== "undefined" ? window.location.origin : "")
+        ).replace(/\/$/, "");
         setEmbedCode(
-          `<!-- Omniweb AI Widget -->\n<script\n  src="https://omniweb.ai/widget.js"\n  data-client-id="${clientId}"\n  async\n></script>`
+          `<!-- Omniweb AI Widget — iframe loads Deepgram voice UI from your engine dashboard -->
+<iframe
+  src="${origin}/widget/${clientId}"
+  title="Omniweb AI"
+  allow="microphone"
+  style="position:fixed;bottom:0;right:0;width:420px;height:640px;border:0;z-index:99999"
+></iframe>`
         );
       }
 

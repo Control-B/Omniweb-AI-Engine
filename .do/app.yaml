@@ -123,6 +123,10 @@ services:
       - key: NEXT_PUBLIC_ENGINE_URL
         scope: BUILD_TIME
         value: "https://api.omniweb.ai"
+      # Next.js pages + /widget + /landing (not the marketing site at omniweb.ai).
+      - key: NEXT_PUBLIC_PLATFORM_URL
+        scope: BUILD_TIME
+        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
 
 ingress:
   rules:

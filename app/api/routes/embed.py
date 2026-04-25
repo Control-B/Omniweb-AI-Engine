@@ -199,16 +199,15 @@ async def get_embed_snippet(
     retell_agent_id = agent_config.retell_agent_id if agent_config else None
 
     platform_url = settings.PLATFORM_URL.rstrip("/")
-    engine_url = settings.ENGINE_BASE_URL.rstrip("/")
+    widget_url = f"{platform_url}/widget/{widget_target_id}"
 
-    snippet = f"""<!-- Omniweb AI Widget -->
-<script
-  src="{platform_url}/widget/loader.js"
-  data-embed-code="{client.embed_code}"
-  data-agent-id="{widget_target_id}"
-  data-engine-url="{engine_url}"
-  async
-></script>"""
+    snippet = f"""<!-- Omniweb AI Widget — Deepgram voice UI (iframe). embed_code={client.embed_code}. -->
+<iframe
+  src="{widget_url}"
+  title="Omniweb AI"
+  allow="microphone"
+  style="position:fixed;bottom:0;right:0;width:min(100vw - 1rem, 420px);height:min(100dvh - 1rem, 640px);max-width:420px;max-height:640px;border:0;border-radius:12px;z-index:99999;box-shadow:0 12px 48px rgba(0,0,0,0.35)"
+></iframe>"""
 
     return {
         "embed_code": client.embed_code,

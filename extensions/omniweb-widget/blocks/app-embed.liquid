@@ -8,14 +8,13 @@
     App Embeds → toggle "Omniweb Widget" on → Save
 {% endcomment %}
 
-{% if block.settings.api_url != blank %}
-  <script
-    src="{{ block.settings.api_url }}/static/omniweb-shopify-widget.js"
-    data-engine="{{ block.settings.api_url }}"
-    data-shop="{{ shop.permanent_domain }}"
-    defer
-  ></script>
-{% endif %}
+{% assign omniweb_engine_url = block.settings.api_url | default: 'https://omniweb-engine-rs6fr.ondigitalocean.app' %}
+<script
+  src="{{ omniweb_engine_url }}/static/omniweb-shopify-widget.js"
+  data-engine="{{ omniweb_engine_url }}"
+  data-shop="{{ shop.permanent_domain }}"
+  defer
+></script>
 
 {% schema %}
 {

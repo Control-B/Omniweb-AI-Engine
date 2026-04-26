@@ -151,6 +151,12 @@ ingress:
         path:
           prefix: /health
     - component:
+        name: api
+        preserve_path_prefix: true
+      match:
+        path:
+          prefix: /static
+    - component:
         name: dashboard
       match:
         path:

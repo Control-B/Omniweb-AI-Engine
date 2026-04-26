@@ -250,7 +250,17 @@ def build_voice_agent_settings(
         f"After the welcome message, wait for the user."
     )
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
-    listen_language = "multi" if lang_tag == "multi" else lang_tag
+    # nova-3 "multi" only covers: en, es, fr, de, hi, ru, pt, ja, it, nl.
+    # For languages outside that set (Arabic, Chinese, Korean, etc.) pass the specific
+    # code directly so nova-3 picks the right acoustic model instead of guessing.
+    _NOVA3_MULTI_LANGS = {"en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"}
+    if lang_tag == "multi":
+        listen_language = "multi"
+    elif lang_tag in _NOVA3_MULTI_LANGS:
+        listen_language = lang_tag
+    else:
+        # Language not in nova-3 multi — pin it explicitly for best STT accuracy
+        listen_language = lang_tag
 
     # Deepgram is always the reliable fallback. When an ElevenLabs key is configured the
     # agent tries ElevenLabs Sarah (eleven_turbo_v2_5 — natively multilingual) first;
@@ -264,12 +274,14 @@ def build_voice_agent_settings(
     }
     if settings.ELEVENLABS_API_KEY:
         eleven_voice_id = _elevenlabs_voice_for_config(config)
+        # Do NOT pass language_code — eleven_turbo_v2_5 is natively multilingual and
+        # auto-detects the language from the LLM-generated text.  Specifying a code
+        # can cause ElevenLabs to reject languages it handles fine when left to detect.
         speak: list[dict[str, Any]] | dict[str, Any] = [
             {
                 "provider": {
                     "type": "eleven_labs",
                     "model_id": "eleven_turbo_v2_5",
-                    "language_code": lang_tag if lang_tag != "multi" else "en",
                 },
                 "endpoint": {
                     "url": f"wss://api.elevenlabs.io/v1/text-to-speech/{eleven_voice_id}/multi-stream-input",

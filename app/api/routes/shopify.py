@@ -119,7 +119,7 @@ class PublicSessionRequest(BaseModel):
 
 class PublicVoiceSessionRequest(BaseModel):
     context: StorefrontContext
-    language: str | None = "en"
+    language: str | None = None
 
 
 class StorefrontEvent(BaseModel):
@@ -636,10 +636,11 @@ async def start_public_storefront_voice_session(
     await db.flush()
     await db.refresh(session)
 
+    voice_language = body.language or body.context.selected_language or body.context.shopper_locale
     voice_payload = await run_voice_agent_bootstrap(
         VoiceAgentBootstrapRequest(
             client_id=str(store.client_id),
-            language=body.language,
+            language=voice_language,
         ),
         db,
     )

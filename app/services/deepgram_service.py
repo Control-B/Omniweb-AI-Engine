@@ -54,6 +54,23 @@ LANGUAGE_NAMES = {
     "uk": "Ukrainian",
     "multi": "the visitor's language",
 }
+VOICE_GREETING_TEMPLATES = {
+    "es": "Hola, soy {agent_name} de {business_name}. Puedo ayudarte a encontrar exactamente lo que buscas, responder preguntas y asegurarme de que recibas la mejor ayuda. ¿Cómo puedo ayudarte hoy?",
+    "fr": "Bonjour, je suis {agent_name} de {business_name}. Je peux vous aider à trouver exactement ce que vous cherchez, répondre à vos questions et vous guider vers la meilleure solution. Comment puis-je vous aider aujourd'hui ?",
+    "de": "Hallo, ich bin {agent_name} von {business_name}. Ich kann Ihnen helfen, genau das zu finden, was Sie suchen, Fragen beantworten und Sie zur besten Lösung führen. Wie kann ich Ihnen heute helfen?",
+    "it": "Ciao, sono {agent_name} di {business_name}. Posso aiutarti a trovare esattamente ciò che cerchi, rispondere alle tue domande e guidarti verso la soluzione migliore. Come posso aiutarti oggi?",
+    "pt": "Olá, sou {agent_name} da {business_name}. Posso ajudar você a encontrar exatamente o que procura, responder perguntas e orientar você para a melhor solução. Como posso ajudar hoje?",
+    "ja": "こんにちは、{business_name}の{agent_name}です。お探しのものを見つけたり、質問に答えたり、最適な案内をしたりできます。本日はどのようにお手伝いできますか？",
+    "ko": "안녕하세요, {business_name}의 {agent_name}입니다. 찾으시는 것을 정확히 찾도록 돕고, 질문에 답하고, 가장 좋은 해결 방법을 안내해 드릴 수 있습니다. 오늘 무엇을 도와드릴까요?",
+    "zh": "您好，我是来自 {business_name} 的 {agent_name}。我可以帮您找到想要的内容、回答问题，并引导您获得最合适的帮助。今天我能为您做什么？",
+    "hi": "नमस्ते, मैं {business_name} से {agent_name} हूं। मैं आपको ठीक वही खोजने, सवालों के जवाब देने और सही मदद पाने में सहायता कर सकता हूं। आज मैं आपकी कैसे मदद करूं?",
+    "ar": "مرحبًا، أنا {agent_name} من {business_name}. يمكنني مساعدتك في العثور على ما تبحث عنه بالضبط، والإجابة عن أسئلتك، وإرشادك إلى أفضل حل. كيف يمكنني مساعدتك اليوم؟",
+    "nl": "Hallo, ik ben {agent_name} van {business_name}. Ik kan u helpen precies te vinden wat u zoekt, vragen beantwoorden en u naar de beste oplossing begeleiden. Waarmee kan ik u vandaag helpen?",
+    "pl": "Cześć, jestem {agent_name} z {business_name}. Mogę pomóc znaleźć dokładnie to, czego szukasz, odpowiedzieć na pytania i wskazać najlepsze rozwiązanie. Jak mogę dziś pomóc?",
+    "ru": "Здравствуйте, я {agent_name} из {business_name}. Я могу помочь вам найти именно то, что вы ищете, ответить на вопросы и подсказать лучшее решение. Чем я могу помочь сегодня?",
+    "tr": "Merhaba, ben {business_name} ekibinden {agent_name}. Aradığınız şeyi bulmanıza, sorularınızı yanıtlamanıza ve en doğru çözüme yönlendirmenize yardımcı olabilirim. Bugün size nasıl yardımcı olabilirim?",
+    "uk": "Вітаю, я {agent_name} з {business_name}. Я можу допомогти знайти саме те, що ви шукаєте, відповісти на запитання й підказати найкраще рішення. Чим можу допомогти сьогодні?",
+}
 
 
 def _coerce_services(raw: Any) -> list[str]:
@@ -179,6 +196,21 @@ def _opening_greeting(config: AgentConfig) -> str:
     return f"Hello, this is {agent_name} from {business_name}. How can I help you today?"
 
 
+def _localized_opening_greeting(config: AgentConfig, lang_tag: str) -> str:
+    if lang_tag == "multi" or lang_tag.lower().startswith("en"):
+        return _opening_greeting(config)
+
+    language_code = lang_tag.lower().split("-")[0]
+    template = VOICE_GREETING_TEMPLATES.get(language_code)
+    if not template:
+        return _opening_greeting(config)
+
+    return template.format(
+        agent_name=(config.agent_name or "Omniweb AI").strip(),
+        business_name=(config.business_name or "this store").strip(),
+    )
+
+
 def build_voice_agent_settings(
     config: AgentConfig,
     *,
@@ -202,18 +234,19 @@ def build_voice_agent_settings(
         custom_context=config.custom_context,
     )
     lang_tag = _agent_language_tag(config, language)
-    opening_greeting = _opening_greeting(config)
+    opening_greeting = _localized_opening_greeting(config, lang_tag)
     language_instruction = (
-        f"\n\n## Voice Session Opening\n"
+        f"## Voice Language Requirement\n"
         f"CRITICAL LANGUAGE REQUIREMENT: The selected voice language is {_language_name(lang_tag)} ({lang_tag}). "
+        f"This is higher priority than any business, sales, greeting, or language-matching instruction below. "
         f"Speak and respond only in {_language_name(lang_tag)} for this entire voice session. "
         f"Do not use English unless the selected voice language is English. "
         f"If the selected language is multi/the visitor's language, infer the visitor's language from speech and respond in that language.\n"
+        f"If the shopper speaks English but selected {_language_name(lang_tag)}, still answer in {_language_name(lang_tag)}.\n\n"
+        f"## Voice Session Opening\n"
         f"The voice session must begin with this complete welcome message. Do not shorten it, "
         f"skip the agent name, skip the business name, or replace it with a generic greeting:\n"
         f"\"{opening_greeting}\"\n\n"
-        f"If the selected language is not English, translate the full meaning of that welcome "
-        f"message into {_language_name(lang_tag)} while preserving every identity and business detail. "
         f"After the welcome message, wait for the user."
     )
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
@@ -250,7 +283,7 @@ def build_voice_agent_settings(
                     "model": think_model,
                     "temperature": 0.7,
                 },
-                "prompt": f"{composed}{language_instruction}",
+                "prompt": f"{language_instruction}\n\n{composed}",
             },
             "speak": speak,
         },

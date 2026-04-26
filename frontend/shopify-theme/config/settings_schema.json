@@ -91,6 +91,24 @@
     ]
   },
   {
+    "name": "Omniweb AI",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "omniweb_widget_enabled",
+        "label": "Connect AI Assist to Omniweb widget",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "omniweb_engine_url",
+        "label": "Omniweb Engine URL",
+        "default": "https://omniweb-engine-rs6fr.ondigitalocean.app",
+        "info": "Loads the real Omniweb chat/voice widget for this Shopify store."
+      }
+    ]
+  },
+  {
     "name": "Social accounts",
     "settings": [
       {

@@ -13,6 +13,8 @@
 ;(function () {
   "use strict"
 
+  if (window.OmniwebChat && window.OmniwebChat.__loaded) return
+
   /* ── Configuration ────────────────────────────────────────────── */
   const SCRIPT = document.currentScript
   const SHOP = SCRIPT?.getAttribute("data-shop") || window.Shopify?.shop || ""
@@ -22,6 +24,7 @@
     SCRIPT?.getAttribute("data-engine") ||
     new URL(SCRIPT?.src || "").origin
   const API = ENGINE.replace(/\/$/, "")
+  const HIDE_LAUNCHER = SCRIPT?.getAttribute("data-hide-launcher") === "true"
 
   /* ── State ────────────────────────────────────────────────────── */
   let token = null
@@ -136,6 +139,10 @@
   inputRow.append(input, sendBtn)
   win.append(header, msgBox, inputRow)
   document.body.append(fab, voiceFab, voicePanel, win)
+  if (HIDE_LAUNCHER) {
+    fab.style.display = "none"
+    voiceFab.style.display = "none"
+  }
 
   document.getElementById("omniweb-chat-close").onclick = toggleChat
   document.getElementById("omniweb-voice-close").onclick = closeVoice
@@ -617,6 +624,7 @@
 
   // Expose for theme-level integrations
   window.OmniwebChat = {
+    __loaded: true,
     trackEvent,
     toggleChat,
     openChat: () => setChatOpen(true),

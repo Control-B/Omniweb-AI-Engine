@@ -60,6 +60,16 @@
     {% section 'ai-assistant-launcher' %}
     {% section 'cart-drawer' %}
 
+    {% if settings.omniweb_widget_enabled %}
+      {% assign omniweb_engine_url = settings.omniweb_engine_url | default: 'https://omniweb-engine-rs6fr.ondigitalocean.app' %}
+      <script
+        src="{{ omniweb_engine_url }}/static/omniweb-shopify-widget.js"
+        data-engine="{{ omniweb_engine_url }}"
+        data-shop="{{ shop.permanent_domain }}"
+        data-hide-launcher="true"
+        defer
+      ></script>
+    {% endif %}
     <script src="{{ 'presence.js' | asset_url }}" defer></script>
   </body>
 </html>

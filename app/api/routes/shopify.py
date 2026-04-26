@@ -55,6 +55,7 @@ class StorefrontContext(BaseModel):
     storefront_session_id: str | None = None
     shopper_email: str | None = None
     shopper_locale: str | None = None
+    selected_language: str | None = None
     currency: str | None = None
     current_page_url: str | None = None
     current_page_title: str | None = None
@@ -577,7 +578,7 @@ async def start_public_storefront_session(
         store_id=store.id,
         storefront_session_id=body.context.storefront_session_id,
         shopper_email=body.context.shopper_email,
-        shopper_locale=body.context.shopper_locale,
+        shopper_locale=body.context.selected_language or body.context.shopper_locale,
         currency=body.context.currency,
         context=ShopifyAssistantService.merge_context({}, context),
         transcript=[],
@@ -624,7 +625,7 @@ async def start_public_storefront_voice_session(
         store_id=store.id,
         storefront_session_id=body.context.storefront_session_id,
         shopper_email=body.context.shopper_email,
-        shopper_locale=body.context.shopper_locale,
+        shopper_locale=body.context.selected_language or body.context.shopper_locale,
         currency=body.context.currency,
         context=ShopifyAssistantService.merge_context({}, context),
         transcript=[],
@@ -676,7 +677,7 @@ async def update_public_storefront_context(
         },
     )
     session.shopper_email = body.context.shopper_email or session.shopper_email
-    session.shopper_locale = body.context.shopper_locale or session.shopper_locale
+    session.shopper_locale = body.context.selected_language or body.context.shopper_locale or session.shopper_locale
     session.currency = body.context.currency or session.currency
     session.last_seen_at = utcnow()
     await db.flush()
@@ -710,7 +711,7 @@ async def create_public_storefront_reply(
         },
     )
     session.shopper_email = body.context.shopper_email or session.shopper_email
-    session.shopper_locale = body.context.shopper_locale or session.shopper_locale
+    session.shopper_locale = body.context.selected_language or body.context.shopper_locale or session.shopper_locale
     session.currency = body.context.currency or session.currency
 
     result = await ShopifyAssistantService.generate_reply(
@@ -918,7 +919,7 @@ async def start_storefront_session(
         store_id=store.id,
         storefront_session_id=body.context.storefront_session_id,
         shopper_email=body.context.shopper_email,
-        shopper_locale=body.context.shopper_locale,
+        shopper_locale=body.context.selected_language or body.context.shopper_locale,
         currency=body.context.currency,
         context=ShopifyAssistantService.merge_context({}, context),
         transcript=[],
@@ -952,7 +953,7 @@ async def update_storefront_context(
 
     session.context = ShopifyAssistantService.merge_context(session.context, body.context.model_dump(exclude_none=True))
     session.shopper_email = body.context.shopper_email or session.shopper_email
-    session.shopper_locale = body.context.shopper_locale or session.shopper_locale
+    session.shopper_locale = body.context.selected_language or body.context.shopper_locale or session.shopper_locale
     session.currency = body.context.currency or session.currency
     session.last_seen_at = utcnow()
     await db.flush()
@@ -978,7 +979,7 @@ async def create_storefront_reply(
             body.context.model_dump(exclude_none=True),
         )
         session.shopper_email = body.context.shopper_email or session.shopper_email
-        session.shopper_locale = body.context.shopper_locale or session.shopper_locale
+        session.shopper_locale = body.context.selected_language or body.context.shopper_locale or session.shopper_locale
         session.currency = body.context.currency or session.currency
 
     result = await ShopifyAssistantService.generate_reply(

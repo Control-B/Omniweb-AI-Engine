@@ -192,6 +192,10 @@ def build_voice_agent_settings(
     opening_greeting = _opening_greeting(config)
     language_instruction = (
         f"\n\n## Voice Session Opening\n"
+        f"CRITICAL LANGUAGE REQUIREMENT: The selected voice language is {_language_name(lang_tag)} ({lang_tag}). "
+        f"Speak and respond only in {_language_name(lang_tag)} for this entire voice session. "
+        f"Do not use English unless the selected voice language is English. "
+        f"If the selected language is multi/the visitor's language, infer the visitor's language from speech and respond in that language.\n"
         f"The voice session must begin with this complete welcome message. Do not shorten it, "
         f"skip the agent name, skip the business name, or replace it with a generic greeting:\n"
         f"\"{opening_greeting}\"\n\n"

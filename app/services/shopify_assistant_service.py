@@ -552,12 +552,20 @@ class ShopifyAssistantService:
             or "multi"
         ).lower().split("-")[0]
         language_name = LANGUAGE_NAMES.get(language_code, language_code)
-        system += (
-            f"Detected intent: {intent}\n"
-            f"Selected shopper language: {language_name} ({language_code}). "
-            f"Reply only in {language_name}. If the selected language is Auto/the shopper's language, "
-            "infer the best language from the shopper's latest message and reply in that language.\n"
-        )
+        if language_code != "multi":
+            system += (
+                f"Detected intent: {intent}\n"
+                f"CRITICAL LANGUAGE REQUIREMENT: The shopper selected {language_name} ({language_code}). "
+                f"Your entire response must be in {language_name}, even if the shopper writes in English. "
+                "Do not answer in English unless English is the selected language. "
+                "Translate product, policy, and navigation guidance naturally into the selected language.\n"
+            )
+        else:
+            system += (
+                f"Detected intent: {intent}\n"
+                "CRITICAL LANGUAGE REQUIREMENT: The shopper selected Auto. Infer the best language from "
+                "the shopper's latest message and reply in that language.\n"
+            )
 
         # Build conversation history
         msgs: list[dict[str, str]] = [{"role": "system", "content": system}]

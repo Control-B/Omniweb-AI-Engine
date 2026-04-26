@@ -423,6 +423,11 @@
     return selectedLanguage || "multi"
   }
 
+  function selectedLanguageLabel() {
+    const match = LANGUAGE_OPTIONS.find(([value]) => value === selectedLanguageValue())
+    return match ? match[1].replace(/^[^\w]+\\s*/, "") : selectedLanguageValue()
+  }
+
   function buildContext() {
     const language = selectedLanguageValue()
     return {
@@ -433,6 +438,7 @@
       currency: window.Shopify?.currency?.active || "USD",
       shopper_locale: language,
       selected_language: language,
+      selected_language_label: selectedLanguageLabel(),
     }
   }
 

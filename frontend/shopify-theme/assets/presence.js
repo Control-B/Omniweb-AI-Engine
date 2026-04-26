@@ -5,6 +5,12 @@
     return document.querySelector('[data-presence-ai]');
   }
 
+  function getOmniwebChat() {
+    return window.OmniwebChat && typeof window.OmniwebChat.openChat === 'function'
+      ? window.OmniwebChat
+      : null;
+  }
+
   function setOpen(open) {
     const launcher = getLauncher();
     state.open = open;
@@ -17,10 +23,21 @@
 
   window.PresenceAI = {
     open: function () {
+      const context = getContext();
+      const omniwebChat = getOmniwebChat();
+      if (omniwebChat) {
+        document.dispatchEvent(new CustomEvent('presence-ai:open', { detail: context }));
+        omniwebChat.openChat();
+        return;
+      }
       setOpen(true);
-      document.dispatchEvent(new CustomEvent('presence-ai:open', { detail: getContext() }));
+      document.dispatchEvent(new CustomEvent('presence-ai:open', { detail: context }));
     },
     close: function () {
+      const omniwebChat = getOmniwebChat();
+      if (omniwebChat && typeof omniwebChat.closeChat === 'function') {
+        omniwebChat.closeChat();
+      }
       setOpen(false);
       document.dispatchEvent(new CustomEvent('presence-ai:close'));
     },
@@ -47,6 +64,11 @@
   document.addEventListener('click', function (event) {
     const toggle = event.target.closest('[data-presence-ai-toggle]');
     if (toggle) {
+      const omniwebChat = getOmniwebChat();
+      if (omniwebChat) {
+        window.PresenceAI.open();
+        return;
+      }
       setOpen(!state.open);
       if (state.open) window.PresenceAI.sendContext();
       return;

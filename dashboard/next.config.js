@@ -45,9 +45,19 @@ const nextConfig = {
       process.env.NEXT_PUBLIC_ENGINE_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
       "http://localhost:8000";
-    // Only add proxy in dev to avoid double-routing in production
-    if (process.env.NODE_ENV === "production") return [];
+
+    // /static is always proxied to the API service (storefront widget JS lives there).
+    // In production the DO ingress sends /api directly to FastAPI, but routes / (and
+    // therefore /static) to this Next.js dashboard, so we need the rewrite in prod too.
+    const staticProxy = {
+      source: "/static/:path*",
+      destination: `${engineUrl}/static/:path*`,
+    };
+
+    if (process.env.NODE_ENV === "production") return [staticProxy];
+
     return [
+      staticProxy,
       {
         source: "/api/:path*",
         destination: `${engineUrl}/api/:path*`,

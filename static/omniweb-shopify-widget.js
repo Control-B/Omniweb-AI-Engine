@@ -177,10 +177,14 @@
   }
 
   /* ── Chat ─────────────────────────────────────────────────────── */
-  function toggleChat() {
-    minimised = !minimised
+  function setChatOpen(open) {
+    minimised = !open
     win.classList.toggle("hidden", minimised)
-    if (!minimised && !sessionId) startSession()
+    if (open && !sessionId) startSession()
+  }
+
+  function toggleChat() {
+    setChatOpen(minimised)
   }
 
   function toggleVoice() {
@@ -612,5 +616,11 @@
   }
 
   // Expose for theme-level integrations
-  window.OmniwebChat = { trackEvent, toggleChat }
+  window.OmniwebChat = {
+    trackEvent,
+    toggleChat,
+    openChat: () => setChatOpen(true),
+    closeChat: () => setChatOpen(false),
+    isOpen: () => !minimised,
+  }
 })()

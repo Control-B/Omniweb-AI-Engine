@@ -1,0 +1,8 @@
+{
+  "sections": {
+    "main": { "type": "page-main" },
+    "trust": { "type": "trust-badges" },
+    "faq": { "type": "faq-accordion" }
+  },
+  "order": ["main", "trust", "faq"]
+}

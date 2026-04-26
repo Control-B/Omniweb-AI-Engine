@@ -1,0 +1,16 @@
+<section class="section section--tight" data-recently-viewed>
+  <div class="page-width">
+    <h2 class="heading">{{ section.settings.heading }}</h2>
+    <p class="subheading">Recently viewed products will appear here once connected to product browsing storage.</p>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Recently viewed",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Recently viewed" }
+  ],
+  "presets": [{ "name": "Recently viewed" }]
+}
+{% endschema %}

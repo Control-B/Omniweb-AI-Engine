@@ -1,0 +1,38 @@
+<section class="section">
+  <div class="page-width">
+    <div style="display: flex; justify-content: space-between; gap: 1rem; align-items: end; margin-bottom: 1.5rem;">
+      <div>
+        <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+        <h2 class="heading">{{ section.settings.heading }}</h2>
+      </div>
+      {% if section.settings.collection != blank %}
+        <a class="button button--secondary" href="{{ section.settings.collection.url }}">View all</a>
+      {% endif %}
+    </div>
+    <div class="grid grid--4">
+      {% assign collection = section.settings.collection %}
+      {% if collection != blank %}
+        {% for product in collection.products limit: section.settings.limit %}
+          {% render 'product-card', product_card_product: product %}
+        {% endfor %}
+      {% else %}
+        {% for i in (1..4) %}
+          {% render 'product-card' %}
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Featured collection",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Curated by AI" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "The conversion edit" },
+    { "type": "collection", "id": "collection", "label": "Collection" },
+    { "type": "range", "id": "limit", "label": "Products", "min": 2, "max": 8, "step": 1, "default": 4 }
+  ],
+  "presets": [{ "name": "Featured collection" }]
+}
+{% endschema %}

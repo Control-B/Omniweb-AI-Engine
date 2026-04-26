@@ -1,0 +1,8 @@
+{
+  "sections": {
+    "main": { "type": "cart-main" },
+    "recommended": { "type": "recommended-products" },
+    "trust": { "type": "trust-badges" }
+  },
+  "order": ["main", "recommended", "trust"]
+}

@@ -1,0 +1,23 @@
+<section class="section section--tight">
+  <div class="page-width card" style="padding: clamp(1.5rem, 5vw, 4rem); display: grid; gap: 1rem;">
+    <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+    <h2 class="heading">{{ section.settings.heading }}</h2>
+    <p class="subheading">{{ section.settings.text }}</p>
+    <button class="button button--accent" type="button" onclick="window.PresenceAI && window.PresenceAI.open()">
+      {{ section.settings.cta_label }}
+    </button>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "AI assistant callout",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "AI shopping assistant" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Help every shopper find the right product faster." },
+    { "type": "textarea", "id": "text", "label": "Text", "default": "Connect any AI backend later. Presence AI already sends page, product, and collection context through window.PresenceAI hooks." },
+    { "type": "text", "id": "cta_label", "label": "CTA label", "default": "Open assistant" }
+  ],
+  "presets": [{ "name": "AI shopping assistant callout" }]
+}
+{% endschema %}

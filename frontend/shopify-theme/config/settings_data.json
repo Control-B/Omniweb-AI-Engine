@@ -1,0 +1,62 @@
+{
+  "current": {
+    "color_background": "#F7F3EC",
+    "color_surface": "#FFFFFF",
+    "color_text": "#171717",
+    "color_muted": "#6B625B",
+    "color_accent": "#8A5A44",
+    "color_accent_dark": "#2B211D",
+    "color_border": "#E6DED5",
+    "card_radius": 24,
+    "section_spacing": 88,
+    "heading_scale": 1,
+    "body_scale": 1
+  },
+  "presets": {
+    "Atelier": {
+      "color_background": "#F7F3EC",
+      "color_surface": "#FFFFFF",
+      "color_text": "#171717",
+      "color_muted": "#6B625B",
+      "color_accent": "#8A5A44",
+      "color_accent_dark": "#2B211D",
+      "color_border": "#E6DED5"
+    },
+    "Signal": {
+      "color_background": "#F3F5F7",
+      "color_surface": "#FFFFFF",
+      "color_text": "#101419",
+      "color_muted": "#5A6570",
+      "color_accent": "#275EFE",
+      "color_accent_dark": "#08111F",
+      "color_border": "#DDE4EC"
+    },
+    "Glow": {
+      "color_background": "#FFF6F7",
+      "color_surface": "#FFFFFF",
+      "color_text": "#251A1D",
+      "color_muted": "#7D6570",
+      "color_accent": "#C76B8A",
+      "color_accent_dark": "#3A1D28",
+      "color_border": "#F0DDE4"
+    },
+    "Maison": {
+      "color_background": "#F5F1EA",
+      "color_surface": "#FFFFFF",
+      "color_text": "#1E1B17",
+      "color_muted": "#6F665A",
+      "color_accent": "#7D6A4F",
+      "color_accent_dark": "#29231B",
+      "color_border": "#E3D8C9"
+    },
+    "Studio": {
+      "color_background": "#F7F8FB",
+      "color_surface": "#FFFFFF",
+      "color_text": "#111827",
+      "color_muted": "#667085",
+      "color_accent": "#6D5DFB",
+      "color_accent_dark": "#17142D",
+      "color_border": "#E5E7EB"
+    }
+  }
+}

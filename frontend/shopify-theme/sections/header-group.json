@@ -1,0 +1,20 @@
+{
+  "type": "header",
+  "name": "Header group",
+  "sections": {
+    "announcement": {
+      "type": "announcement-bar",
+      "settings": {
+        "text": "Meet Presence AI: video-led shopping with an assistant ready to help."
+      }
+    },
+    "header": {
+      "type": "header",
+      "settings": {
+        "sticky": true,
+        "transparent_over_hero": false
+      }
+    }
+  },
+  "order": ["announcement", "header"]
+}

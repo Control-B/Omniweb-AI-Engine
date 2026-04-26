@@ -1,0 +1,20 @@
+{% if product != blank %}
+  <div class="card" style="position: sticky; bottom: 1rem; z-index: 40; margin: 1rem; padding: .75rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+    <div>
+      <strong>{{ product.title }}</strong>
+      <div>{% render 'price', product: product %}</div>
+    </div>
+    {% form 'product', product %}
+      <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}">
+      <button class="button" type="submit">{{ 'products.product.add_to_cart' | t }}</button>
+    {% endform %}
+  </div>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Sticky add to cart",
+  "settings": [],
+  "presets": [{ "name": "Sticky add to cart" }]
+}
+{% endschema %}

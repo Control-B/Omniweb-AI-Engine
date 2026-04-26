@@ -1,0 +1,65 @@
+<!doctype html>
+<html class="no-js" lang="{{ request.locale.iso_code }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="{{ settings.color_accent_dark }}">
+    <link rel="canonical" href="{{ canonical_url }}">
+
+    <title>
+      {{ page_title }}
+      {%- if current_tags %} &ndash; tagged "{{ current_tags | join: ', ' }}"{% endif -%}
+      {%- if current_page != 1 %} &ndash; Page {{ current_page }}{% endif -%}
+      {%- unless page_title contains shop.name %} &ndash; {{ shop.name }}{% endunless -%}
+    </title>
+
+    {% if page_description %}
+      <meta name="description" content="{{ page_description | escape }}">
+    {% endif %}
+
+    {{ content_for_header }}
+
+    <style>
+      :root {
+        --color-background: {{ settings.color_background | default: '#F7F3EC' }};
+        --color-surface: {{ settings.color_surface | default: '#FFFFFF' }};
+        --color-text: {{ settings.color_text | default: '#171717' }};
+        --color-muted: {{ settings.color_muted | default: '#6B625B' }};
+        --color-accent: {{ settings.color_accent | default: '#8A5A44' }};
+        --color-accent-dark: {{ settings.color_accent_dark | default: '#2B211D' }};
+        --color-border: {{ settings.color_border | default: '#E6DED5' }};
+        --radius-card: {{ settings.card_radius | default: 24 }}px;
+        --section-spacing: {{ settings.section_spacing | default: 88 }}px;
+        --heading-scale: {{ settings.heading_scale | default: 1.0 }};
+        --body-scale: {{ settings.body_scale | default: 1.0 }};
+      }
+    </style>
+
+    <script>
+      document.documentElement.className = document.documentElement.className.replace('no-js', 'js');
+      window.PresenceAIContext = {
+        template: {{ template.name | json }},
+        shop: {{ shop.permanent_domain | json }},
+        pageTitle: {{ page_title | json }}
+      };
+    </script>
+
+    {{ 'presence.css' | asset_url | stylesheet_tag }}
+  </head>
+  <body class="template-{{ template.name | handle }}">
+    <a class="skip-link" href="#MainContent">{{ 'accessibility.skip_to_text' | t }}</a>
+
+    {% sections 'header-group' %}
+
+    <main id="MainContent" class="site-main" role="main" tabindex="-1">
+      {{ content_for_layout }}
+    </main>
+
+    {% sections 'footer-group' %}
+    {% section 'mobile-bottom-nav' %}
+    {% section 'ai-assistant-launcher' %}
+    {% section 'cart-drawer' %}
+
+    <script src="{{ 'presence.js' | asset_url }}" defer></script>
+  </body>
+</html>

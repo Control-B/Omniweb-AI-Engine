@@ -1,0 +1,26 @@
+<section class="section">
+  <div class="page-width grid grid--2">
+    <div>
+      <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+      <h1 class="heading">{{ section.settings.heading }}</h1>
+      <p class="subheading">{{ section.settings.text }}</p>
+    </div>
+    {% form 'contact', class: 'card', style: 'padding: 1.25rem; display: grid; gap: 1rem;' %}
+      <input type="text" name="contact[name]" placeholder="Name" required>
+      <input type="email" name="contact[email]" placeholder="Email" required>
+      <textarea name="contact[body]" placeholder="How can we help?" rows="6" required></textarea>
+      <button class="button" type="submit">Send message</button>
+    {% endform %}
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Contact form",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Contact" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "We would love to help." },
+    { "type": "textarea", "id": "text", "label": "Text", "default": "Ask a question, request sizing help, or get support from our team." }
+  ]
+}
+{% endschema %}

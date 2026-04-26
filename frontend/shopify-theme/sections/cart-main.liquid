@@ -1,0 +1,36 @@
+<section class="section">
+  <div class="page-width">
+    <h1 class="heading">{{ 'cart.general.title' | t }}</h1>
+    {% if cart.item_count == 0 %}
+      <p class="subheading">{{ 'cart.general.empty' | t }}</p>
+      <a class="button" href="{{ routes.all_products_collection_url }}">Continue shopping</a>
+    {% else %}
+      <form action="{{ routes.cart_url }}" method="post">
+        {% for item in cart.items %}
+          <div class="card" style="display: grid; grid-template-columns: 120px 1fr auto; gap: 1rem; align-items: center; padding: 1rem; margin: 1rem 0;">
+            {% render 'responsive-image', image: item.image, sizes: '120px', alt: item.product.title %}
+            <div>
+              <h2>{{ item.product.title }}</h2>
+              <p class="subheading">{{ item.variant.title }}</p>
+              <label>Qty <input name="updates[]" value="{{ item.quantity }}" min="0" type="number"></label>
+            </div>
+            <strong>{{ item.final_line_price | money }}</strong>
+          </div>
+        {% endfor %}
+        <label>
+          <span class="eyebrow">Order notes</span>
+          <textarea name="note" style="width: 100%; min-height: 100px;">{{ cart.note }}</textarea>
+        </label>
+        <button class="button button--secondary" type="submit" name="update">Update cart</button>
+        <button class="button" type="submit" name="checkout">{{ 'cart.general.checkout' | t }}</button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Cart main",
+  "settings": []
+}
+{% endschema %}

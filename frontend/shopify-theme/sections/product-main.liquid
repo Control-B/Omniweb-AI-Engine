@@ -1,0 +1,58 @@
+{% render 'presence-context' %}
+<section class="section">
+  <div class="page-width grid grid--2">
+    <div class="grid">
+      {% for media in product.media %}
+        <div class="card">
+          {% render 'responsive-image', image: media.preview_image, sizes: '(min-width: 990px) 50vw, 100vw', alt: product.title %}
+        </div>
+      {% else %}
+        <div class="card">{{ 'product-1' | placeholder_svg_tag: 'placeholder-svg' }}</div>
+      {% endfor %}
+    </div>
+    <div style="position: sticky; top: 100px; align-self: start;">
+      <p class="eyebrow">{{ product.vendor }}</p>
+      <h1 class="heading">{{ product.title }}</h1>
+      <p style="font-size: 1.35rem;">{% render 'price', product: product %}</p>
+      {% form 'product', product, class: 'product-form' %}
+        {% unless product.has_only_default_variant %}
+          {% for option in product.options_with_values %}
+            <label>
+              <span class="eyebrow">{{ option.name }}</span>
+              <select name="options[{{ option.name | escape }}]" style="display: block; width: 100%; min-height: 46px; margin: .5rem 0 1rem;">
+                {% for value in option.values %}
+                  <option value="{{ value | escape }}" {% if option.selected_value == value %}selected{% endif %}>{{ value }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          {% endfor %}
+        {% endunless %}
+        <label>
+          <span class="eyebrow">{{ 'products.product.quantity' | t }}</span>
+          <input type="number" name="quantity" value="1" min="1" style="display: block; width: 100%; min-height: 46px; margin: .5rem 0 1rem;">
+        </label>
+        <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}">
+        <button class="button" type="submit" {% unless product.available %}disabled{% endunless %}>
+          {% if product.available %}{{ 'products.product.add_to_cart' | t }}{% else %}{{ 'products.product.sold_out' | t }}{% endif %}
+        </button>
+      {% endform %}
+      <div class="card" style="padding: 1rem; margin-top: 1rem;">
+        <p class="eyebrow">AI product expert</p>
+        <p class="subheading">Ask about sizing, compatibility, ingredients, materials, or how this compares to another item.</p>
+        <button class="button button--accent" type="button" onclick="window.PresenceAI && window.PresenceAI.open()">Ask about this product</button>
+      </div>
+      <div class="faq" style="margin-top: 1rem;">
+        <details open><summary>Description</summary><div class="subheading">{{ product.description }}</div></details>
+        <details><summary>Size guide</summary><p class="subheading">Add size details in the theme editor or product metafields.</p></details>
+        <details><summary>Shipping & returns</summary><p class="subheading">Fast shipping and easy returns. Customize this copy for your policies.</p></details>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Product main",
+  "settings": []
+}
+{% endschema %}

@@ -13,8 +13,8 @@ import {
   Shield,
   Bot,
   MessageSquare,
-  ExternalLink,
   UserCog,
+  Settings,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,6 +26,7 @@ const NAV_ITEMS: { id: AdminPageId; label: string; icon: React.ElementType; perm
   { id: "clients", label: "Clients", icon: Users, permission: "clients.read" },
   { id: "templates", label: "Templates", icon: FileText, permission: "templates.read" },
   { id: "team", label: "Super Admin", icon: UserCog, permission: "team.read" },
+  { id: "account", label: "Account", icon: Settings },
 ];
 
 interface AdminSidebarProps {
@@ -101,13 +102,6 @@ export function AdminSidebar({ activePage, onNavigate }: AdminSidebarProps) {
 
       {/* Bottom */}
       <div className="px-2 py-3 border-t border-border space-y-0.5">
-        <a
-          href="/demo?target=agent"
-          className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
-        >
-          <ExternalLink className="w-[18px] h-[18px]" />
-          {!collapsed && <span>Demo / Test Agent</span>}
-        </a>
         <button
           onClick={logout}
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"

@@ -1,0 +1,28 @@
+<aside class="cart-drawer" data-cart-drawer data-open="false" aria-label="{{ 'cart.general.title' | t }}">
+  <div class="cart-drawer__overlay" data-cart-close></div>
+  <div class="cart-drawer__panel">
+    <button class="icon-button" type="button" data-cart-close aria-label="{{ 'accessibility.close' | t }}">×</button>
+    <h2>{{ 'cart.general.title' | t }}</h2>
+    {% if cart.item_count == 0 %}
+      <p class="subheading">{{ 'cart.general.empty' | t }}</p>
+    {% else %}
+      {% for item in cart.items %}
+        <div style="display: grid; grid-template-columns: 72px 1fr; gap: .75rem; padding: 1rem 0; border-bottom: 1px solid var(--color-border);">
+          {% render 'responsive-image', image: item.image, sizes: '72px', alt: item.product.title %}
+          <div>
+            <strong>{{ item.product.title }}</strong>
+            <p class="subheading">{{ item.quantity }} × {{ item.final_price | money }}</p>
+          </div>
+        </div>
+      {% endfor %}
+      <a class="button" href="{{ routes.cart_url }}">{{ 'cart.general.checkout' | t }}</a>
+    {% endif %}
+  </div>
+</aside>
+
+{% schema %}
+{
+  "name": "Cart drawer",
+  "settings": []
+}
+{% endschema %}

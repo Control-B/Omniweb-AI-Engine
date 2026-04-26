@@ -1,0 +1,24 @@
+<section class="section section--tight">
+  <div class="page-width card" style="padding: clamp(1.5rem, 5vw, 4rem); text-align: center;">
+    <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+    <h2 class="heading">{{ section.settings.heading }}</h2>
+    <p class="subheading" style="margin-inline: auto;">{{ section.settings.text }}</p>
+    {% form 'customer', class: 'newsletter-form', style: 'display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; margin-top: 1.25rem;' %}
+      <input type="hidden" name="contact[tags]" value="newsletter">
+      <input class="input" type="email" name="contact[email]" placeholder="{{ 'general.newsletter_email' | t }}" required style="min-height: 46px; border: 1px solid var(--color-border); border-radius: 999px; padding: 0 1rem;">
+      <button class="button" type="submit">{{ 'general.newsletter_submit' | t }}</button>
+    {% endform %}
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Newsletter",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Stay close" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Launch drops, guides, and AI-led product education." },
+    { "type": "textarea", "id": "text", "label": "Text", "default": "Invite shoppers into a premium content and product discovery loop." }
+  ],
+  "presets": [{ "name": "Newsletter" }]
+}
+{% endschema %}

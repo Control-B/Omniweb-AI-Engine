@@ -1,0 +1,113 @@
+[
+  {
+    "name": "theme_info",
+    "theme_name": "Presence AI",
+    "theme_version": "0.1.0",
+    "theme_author": "Omniweb AI",
+    "theme_documentation_url": "https://omniweb.ai",
+    "theme_support_url": "https://omniweb.ai"
+  },
+  {
+    "name": "Design system",
+    "settings": [
+      {
+        "type": "color",
+        "id": "color_background",
+        "label": "Background",
+        "default": "#F7F3EC"
+      },
+      {
+        "type": "color",
+        "id": "color_surface",
+        "label": "Surface",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "color_text",
+        "label": "Text",
+        "default": "#171717"
+      },
+      {
+        "type": "color",
+        "id": "color_muted",
+        "label": "Muted text",
+        "default": "#6B625B"
+      },
+      {
+        "type": "color",
+        "id": "color_accent",
+        "label": "Accent",
+        "default": "#8A5A44"
+      },
+      {
+        "type": "color",
+        "id": "color_accent_dark",
+        "label": "Accent dark",
+        "default": "#2B211D"
+      },
+      {
+        "type": "color",
+        "id": "color_border",
+        "label": "Border",
+        "default": "#E6DED5"
+      },
+      {
+        "type": "range",
+        "id": "card_radius",
+        "label": "Card radius",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "section_spacing",
+        "label": "Section spacing",
+        "min": 36,
+        "max": 140,
+        "step": 4,
+        "default": 88
+      },
+      {
+        "type": "range",
+        "id": "heading_scale",
+        "label": "Heading scale",
+        "min": 0.8,
+        "max": 1.3,
+        "step": 0.1,
+        "default": 1.0
+      },
+      {
+        "type": "range",
+        "id": "body_scale",
+        "label": "Body scale",
+        "min": 0.9,
+        "max": 1.2,
+        "step": 0.1,
+        "default": 1.0
+      }
+    ]
+  },
+  {
+    "name": "Social accounts",
+    "settings": [
+      {
+        "type": "url",
+        "id": "social_instagram",
+        "label": "Instagram URL"
+      },
+      {
+        "type": "url",
+        "id": "social_tiktok",
+        "label": "TikTok URL"
+      },
+      {
+        "type": "url",
+        "id": "social_youtube",
+        "label": "YouTube URL"
+      }
+    ]
+  }
+]

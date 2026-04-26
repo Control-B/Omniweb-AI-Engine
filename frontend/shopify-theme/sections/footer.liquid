@@ -1,0 +1,36 @@
+<footer class="section--tight" style="background: var(--color-accent-dark); color: #fff;">
+  <div class="page-width grid grid--4">
+    <div style="grid-column: span 2;">
+      <h2 class="heading" style="font-size: clamp(2rem, 4vw, 4rem);">{{ shop.name }}</h2>
+      <p style="color: rgba(255,255,255,.72); max-width: 56ch;">{{ section.settings.statement }}</p>
+    </div>
+    <div>
+      <h3>{{ section.settings.menu_heading }}</h3>
+      {% if section.settings.menu != blank %}
+        {% for link in section.settings.menu.links %}
+          <a style="display: block; color: rgba(255,255,255,.72); margin: .5rem 0;" href="{{ link.url }}">{{ link.title }}</a>
+        {% endfor %}
+      {% endif %}
+    </div>
+    <div>
+      <h3>Social</h3>
+      {% if settings.social_instagram != blank %}<a style="display:block; color: rgba(255,255,255,.72); margin:.5rem 0;" href="{{ settings.social_instagram }}">Instagram</a>{% endif %}
+      {% if settings.social_tiktok != blank %}<a style="display:block; color: rgba(255,255,255,.72); margin:.5rem 0;" href="{{ settings.social_tiktok }}">TikTok</a>{% endif %}
+      {% if settings.social_youtube != blank %}<a style="display:block; color: rgba(255,255,255,.72); margin:.5rem 0;" href="{{ settings.social_youtube }}">YouTube</a>{% endif %}
+    </div>
+  </div>
+  <div class="page-width" style="border-top: 1px solid rgba(255,255,255,.16); margin-top: 2rem; padding-top: 1rem; color: rgba(255,255,255,.58); font-size: .85rem;">
+    &copy; {{ 'now' | date: '%Y' }} {{ shop.name }}. Powered by Presence AI.
+  </div>
+</footer>
+
+{% schema %}
+{
+  "name": "Footer",
+  "settings": [
+    { "type": "textarea", "id": "statement", "label": "Brand statement", "default": "A premium storefront designed for video-led storytelling, product education, and AI-ready shopping." },
+    { "type": "text", "id": "menu_heading", "label": "Menu heading", "default": "Explore" },
+    { "type": "link_list", "id": "menu", "label": "Footer menu" }
+  ]
+}
+{% endschema %}

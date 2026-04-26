@@ -11,6 +11,7 @@ import { AdminClientDetail } from "@/components/admin/client-detail";
 import { AdminAgents } from "@/components/admin/agents";
 import { AdminConversations } from "@/components/admin/conversations";
 import { AdminTeam } from "@/components/admin/team";
+import { AdminAccount } from "@/components/admin/account";
 import { AgentConfigPage } from "@/components/pages/agent-config";
 import { Loader2 } from "lucide-react";
 
@@ -22,6 +23,7 @@ export type AdminPageId =
   | "clients"
   | "templates"
   | "team"
+  | "account"
   | "client-detail";
 
 const PAGE_PERMISSIONS: Partial<Record<Exclude<AdminPageId, "client-detail">, UserPermission>> = {
@@ -98,6 +100,7 @@ export default function AdminDashboard() {
         {activePage === "clients" && <AdminClients onViewClient={handleViewClient} />}
         {activePage === "templates" && <AdminTemplates />}
         {activePage === "team" && <AdminTeam />}
+        {activePage === "account" && <AdminAccount />}
         {activePage === "client-detail" && selectedClientId && (
           <AdminClientDetail clientId={selectedClientId} onBack={handleBackToClients} />
         )}

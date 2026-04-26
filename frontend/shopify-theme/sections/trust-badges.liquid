@@ -1,0 +1,25 @@
+<section class="section--tight">
+  <div class="page-width grid grid--4">
+    {% for block in section.blocks %}
+      <div class="card" style="padding: 1rem;" {{ block.shopify_attributes }}>
+        <p class="eyebrow">{{ block.settings.kicker }}</p>
+        <h3>{{ block.settings.title }}</h3>
+        <p class="subheading">{{ block.settings.text }}</p>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Trust badges",
+  "blocks": [
+    { "type": "badge", "name": "Badge", "settings": [
+      { "type": "text", "id": "kicker", "label": "Kicker", "default": "Trusted" },
+      { "type": "text", "id": "title", "label": "Title", "default": "Premium support" },
+      { "type": "text", "id": "text", "label": "Text", "default": "Fast answers before and after purchase." }
+    ] }
+  ],
+  "presets": [{ "name": "Trust badges", "blocks": [{ "type": "badge" }, { "type": "badge" }, { "type": "badge" }, { "type": "badge" }] }]
+}
+{% endschema %}

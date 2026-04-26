@@ -1,0 +1,41 @@
+<section class="section">
+  <div class="page-width grid grid--2">
+    <div>
+      <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+      <h2 class="heading">{{ section.settings.heading }}</h2>
+      <p class="subheading">{{ section.settings.text }}</p>
+    </div>
+    <div class="faq">
+      {% for block in section.blocks %}
+        <details {{ block.shopify_attributes }}>
+          <summary>{{ block.settings.question }}</summary>
+          <p class="subheading">{{ block.settings.answer }}</p>
+        </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "FAQ accordion",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Answers" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Everything shoppers ask before buying." },
+    { "type": "textarea", "id": "text", "label": "Text", "default": "Pair FAQs with the AI assistant so customers can get instant guidance." }
+  ],
+  "blocks": [
+    {
+      "type": "faq",
+      "name": "Question",
+      "settings": [
+        { "type": "text", "id": "question", "label": "Question", "default": "Can the assistant answer product questions?" },
+        { "type": "textarea", "id": "answer", "label": "Answer", "default": "Yes. The theme includes provider-agnostic hooks so your AI app can receive page and product context." }
+      ]
+    }
+  ],
+  "presets": [
+    { "name": "FAQ accordion", "blocks": [{ "type": "faq" }, { "type": "faq" }, { "type": "faq" }] }
+  ]
+}
+{% endschema %}

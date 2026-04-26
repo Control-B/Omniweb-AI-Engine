@@ -1,0 +1,26 @@
+{% liquid
+  assign context_type = template.name
+%}
+
+<script type="application/json" data-presence-context>
+  {
+    "type": {{ context_type | json }},
+    {% if product %}
+      "product": {
+        "id": {{ product.id | json }},
+        "title": {{ product.title | json }},
+        "url": {{ product.url | json }},
+        "available": {{ product.available | json }},
+        "price": {{ product.price | money_without_currency | json }}
+      }
+    {% endif %}
+    {% if collection %}
+      {% if product %},{% endif %}
+      "collection": {
+        "id": {{ collection.id | json }},
+        "title": {{ collection.title | json }},
+        "url": {{ collection.url | json }}
+      }
+    {% endif %}
+  }
+</script>

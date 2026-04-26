@@ -1,0 +1,23 @@
+<section class="section">
+  <div class="page-width">
+    <h1 class="heading">{{ blog.title }}</h1>
+    <div class="grid grid--3" style="margin-top: 1.5rem;">
+      {% for article in blog.articles %}
+        <article class="card">
+          {% render 'responsive-image', image: article.image, sizes: '33vw', alt: article.title %}
+          <div style="padding: 1rem;">
+            <h2><a href="{{ article.url }}">{{ article.title }}</a></h2>
+            <p class="subheading">{{ article.excerpt_or_content | strip_html | truncate: 140 }}</p>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Blog main",
+  "settings": []
+}
+{% endschema %}

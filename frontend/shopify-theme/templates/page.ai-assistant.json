@@ -1,0 +1,9 @@
+{
+  "sections": {
+    "main": { "type": "page-main" },
+    "presenter": { "type": "ai-presenter" },
+    "assistant": { "type": "ai-assistant-callout" },
+    "faq": { "type": "faq-accordion" }
+  },
+  "order": ["main", "presenter", "assistant", "faq"]
+}

@@ -1,0 +1,38 @@
+{% render 'presence-context' %}
+<section class="section">
+  <div class="page-width">
+    <p class="eyebrow">{{ collection.title | default: section.settings.eyebrow }}</p>
+    <h1 class="heading">{{ section.settings.heading | default: collection.title }}</h1>
+    {% if collection.description != blank %}
+      <div class="subheading">{{ collection.description }}</div>
+    {% endif %}
+    <div style="display: flex; justify-content: space-between; gap: 1rem; margin: 1.5rem 0;">
+      <span>{{ collection.products_count }} products</span>
+      <select aria-label="Sort by">
+        <option>Featured</option>
+        <option>Best selling</option>
+        <option>Price ascending</option>
+      </select>
+    </div>
+    <div class="grid grid--4">
+      {% paginate collection.products by 24 %}
+        {% for product in collection.products %}
+          {% render 'product-card', product_card_product: product %}
+        {% else %}
+          {% for i in (1..8) %}{% render 'product-card' %}{% endfor %}
+        {% endfor %}
+      {% endpaginate %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Collection grid",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Fallback eyebrow", "default": "Collection" },
+    { "type": "text", "id": "heading", "label": "Fallback heading", "default": "Shop the edit" }
+  ],
+  "presets": [{ "name": "Collection grid" }]
+}
+{% endschema %}

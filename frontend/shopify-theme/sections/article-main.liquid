@@ -1,0 +1,15 @@
+<article class="section">
+  <div class="page-width" style="max-width: 920px;">
+    <p class="eyebrow">{{ article.published_at | date: '%B %d, %Y' }}</p>
+    <h1 class="heading">{{ article.title }}</h1>
+    {% render 'responsive-image', image: article.image, sizes: '920px', alt: article.title %}
+    <div class="rte subheading" style="max-width: none; margin-top: 1.5rem;">{{ article.content }}</div>
+  </div>
+</article>
+
+{% schema %}
+{
+  "name": "Article main",
+  "settings": []
+}
+{% endschema %}

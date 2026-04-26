@@ -1,0 +1,7 @@
+{
+  "sections": {
+    "main": { "type": "blog-main" },
+    "newsletter": { "type": "newsletter" }
+  },
+  "order": ["main", "newsletter"]
+}

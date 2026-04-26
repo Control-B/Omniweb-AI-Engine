@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
-import { demoLogin, hasStashedAdminToken, restoreAdminToken, stashAdminToken } from "@/lib/api";
+import { demoLogin, getToken, hasStashedAdminToken, parseJwt, restoreAdminToken, stashAdminToken } from "@/lib/api";
+import { isInternalRole } from "@/lib/auth-context";
 
 export default function DemoPage() {
   const [error, setError] = useState("");
@@ -13,6 +14,13 @@ export default function DemoPage() {
 
     async function autoLogin() {
       try {
+        const currentToken = getToken();
+        const currentRole = currentToken ? parseJwt(currentToken)?.role : null;
+        if (isInternalRole(typeof currentRole === "string" ? currentRole : null)) {
+          window.location.href = "/admin";
+          return;
+        }
+
         // Save any existing admin session so we can return later
         stashAdminToken();
         setCanReturnToAdmin(hasStashedAdminToken());

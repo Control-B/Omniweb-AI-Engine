@@ -1,207 +1,262 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useState } from "react";
+import { Check, Zap, Globe2, Mic, MessageSquare, ShoppingCart, BarChart3, Shield, ChevronRight } from "lucide-react";
 
-const STORAGE_KEY = "omniweb_widget_demo_client_id";
+const PLANS = [
+  {
+    id: "starter",
+    label: "Starter",
+    price: "$149",
+    period: "/mo",
+    tagline: "Perfect for small Shopify stores",
+    highlight: false,
+    color: "border-slate-700 bg-slate-900/60",
+    badgeColor: "bg-slate-800 text-slate-300",
+    btnClass: "bg-white/10 hover:bg-white/20 text-white border border-white/20",
+    features: [
+      "1 AI storefront agent",
+      "500 conversations / month",
+      "Text chat + Voice mode",
+      "10 languages supported",
+      "Knowledge base (5 docs)",
+      "Basic analytics dashboard",
+      "Email support",
+    ],
+  },
+  {
+    id: "growth",
+    label: "Growth",
+    price: "$299",
+    period: "/mo",
+    tagline: "For growing stores & teams",
+    highlight: true,
+    color: "border-violet-500/60 bg-gradient-to-b from-violet-950/80 to-slate-900/80",
+    badgeColor: "bg-violet-600 text-white",
+    btnClass: "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25",
+    features: [
+      "3 AI storefront agents",
+      "2,000 conversations / month",
+      "Text chat + Voice mode",
+      "All 26 languages",
+      "Unlimited knowledge base docs",
+      "Advanced analytics + conversation summaries",
+      "Native Shopify app embed",
+      "Priority email & chat support",
+    ],
+  },
+  {
+    id: "pro",
+    label: "Pro",
+    price: "$499",
+    period: "/mo",
+    tagline: "For agencies & high-volume stores",
+    highlight: false,
+    color: "border-emerald-700/50 bg-slate-900/60",
+    badgeColor: "bg-emerald-800 text-emerald-200",
+    btnClass: "bg-white/10 hover:bg-white/20 text-white border border-white/20",
+    features: [
+      "Unlimited AI agents",
+      "Unlimited conversations",
+      "Text chat + Voice mode",
+      "All 26 languages",
+      "Unlimited knowledge base",
+      "Full analytics suite",
+      "White-label widget",
+      "Multi-store support",
+      "Custom integrations",
+      "Dedicated account support",
+    ],
+  },
+];
 
-function engineBaseUrl(): string {
-  const raw =
-    process.env.NEXT_PUBLIC_ENGINE_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:8000";
-  return raw.replace(/\/$/, "");
-}
+const FEATURES = [
+  { icon: Mic, title: "Voice + Text AI", desc: "Shoppers can chat by typing or speaking in their native language — your agent replies in kind." },
+  { icon: Globe2, title: "26 Languages", desc: "Auto-detect or let shoppers choose. ElevenLabs TTS delivers natural-sounding speech in every language." },
+  { icon: ShoppingCart, title: "Cart-Aware", desc: "The agent adds products, reminds shoppers about abandoned carts, and answers product questions — without touching finances." },
+  { icon: Shield, title: "Human Escalation", desc: "Any checkout, refund, or financial request is immediately escalated to a human rep — zero financial risk." },
+  { icon: BarChart3, title: "Conversation Summaries", desc: "Every session generates an AI summary so you see exactly what shoppers asked, their intent, and lead score." },
+  { icon: MessageSquare, title: "Knowledge Base", desc: "Upload PDFs, paste URLs, or add text. Your agent uses your docs to answer product and policy questions accurately." },
+];
 
-/**
- * Public landing page to try the Deepgram voice widget locally or in staging.
- * Widget route: ``/widget/{client_id}`` (UUID from your ``AgentConfig``).
- */
 export default function LandingPage() {
-  const [clientId, setClientId] = useState("");
-  const [showFrame, setShowFrame] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [annual, setAnnual] = useState(false);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const q = params.get("client")?.trim();
-    if (q) {
-      setClientId(q);
-      return;
-    }
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setClientId(saved);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const iframeSrc = useMemo(() => {
-    const id = clientId.trim();
-    if (!id) return "";
-    return `/widget/${encodeURIComponent(id)}`;
-  }, [clientId]);
-
-  const loadWidget = useCallback(() => {
-    const id = clientId.trim();
-    if (!id) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, id);
-    } catch {
-      /* ignore */
-    }
-    setShowFrame(true);
-  }, [clientId]);
-
-  const copySnippet = useCallback(() => {
-    const id = clientId.trim();
-    if (!id) return;
-    const origin =
-      typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
-    const snippet = `<!-- Omniweb widget preview — replace YOUR_CLIENT_UUID -->
-<iframe
-  src="${origin}/widget/${id}"
-  title="Omniweb AI"
-  allow="microphone; autoplay"
-  style="position:fixed;bottom:0;right:0;width:420px;height:640px;border:0;z-index:99999"
-></iframe>`;
-    void (async () => {
-      try {
-        await navigator.clipboard.writeText(snippet);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch {
-        setCopied(false);
-      }
-    })();
-  }, [clientId]);
+  const discount = (price: string) => {
+    const n = parseInt(price.replace("$", ""));
+    return `$${Math.round(n * 0.8)}`;
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
-      <div className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
-        <p className="text-xs font-medium uppercase tracking-widest text-cyan-400/90 mb-3">
-          Omniweb · Widget demo
-        </p>
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-white mb-4">
-          Try the AI widget
-        </h1>
-        <p className="text-slate-400 text-base leading-relaxed mb-10">
-          This page loads your embeddable assistant in an iframe. You need the Agent Engine running
-          with Deepgram configured, and a real{" "}
-          <code className="text-cyan-300/90 text-sm">client_id</code> (UUID) that exists in your
-          database.
-        </p>
-
-        <section className="rounded-2xl border border-white/10 bg-slate-900/40 p-6 mb-8">
-          <h2 className="text-sm font-semibold text-white mb-4">Checklist</h2>
-          <ol className="list-decimal list-inside space-y-2 text-sm text-slate-300 leading-relaxed">
-            <li>
-              Start the engine:{" "}
-              <code className="rounded bg-black/40 px-1.5 py-0.5 text-cyan-200">
-                uvicorn app.main:app --reload --port 8000
-              </code>{" "}
-              (from the repo root, with your venv).
-            </li>
-            <li>
-              Set <code className="rounded bg-black/40 px-1.5 py-0.5">DEEPGRAM_API_KEY</code> in
-              the engine <code className="rounded bg-black/40 px-1.5 py-0.5">.env</code> (Member
-              role key for token grant).
-            </li>
-            <li>
-              Point this dashboard at the engine:{" "}
-              <code className="rounded bg-black/40 px-1.5 py-0.5">
-                NEXT_PUBLIC_ENGINE_URL=http://localhost:8000
-              </code>{" "}
-              in <code className="rounded bg-black/40 px-1.5 py-0.5">dashboard/.env.local</code>,
-              then <code className="rounded bg-black/40 px-1.5 py-0.5">pnpm dev</code>.
-            </li>
-            <li>
-              Use a <code className="rounded bg-black/40 px-1.5 py-0.5">client_id</code> from{" "}
-              <code className="rounded bg-black/40 px-1.5 py-0.5">agent_config</code> (same UUID you
-              use in the admin URL). Optional: anonymous landing calls can use{" "}
-              <code className="rounded bg-black/40 px-1.5 py-0.5">LANDING_PAGE_CLIENT_ID</code> on
-              the engine and paste that UUID here.
-            </li>
-          </ol>
-          <p className="mt-4 text-xs text-slate-500">
-            Engine this build talks to:{" "}
-            <span className="text-slate-400 font-mono break-all">{engineBaseUrl()}</span>
-          </p>
-        </section>
-
-        <section className="rounded-2xl border border-white/10 bg-slate-900/40 p-6 mb-6">
-          <label htmlFor="client-id" className="block text-sm font-medium text-slate-200 mb-2">
-            Client ID (UUID)
-          </label>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              id="client-id"
-              type="text"
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000"
-              className="flex-1 rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
-            />
-            <button
-              type="button"
-              onClick={loadWidget}
-              disabled={!clientId.trim()}
-              className="rounded-xl bg-cyan-600 px-6 py-3 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-40 disabled:pointer-events-none transition-colors"
-            >
-              Load widget
-            </button>
+    <div className="min-h-screen bg-slate-950 text-slate-100 antialiased">
+      {/* Nav */}
+      <nav className="border-b border-white/[0.06] px-6 py-4 flex items-center justify-between max-w-7xl mx-auto">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+            <Zap className="w-4 h-4 text-white" />
           </div>
-          <p className="mt-3 text-xs text-slate-500">
-            Tip: open{" "}
-            <code className="text-slate-400">
-              /landing?client=YOUR-UUID
-            </code>{" "}
-            to skip typing next time.
-          </p>
-        </section>
-
-        <div className="flex flex-wrap gap-3 mb-8">
-          <button
-            type="button"
-            onClick={copySnippet}
-            disabled={!clientId.trim()}
-            className="text-sm text-cyan-400 hover:text-cyan-300 disabled:opacity-40 underline-offset-2 hover:underline"
-          >
-            {copied ? "Copied iframe snippet" : "Copy iframe embed snippet"}
-          </button>
-          <span className="text-slate-600">·</span>
-          {iframeSrc ? (
-            <Link href={iframeSrc} className="text-sm text-slate-400 hover:text-white">
-              Open widget full page →
-            </Link>
-          ) : (
-            <span className="text-sm text-slate-600">Open widget full page →</span>
-          )}
-          <span className="text-slate-600">·</span>
-          <Link href="/login" className="text-sm text-slate-400 hover:text-white">
-            Admin login
+          <span className="font-bold text-white text-lg">Omniweb AI</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/login" className="text-sm text-slate-400 hover:text-white transition-colors">Sign in</Link>
+          <Link href="/register" className="px-4 py-2 rounded-full bg-white text-slate-900 text-sm font-semibold hover:bg-slate-100 transition-colors">
+            Get started
           </Link>
         </div>
+      </nav>
 
-        {showFrame && iframeSrc ? (
-          <div className="rounded-2xl border border-cyan-500/20 overflow-hidden bg-black/40 shadow-2xl shadow-cyan-950/30">
-            <p className="text-xs text-slate-500 px-4 py-2 border-b border-white/5 bg-slate-900/60">
-              Preview — allow microphone when the browser asks (needed for voice).
-            </p>
-            <iframe
-              title="Omniweb AI widget"
-              src={iframeSrc}
-              allow="microphone; autoplay"
-              className="w-full min-h-[min(85vh,720px)] bg-transparent"
-            />
+      {/* Hero */}
+      <section className="py-20 px-6 text-center max-w-4xl mx-auto">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-semibold uppercase tracking-wider mb-8">
+          <Zap className="w-3.5 h-3.5" />
+          AI-Powered Shopify Storefront Agent
+        </div>
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white mb-6 leading-tight">
+          Your store, speaking{" "}
+          <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-pink-400 bg-clip-text text-transparent">
+            every language
+          </span>
+        </h1>
+        <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+          Omniweb AI adds a voice and text agent to your Shopify store. It answers questions, recommends products, manages carts, and captures leads — 24/7, in 26 languages.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Link
+            href="/register"
+            className="flex items-center gap-2 px-8 py-3.5 rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold text-sm hover:from-indigo-500 hover:to-violet-500 shadow-xl shadow-indigo-500/30 transition-all hover:scale-105"
+          >
+            Start free trial <ChevronRight className="w-4 h-4" />
+          </Link>
+          <Link
+            href="/demo"
+            className="flex items-center gap-2 px-8 py-3.5 rounded-full border border-white/15 text-slate-300 font-semibold text-sm hover:bg-white/5 transition-colors"
+          >
+            Live demo →
+          </Link>
+        </div>
+      </section>
+
+      {/* Features grid */}
+      <section className="py-16 px-6 max-w-6xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Everything your shoppers need</h2>
+          <p className="text-slate-400">Built for Shopify. Designed for conversions.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {FEATURES.map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="rounded-2xl border border-white/[0.07] bg-slate-900/50 p-6 space-y-3 hover:border-indigo-500/30 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
+                <Icon className="w-5 h-5 text-indigo-400" />
+              </div>
+              <h3 className="font-semibold text-white">{title}</h3>
+              <p className="text-sm text-slate-400 leading-relaxed">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section className="py-16 px-6 max-w-6xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Simple, transparent pricing</h2>
+          <p className="text-slate-400 mb-6">No hidden fees. Cancel any time.</p>
+          {/* Annual toggle */}
+          <div className="inline-flex items-center gap-3 p-1 rounded-full border border-white/10 bg-slate-900">
+            <button
+              onClick={() => setAnnual(false)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${!annual ? "bg-white text-slate-900" : "text-slate-400 hover:text-white"}`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setAnnual(true)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${annual ? "bg-white text-slate-900" : "text-slate-400 hover:text-white"}`}
+            >
+              Annual <span className="text-emerald-400 text-xs font-bold ml-1">-20%</span>
+            </button>
           </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-white/10 py-20 text-center text-sm text-slate-500">
-            Enter a client ID and click &quot;Load widget&quot; to preview here.
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+          {PLANS.map((plan) => (
+            <div
+              key={plan.id}
+              className={`relative rounded-2xl border p-7 space-y-6 ${plan.color} ${plan.highlight ? "scale-[1.03] shadow-2xl shadow-violet-500/20 z-10" : ""} transition-all`}
+            >
+              {plan.highlight && (
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                  <span className="px-4 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg">
+                    Most Popular
+                  </span>
+                </div>
+              )}
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`text-xs font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${plan.badgeColor}`}>
+                    {plan.label}
+                  </span>
+                </div>
+                <p className="text-slate-400 text-sm mt-2">{plan.tagline}</p>
+              </div>
+
+              <div className="flex items-end gap-1">
+                <span className="text-4xl font-extrabold text-white">
+                  {annual ? discount(plan.price) : plan.price}
+                </span>
+                <span className="text-slate-400 text-sm mb-1.5">/mo</span>
+                {annual && (
+                  <span className="ml-2 text-xs text-emerald-400 font-semibold mb-1.5">billed annually</span>
+                )}
+              </div>
+
+              <ul className="space-y-2.5">
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2.5 text-sm text-slate-300">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+
+              <Link
+                href="/register"
+                className={`block w-full py-3 text-center rounded-xl font-bold text-sm transition-all ${plan.btnClass}`}
+              >
+                Get started
+              </Link>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Financial Policy callout */}
+      <section className="py-12 px-6 max-w-3xl mx-auto">
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-7 text-center space-y-3">
+          <Shield className="w-8 h-8 text-amber-400 mx-auto" />
+          <h3 className="font-bold text-white">Zero Financial Risk — By Design</h3>
+          <p className="text-sm text-slate-400 leading-relaxed max-w-lg mx-auto">
+            Your Omniweb AI agent can add products to carts and send cart reminders, but it <strong className="text-white">cannot process checkouts, issue refunds, or handle any financial transactions</strong>. Every financial request is escalated to a human representative immediately.
+          </p>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-white/[0.06] py-10 px-6 text-center">
+        <div className="flex items-center justify-center gap-2 mb-4">
+          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+            <Zap className="w-3.5 h-3.5 text-white" />
           </div>
-        )}
-      </div>
+          <span className="font-semibold text-white">Omniweb AI</span>
+        </div>
+        <p className="text-xs text-slate-600">
+          © {new Date().getFullYear()} Omniweb AI. All rights reserved. ·{" "}
+          <a href="https://omniweb.ai/terms" target="_blank" rel="noopener noreferrer" className="hover:text-slate-400 transition-colors">Terms</a>
+          {" · "}
+          <a href="https://omniweb.ai/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-slate-400 transition-colors">Privacy</a>
+        </p>
+      </footer>
     </div>
   );
 }

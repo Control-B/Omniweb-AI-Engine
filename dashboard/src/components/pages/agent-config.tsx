@@ -55,6 +55,17 @@ const VOICE_OPTIONS = [
   { id: "pNInz6obpgDQGcFmaJgB", name: "Josh", accent: "American", style: "Conversational" },
 ];
 
+const PRIMARY_GOALS = [
+  { id: "all", label: "All Goals", desc: "Enable every capability below" },
+  { id: "product_recommendations", label: "Product Recommendations", desc: "Help shoppers find the right products" },
+  { id: "customer_support", label: "Customer Support & FAQs", desc: "Answer common questions and policies" },
+  { id: "cart_management", label: "Cart Management & Reminders", desc: "Add to cart and remind about abandoned carts" },
+  { id: "lead_capture", label: "Lead Capture", desc: "Collect contact info and qualify prospects" },
+  { id: "appointment_booking", label: "Appointment Booking", desc: "Schedule and confirm appointments" },
+  { id: "order_tracking", label: "Order Tracking & Status", desc: "Update shoppers on their orders" },
+  { id: "multilingual_support", label: "Multilingual Support", desc: "Serve shoppers in their preferred language" },
+];
+
 const LANGUAGE_OPTIONS = [
   { code: "en", label: "English", flag: "🇺🇸" },
   { code: "es", label: "Spanish", flag: "🇪🇸" },
@@ -89,6 +100,9 @@ interface AgentConfig {
   business_type: string;
   retell_agent_id: string | null;
   supported_languages: string[];
+  primary_goals: string[];
+  escalation_email: string;
+  response_length: "brief" | "moderate" | "detailed";
   [key: string]: any;
 }
 
@@ -101,7 +115,13 @@ export function AgentConfigPage() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"personality" | "voice" | "brain" | "languages" | "knowledge" | "widget">("personality");
+  const [activeTab, setActiveTab] = useState<"personality" | "voice" | "brain" | "languages" | "knowledge" | "widget" | "test">("personality");
+  const [agreedToPolicy, setAgreedToPolicy] = useState(() => {
+    try { return localStorage.getItem("omniweb_policy_agreed") === "1"; } catch { return false; }
+  });
+
+  // Language search filter
+  const [langSearch, setLangSearch] = useState("");
 
   // Knowledge Base state
   const [kbDocs, setKbDocs] = useState<any[]>([]);
@@ -182,6 +202,9 @@ export function AgentConfigPage() {
         business_name: config.business_name,
         business_type: config.business_type,
         supported_languages: config.supported_languages,
+        primary_goals: config.primary_goals,
+        escalation_email: config.escalation_email,
+        response_length: config.response_length,
       });
       setSaved(true);
       await loadConfig();
@@ -295,14 +318,14 @@ export function AgentConfigPage() {
     { id: "voice" as const, label: "Voice", icon: Volume2 },
     { id: "brain" as const, label: "AI Brain", icon: Brain },
     { id: "languages" as const, label: "Languages", icon: Globe },
-    { id: "knowledge" as const, label: "Knowledge Base", icon: BookOpen },
-    { id: "widget" as const, label: "Widget & Embed", icon: Code },
+    { id: "knowledge" as const, label: "Knowledge", icon: BookOpen },
+    { id: "widget" as const, label: "Embed", icon: Code },
+    { id: "test" as const, label: "Test Agent", icon: Mic },
   ];
 
   return (
     <div className="w-full p-6">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,460px)]">
-        <section className="min-w-0 space-y-4">
+      <div className="max-w-[860px] space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">AI Agent Configuration</h1>
@@ -382,6 +405,95 @@ export function AgentConfigPage() {
               <Label>Business Type</Label>
               <Input value={config.business_type || ""} onChange={(e) => update("business_type", e.target.value)} placeholder="plumbing, dental, law firm, etc." />
             </div>
+            <div className="space-y-1.5">
+              <Label>Escalation Email</Label>
+              <Input type="email" value={config.escalation_email || ""} onChange={(e) => update("escalation_email", e.target.value)} placeholder="human@yourbusiness.com" />
+              <p className="text-xs text-muted-foreground">When a shopper needs human help, the agent will direct them here</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Response Length</Label>
+              <div className="flex gap-2">
+                {(["brief", "moderate", "detailed"] as const).map((len) => (
+                  <button key={len} onClick={() => update("response_length", len)}
+                    className={cn("flex-1 py-2 px-3 rounded-lg border text-sm font-medium capitalize transition-colors",
+                      (config.response_length || "moderate") === len
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-muted-foreground hover:border-muted-foreground/50")}>
+                    {len}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Primary Goals */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Primary Goals</CardTitle>
+            <CardDescription>Select what your AI agent should help shoppers with</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {PRIMARY_GOALS.map((goal) => {
+              const isAll = goal.id === "all";
+              const goals = config.primary_goals ?? PRIMARY_GOALS.map(g => g.id);
+              const allSelected = PRIMARY_GOALS.filter(g => g.id !== "all").every(g => goals.includes(g.id));
+              const checked = isAll ? allSelected : goals.includes(goal.id);
+              return (
+                <label key={goal.id} className={cn(
+                  "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                  checked ? "border-primary/40 bg-primary/5" : "border-border hover:bg-secondary/40"
+                )}>
+                  <input type="checkbox" checked={checked} className="mt-0.5 accent-primary"
+                    onChange={() => {
+                      const current = config.primary_goals ?? PRIMARY_GOALS.map(g => g.id);
+                      if (isAll) {
+                        update("primary_goals", allSelected ? [] : PRIMARY_GOALS.map(g => g.id));
+                      } else {
+                        const next = checked ? current.filter((id: string) => id !== goal.id) : [...current, goal.id];
+                        update("primary_goals", next);
+                      }
+                    }} />
+                  <div className="min-w-0">
+                    <p className={cn("text-sm font-medium", isAll && "font-bold")}>{goal.label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{goal.desc}</p>
+                  </div>
+                </label>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        {/* Financial Policy Notice */}
+        <Card className="border-amber-500/30 bg-amber-500/[0.04]">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 mt-0.5 p-1.5 rounded-lg bg-amber-500/15">
+                <Zap className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-foreground">AI Agent Financial Policy</p>
+                <div className="text-xs text-muted-foreground space-y-1.5">
+                  <p className="flex items-center gap-2"><span className="text-emerald-500 font-bold">✓</span> Agent CAN add products to the shopper&apos;s cart</p>
+                  <p className="flex items-center gap-2"><span className="text-emerald-500 font-bold">✓</span> Agent CAN remind shoppers about abandoned carts</p>
+                  <p className="flex items-center gap-2"><span className="text-red-400 font-bold">✗</span> Agent CANNOT process checkouts or complete payments</p>
+                  <p className="flex items-center gap-2"><span className="text-red-400 font-bold">✗</span> Agent CANNOT issue refunds or access billing information</p>
+                  <p className="flex items-center gap-2"><span className="text-red-400 font-bold">✗</span> Agent CANNOT handle any financial transactions</p>
+                </div>
+                <p className="text-xs text-amber-600 dark:text-amber-400 pt-1">
+                  For any financial request, the agent will escalate to a human representative using your escalation email above.
+                </p>
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input type="checkbox" checked={agreedToPolicy}
+                    className="accent-primary"
+                    onChange={(e) => {
+                      setAgreedToPolicy(e.target.checked);
+                      try { localStorage.setItem("omniweb_policy_agreed", e.target.checked ? "1" : "0"); } catch {}
+                    }} />
+                  <span className="text-xs font-medium text-foreground">I understand and agree to these restrictions</span>
+                </label>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -456,67 +568,81 @@ export function AgentConfigPage() {
           <CardHeader>
             <CardTitle>Supported Languages</CardTitle>
             <CardDescription>
-              Choose which languages your AI agent can speak. Your agent will automatically greet callers in their selected language.
+              Choose which languages your AI agent can speak. The widget will show a language selector to shoppers with all enabled languages.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Quick actions + count */}
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                {(config.supported_languages?.length ?? 1)} of {LANGUAGE_OPTIONS.length} languages enabled
+                <span className="font-semibold text-foreground">{config.supported_languages?.length ?? 1}</span> of {LANGUAGE_OPTIONS.length} languages enabled
               </p>
               <div className="flex gap-2">
-                <button
-                  onClick={() => update("supported_languages", LANGUAGE_OPTIONS.map(l => l.code))}
-                  className="text-xs text-primary hover:underline"
-                >
+                <button onClick={() => update("supported_languages", LANGUAGE_OPTIONS.map(l => l.code))} className="text-xs text-primary hover:underline font-medium">
                   Enable all
                 </button>
                 <span className="text-muted-foreground">·</span>
-                <button
-                  onClick={() => update("supported_languages", ["en"])}
-                  className="text-xs text-muted-foreground hover:underline"
-                >
+                <button onClick={() => update("supported_languages", ["en"])} className="text-xs text-muted-foreground hover:underline">
                   English only
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {LANGUAGE_OPTIONS.map((lang) => {
+
+            {/* Search dropdown */}
+            <div className="relative">
+              <Input
+                value={langSearch}
+                onChange={(e) => setLangSearch(e.target.value)}
+                placeholder="Search languages..."
+                className="pr-8"
+              />
+              {langSearch && (
+                <button onClick={() => setLangSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Language list */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
+              {LANGUAGE_OPTIONS.filter(l =>
+                !langSearch || l.label.toLowerCase().includes(langSearch.toLowerCase()) || l.code.toLowerCase().includes(langSearch.toLowerCase())
+              ).map((lang) => {
                 const enabled = config.supported_languages?.includes(lang.code) ?? lang.code === "en";
                 const isEnglish = lang.code === "en";
                 return (
-                  <button
+                  <label
                     key={lang.code}
-                    onClick={() => {
-                      if (isEnglish) return; // English is always required
-                      const current = config.supported_languages ?? ["en"];
-                      const next = enabled
-                        ? current.filter((c: string) => c !== lang.code)
-                        : [...current, lang.code];
-                      update("supported_languages", next);
-                    }}
                     className={cn(
-                      "flex items-center gap-2 p-3 rounded-lg border text-left transition-colors",
-                      enabled
-                        ? "border-primary bg-primary/5 text-foreground"
-                        : "border-border text-muted-foreground hover:border-muted-foreground/50",
+                      "flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors",
+                      enabled ? "border-primary/40 bg-primary/5" : "border-border hover:bg-secondary/40",
                       isEnglish && "cursor-default"
                     )}
                   >
-                    <span className="text-lg">{lang.flag}</span>
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      disabled={isEnglish}
+                      className="accent-primary shrink-0"
+                      onChange={() => {
+                        if (isEnglish) return;
+                        const current = config.supported_languages ?? ["en"];
+                        const next = enabled ? current.filter((c: string) => c !== lang.code) : [...current, lang.code];
+                        update("supported_languages", next);
+                      }}
+                    />
+                    <span className="text-base">{lang.flag}</span>
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{lang.label}</div>
-                      <div className="text-[10px] uppercase tracking-wider opacity-60">{lang.code}</div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{lang.code}</div>
                     </div>
-                    {isEnglish && (
-                      <Badge variant="secondary" className="ml-auto text-[9px] px-1.5">Required</Badge>
-                    )}
-                  </button>
+                  </label>
                 );
               })}
             </div>
+
             <p className="text-xs text-muted-foreground">
-              When a caller or visitor selects a language, the AI agent will use that language for speech recognition, responses, and text chat. The widget will show a language selector.
+              English is always required. Voice mode uses Deepgram STT + ElevenLabs TTS for each selected language.
             </p>
           </CardContent>
         </Card>
@@ -623,7 +749,7 @@ export function AgentConfigPage() {
                         value={kbUrlValue}
                         onChange={(e) => setKbUrlValue(e.target.value)}
                         placeholder="https://example.com/about"
-                        type="url"
+                        type="text"
                       />
                       <p className="text-xs text-muted-foreground">The page content will be scraped and added to your agent&apos;s knowledge</p>
                     </div>
@@ -832,15 +958,15 @@ export function AgentConfigPage() {
           )}
         </div>
       )}
-        </section>
-
-        <aside className="xl:sticky xl:top-6 xl:self-start">
+      {activeTab === "test" && (
+        <div className="max-w-[480px]">
           <AgentVoiceTestPanel
             clientId={clientId}
             agentName={config.agent_name || "your agent"}
             widgetUrl={widget?.widget_url || (clientId ? `/widget/${encodeURIComponent(clientId)}?panel=1` : "")}
           />
-        </aside>
+        </div>
+      )}
       </div>
     </div>
   );

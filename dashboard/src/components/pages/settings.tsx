@@ -33,21 +33,21 @@ import {
   type Profile,
 } from "@/lib/api";
 
-const TABS = ["profile", "api-keys", "notifications", "billing"] as const;
+const TABS = ["profile", "api-keys", "notifications", "pricing"] as const;
 type Tab = (typeof TABS)[number];
 
 const ICON_MAP: Record<Tab, React.ElementType> = {
   profile: Building2,
   "api-keys": Key,
   notifications: Bell,
-  billing: CreditCard,
+  pricing: CreditCard,
 };
 
 const TAB_LABELS: Record<Tab, string> = {
   profile: "Profile",
   "api-keys": "API Keys",
   notifications: "Notifications",
-  billing: "Billing",
+  pricing: "Pricing",
 };
 
 function CopyButton({ value }: { value: string }) {
@@ -609,15 +609,70 @@ function NotificationSettings() {
   );
 }
 
-/* ─── Billing Tab ─── */
-const PLAN_DETAILS: Record<string, { label: string; price: string; features: string }> = {
-  starter: { label: "Starter", price: "$29/mo", features: "100 minutes · 1 number" },
-  growth: { label: "Growth", price: "$79/mo", features: "500 minutes · 3 numbers" },
-  pro: { label: "Pro", price: "$199/mo", features: "Unlimited minutes · 5 numbers" },
-  agency: { label: "Agency", price: "$499/mo", features: "Unlimited everything · White-label" },
-};
+/* ─── Pricing Tab ─── */
+const PRICING_PLANS = [
+  {
+    id: "starter",
+    label: "Starter",
+    price: "$149",
+    period: "/mo",
+    tagline: "Perfect for small businesses",
+    color: "from-indigo-500/20 to-violet-500/10",
+    border: "border-indigo-500/30",
+    features: [
+      "1 AI Agent",
+      "500 conversations/mo",
+      "Text + Voice modes",
+      "10 languages",
+      "Knowledge base (5 docs)",
+      "Basic analytics",
+      "Email support",
+    ],
+  },
+  {
+    id: "growth",
+    label: "Growth",
+    price: "$299",
+    period: "/mo",
+    tagline: "For growing stores & teams",
+    color: "from-violet-500/20 to-purple-500/10",
+    border: "border-violet-500/40",
+    popular: true,
+    features: [
+      "3 AI Agents",
+      "2,000 conversations/mo",
+      "Text + Voice modes",
+      "All 26 languages",
+      "Knowledge base (unlimited docs)",
+      "Advanced analytics + summaries",
+      "Shopify native integration",
+      "Priority support",
+    ],
+  },
+  {
+    id: "pro",
+    label: "Pro",
+    price: "$499",
+    period: "/mo",
+    tagline: "For high-volume & agencies",
+    color: "from-emerald-500/20 to-teal-500/10",
+    border: "border-emerald-500/30",
+    features: [
+      "Unlimited AI Agents",
+      "Unlimited conversations",
+      "Text + Voice modes",
+      "All 26 languages",
+      "Knowledge base (unlimited)",
+      "Full analytics suite",
+      "White-label widget",
+      "Multi-store support",
+      "Dedicated support",
+      "Custom integrations",
+    ],
+  },
+];
 
-function BillingSettings() {
+function PricingSettings() {
   const [plan, setPlan] = useState("starter");
 
   useEffect(() => {
@@ -628,39 +683,80 @@ function BillingSettings() {
     }
   }, []);
 
-  const details = PLAN_DETAILS[plan] || PLAN_DETAILS.starter;
-
   return (
-    <div className="space-y-5">
-      <Card>
-        <CardHeader>
-          <CardTitle>Current Plan</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20">
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <p className="text-lg font-bold text-foreground">{details.label} Plan</p>
-                <Badge variant="success">Active</Badge>
-              </div>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {details.price} · {details.features}
-              </p>
-            </div>
+    <div className="space-y-6">
+      {/* Current plan banner */}
+      <div className="flex items-center gap-3 p-4 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20">
+        <CreditCard className="w-5 h-5 text-primary shrink-0" />
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-bold text-foreground capitalize">{plan} Plan</p>
+            <Badge variant="success">Active</Badge>
           </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex items-start gap-2 text-sm text-muted-foreground bg-accent/50 border border-border rounded-lg px-3 py-2">
-        <CreditCard className="w-4 h-4 mt-0.5 shrink-0" />
-        <p>
-          To upgrade your plan or manage payment methods, contact us at{" "}
-          <a href="mailto:support@omniweb.ai" className="text-primary hover:underline">
-            support@omniweb.ai
-          </a>
-          . Self-service billing coming soon.
-        </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {PRICING_PLANS.find(p => p.id === plan)?.price ?? "—"}/mo ·{" "}
+            {PRICING_PLANS.find(p => p.id === plan)?.tagline}
+          </p>
+        </div>
       </div>
+
+      {/* Pricing cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {PRICING_PLANS.map((p) => {
+          const isCurrent = p.id === plan;
+          return (
+            <div
+              key={p.id}
+              className={cn(
+                "relative rounded-2xl border p-5 space-y-4 bg-gradient-to-b transition-all",
+                p.color, p.border,
+                isCurrent && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+              )}
+            >
+              {p.popular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-violet-600 text-white shadow-lg">
+                    Most Popular
+                  </span>
+                </div>
+              )}
+              <div>
+                <p className="text-sm font-bold text-foreground">{p.label}</p>
+                <p className="text-xs text-muted-foreground">{p.tagline}</p>
+              </div>
+              <div className="flex items-end gap-0.5">
+                <span className="text-3xl font-extrabold text-foreground">{p.price}</span>
+                <span className="text-sm text-muted-foreground mb-1">{p.period}</span>
+              </div>
+              <ul className="space-y-1.5">
+                {p.features.map((f) => (
+                  <li key={f} className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="text-emerald-500 font-bold shrink-0">✓</span> {f}
+                  </li>
+                ))}
+              </ul>
+              {isCurrent ? (
+                <div className="w-full py-2 text-center rounded-lg bg-primary/10 text-primary text-xs font-semibold">
+                  Current Plan
+                </div>
+              ) : (
+                <a
+                  href="mailto:support@omniweb.ai?subject=Plan Upgrade Request"
+                  className="block w-full py-2 text-center rounded-lg bg-foreground text-background text-xs font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Upgrade
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center">
+        To change your plan, contact us at{" "}
+        <a href="mailto:support@omniweb.ai" className="text-primary hover:underline">support@omniweb.ai</a>
+        . Self-service billing coming soon.
+      </p>
     </div>
   );
 }
@@ -673,7 +769,7 @@ export function SettingsPage() {
     profile: ProfileSettings,
     "api-keys": ApiKeysSettings,
     notifications: NotificationSettings,
-    billing: BillingSettings,
+    pricing: PricingSettings,
   }[tab];
 
   return (
@@ -681,7 +777,7 @@ export function SettingsPage() {
       <div className="mb-5">
         <h1 className="text-xl font-bold text-foreground">Settings</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Manage your account, integrations, and billing
+          Manage your account, integrations, and pricing
         </p>
       </div>
 

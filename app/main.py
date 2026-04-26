@@ -248,7 +248,7 @@ class CanonicalHostMiddleware(BaseHTTPMiddleware):
             path = request.url.path
             query = f"?{request.url.query}" if request.url.query else ""
 
-            if path.startswith("/api") or path == "/health":
+            if path.startswith("/api") or path.startswith("/static") or path == "/health":
                 return await call_next(request)
 
             return RedirectResponse(f"{settings.PLATFORM_URL.rstrip('/')}/admin", status_code=302)

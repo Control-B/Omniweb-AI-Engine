@@ -252,28 +252,34 @@ def build_voice_agent_settings(
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
     listen_language = "multi" if lang_tag == "multi" else lang_tag
 
-    # Use ElevenLabs Sarah (eleven_turbo_v2_5 — natively multilingual) when the key is
-    # present.  Single provider only: Deepgram Voice Agent v1 does not support a speak
-    # array, so we choose one provider per session.
+    # Deepgram is always the reliable fallback. When an ElevenLabs key is configured the
+    # agent tries ElevenLabs Sarah (eleven_turbo_v2_5 — natively multilingual) first;
+    # Deepgram Voice Agent v1 supports an ordered fallback array so if ElevenLabs fails
+    # Deepgram takes over automatically without silence.
+    deepgram_speak: dict[str, Any] = {
+        "provider": {
+            "type": "deepgram",
+            "model": _deepgram_tts_for_language(lang_tag, config),
+        }
+    }
     if settings.ELEVENLABS_API_KEY:
         eleven_voice_id = _elevenlabs_voice_for_config(config)
-        speak: dict[str, Any] = {
-            "provider": {
-                "type": "eleven_labs",
-                "model_id": "eleven_turbo_v2_5",
+        speak: list[dict[str, Any]] | dict[str, Any] = [
+            {
+                "provider": {
+                    "type": "eleven_labs",
+                    "model_id": "eleven_turbo_v2_5",
+                    "language_code": lang_tag if lang_tag != "multi" else "en",
+                },
+                "endpoint": {
+                    "url": f"wss://api.elevenlabs.io/v1/text-to-speech/{eleven_voice_id}/multi-stream-input",
+                    "headers": {"xi-api-key": settings.ELEVENLABS_API_KEY},
+                },
             },
-            "endpoint": {
-                "url": f"wss://api.elevenlabs.io/v1/text-to-speech/{eleven_voice_id}/multi-stream-input",
-                "headers": {"xi-api-key": settings.ELEVENLABS_API_KEY},
-            },
-        }
+            deepgram_speak,
+        ]
     else:
-        speak = {
-            "provider": {
-                "type": "deepgram",
-                "model": _deepgram_tts_for_language(lang_tag, config),
-            }
-        }
+        speak = deepgram_speak
 
     # Shape must match Deepgram Voice Agent v1 Settings (see voice-agent-settings docs):
     # listen/speak/think use nested { "provider": { "type", "model", ... } }.

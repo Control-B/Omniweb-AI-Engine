@@ -17,22 +17,13 @@ settings = get_settings()
 DEEPGRAM_GRANT_URL = "https://api.deepgram.com/v1/auth/grant"
 DEEPGRAM_AGENT_WS_URL = "wss://agent.deepgram.com/v1/agent/converse"
 SUPPORTED_VOICE_LANGUAGE_CODES = {
-    "en",
-    "es",
-    "fr",
-    "de",
-    "it",
-    "pt",
-    "ja",
-    "ko",
-    "zh",
-    "hi",
-    "ar",
-    "nl",
-    "pl",
-    "ru",
-    "tr",
-    "uk",
+    "en", "es", "fr", "de", "it", "pt", "nl", "sv", "ro",
+    "ru", "uk", "pl",
+    "ar", "tr",
+    "hi", "bn",
+    "zh", "ja", "ko",
+    "id", "vi", "tl",
+    "sw", "kri", "su",
     "multi",
 }
 LANGUAGE_NAMES = {
@@ -42,16 +33,25 @@ LANGUAGE_NAMES = {
     "de": "German",
     "it": "Italian",
     "pt": "Portuguese",
+    "nl": "Dutch",
+    "sv": "Swedish",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "uk": "Ukrainian",
+    "pl": "Polish",
+    "ar": "Arabic",
+    "tr": "Turkish",
+    "hi": "Hindi",
+    "bn": "Bengali",
+    "zh": "Chinese",
     "ja": "Japanese",
     "ko": "Korean",
-    "zh": "Chinese",
-    "hi": "Hindi",
-    "ar": "Arabic",
-    "nl": "Dutch",
-    "pl": "Polish",
-    "ru": "Russian",
-    "tr": "Turkish",
-    "uk": "Ukrainian",
+    "id": "Indonesian",
+    "vi": "Vietnamese",
+    "tl": "Filipino",
+    "sw": "Swahili",
+    "kri": "Krio",
+    "su": "Sundanese",
     "multi": "the visitor's language",
 }
 VOICE_GREETING_TEMPLATES = {
@@ -60,16 +60,25 @@ VOICE_GREETING_TEMPLATES = {
     "de": "Hallo, ich bin {agent_name} von {business_name}. Ich kann Ihnen helfen, genau das zu finden, was Sie suchen, Fragen beantworten und Sie zur besten Lösung führen. Wie kann ich Ihnen heute helfen?",
     "it": "Ciao, sono {agent_name} di {business_name}. Posso aiutarti a trovare esattamente ciò che cerchi, rispondere alle tue domande e guidarti verso la soluzione migliore. Come posso aiutarti oggi?",
     "pt": "Olá, sou {agent_name} da {business_name}. Posso ajudar você a encontrar exatamente o que procura, responder perguntas e orientar você para a melhor solução. Como posso ajudar hoje?",
+    "nl": "Hallo, ik ben {agent_name} van {business_name}. Ik kan u helpen precies te vinden wat u zoekt, vragen beantwoorden en u naar de beste oplossing begeleiden. Waarmee kan ik u vandaag helpen?",
+    "sv": "Hej, jag är {agent_name} från {business_name}. Jag kan hjälpa dig hitta precis det du letar efter, svara på dina frågor och guida dig till den bästa lösningen. Hur kan jag hjälpa dig idag?",
+    "ro": "Bună ziua, sunt {agent_name} de la {business_name}. Vă pot ajuta să găsiți exact ce căutați, să răspund la întrebări și să vă îndrept spre cea mai bună soluție. Cum vă pot ajuta astăzi?",
+    "ru": "Здравствуйте, я {agent_name} из {business_name}. Я могу помочь вам найти именно то, что вы ищете, ответить на вопросы и подсказать лучшее решение. Чем я могу помочь сегодня?",
+    "uk": "Вітаю, я {agent_name} з {business_name}. Я можу допомогти знайти саме те, що ви шукаєте, відповісти на запитання й підказати найкраще рішення. Чим можу допомогти сьогодні?",
+    "pl": "Cześć, jestem {agent_name} z {business_name}. Mogę pomóc znaleźć dokładnie to, czego szukasz, odpowiedzieć na pytania i wskazać najlepsze rozwiązanie. Jak mogę dziś pomóc?",
+    "ar": "مرحبًا، أنا {agent_name} من {business_name}. يمكنني مساعدتك في العثور على ما تبحث عنه بالضبط، والإجابة عن أسئلتك، وإرشادك إلى أفضل حل. كيف يمكنني مساعدتك اليوم؟",
+    "tr": "Merhaba, ben {business_name} ekibinden {agent_name}. Aradığınız şeyi bulmanıza, sorularınızı yanıtlamanıza ve en doğru çözüme yönlendirmenize yardımcı olabilirim. Bugün size nasıl yardımcı olabilirim?",
+    "hi": "नमस्ते, मैं {business_name} से {agent_name} हूं। मैं आपको ठीक वही खोजने, सवालों के जवाब देने और सही मदद पाने में सहायता कर सकता हूं। आज मैं आपकी कैसे मदद करूं?",
+    "bn": "নমস্কার, আমি {business_name} থেকে {agent_name}। আমি আপনাকে প্রয়োজনীয় জিনিস খুঁজে পেতে, প্রশ্নের উত্তর দিতে এবং সেরা সমাধানের দিকে গাইড করতে পারি। আজ আমি কীভাবে সাহায্য করতে পারি?",
+    "zh": "您好，我是来自 {business_name} 的 {agent_name}。我可以帮您找到想要的内容、回答问题，并引导您获得最合适的帮助。今天我能为您做什么？",
     "ja": "こんにちは、{business_name}の{agent_name}です。お探しのものを見つけたり、質問に答えたり、最適な案内をしたりできます。本日はどのようにお手伝いできますか？",
     "ko": "안녕하세요, {business_name}의 {agent_name}입니다. 찾으시는 것을 정확히 찾도록 돕고, 질문에 답하고, 가장 좋은 해결 방법을 안내해 드릴 수 있습니다. 오늘 무엇을 도와드릴까요?",
-    "zh": "您好，我是来自 {business_name} 的 {agent_name}。我可以帮您找到想要的内容、回答问题，并引导您获得最合适的帮助。今天我能为您做什么？",
-    "hi": "नमस्ते, मैं {business_name} से {agent_name} हूं। मैं आपको ठीक वही खोजने, सवालों के जवाब देने और सही मदद पाने में सहायता कर सकता हूं। आज मैं आपकी कैसे मदद करूं?",
-    "ar": "مرحبًا، أنا {agent_name} من {business_name}. يمكنني مساعدتك في العثور على ما تبحث عنه بالضبط، والإجابة عن أسئلتك، وإرشادك إلى أفضل حل. كيف يمكنني مساعدتك اليوم؟",
-    "nl": "Hallo, ik ben {agent_name} van {business_name}. Ik kan u helpen precies te vinden wat u zoekt, vragen beantwoorden en u naar de beste oplossing begeleiden. Waarmee kan ik u vandaag helpen?",
-    "pl": "Cześć, jestem {agent_name} z {business_name}. Mogę pomóc znaleźć dokładnie to, czego szukasz, odpowiedzieć na pytania i wskazać najlepsze rozwiązanie. Jak mogę dziś pomóc?",
-    "ru": "Здравствуйте, я {agent_name} из {business_name}. Я могу помочь вам найти именно то, что вы ищете, ответить на вопросы и подсказать лучшее решение. Чем я могу помочь сегодня?",
-    "tr": "Merhaba, ben {business_name} ekibinden {agent_name}. Aradığınız şeyi bulmanıza, sorularınızı yanıtlamanıza ve en doğru çözüme yönlendirmenize yardımcı olabilirim. Bugün size nasıl yardımcı olabilirim?",
-    "uk": "Вітаю, я {agent_name} з {business_name}. Я можу допомогти знайти саме те, що ви шукаєте, відповісти на запитання й підказати найкраще рішення. Чим можу допомогти сьогодні?",
+    "id": "Halo, saya {agent_name} dari {business_name}. Saya bisa membantu Anda menemukan apa yang dicari, menjawab pertanyaan, dan memandu Anda ke solusi terbaik. Bagaimana saya bisa membantu Anda hari ini?",
+    "vi": "Xin chào, tôi là {agent_name} từ {business_name}. Tôi có thể giúp bạn tìm chính xác những gì cần, trả lời câu hỏi và hướng dẫn đến giải pháp tốt nhất. Hôm nay tôi có thể giúp gì cho bạn?",
+    "tl": "Kumusta, ako si {agent_name} mula sa {business_name}. Matutulungan kita na mahanap ang hinahanap mo, sagutin ang iyong mga tanong, at gabayan ka sa pinakamahusay na solusyon. Paano kita matutulungan ngayon?",
+    "sw": "Habari, mimi ni {agent_name} kutoka {business_name}. Ninaweza kukusaidia kupata unachotafuta, kujibu maswali yako, na kukuongoza kwenye suluhisho bora. Ninawezaje kukusaidia leo?",
+    "kri": "Kushɛh, a nɛm {agent_name} fɔm {business_name}. A kɛn ɛp yu fɛn wetin yu de luk fɔ, ansa yu kwɛsɔn dɛn, ɛn ɛp yu gɛt di bɛs ansa. Aw a kɛn ɛp yu tɔde?",
+    "su": "Wilujeng sumping, abdi {agent_name} ti {business_name}. Abdi tiasa ngabantosan anjeun mendakan naon anu anjeun milarian, ngajawab patarosan, sareng ngarahkeun kana solusi anu pangsaéna. Kumaha abdi tiasa ngabantosan anjeun dinten ieu?",
 }
 
 
@@ -250,17 +259,21 @@ def build_voice_agent_settings(
         f"After the welcome message, wait for the user."
     )
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
-    # nova-3 "multi" only covers: en, es, fr, de, hi, ru, pt, ja, it, nl.
-    # For languages outside that set (Arabic, Chinese, Korean, etc.) pass the specific
-    # code directly so nova-3 picks the right acoustic model instead of guessing.
-    _NOVA3_MULTI_LANGS = {"en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"}
+    # Languages explicitly supported by Deepgram nova-3 STT with a named code.
+    # Languages NOT listed here (Swahili, Krio, Sundanese) fall back to "multi" so
+    # nova-3 at least attempts recognition rather than failing with an unknown code.
+    _NOVA3_SUPPORTED = {
+        "en", "es", "fr", "de", "it", "pt", "nl", "sv", "ro",
+        "ru", "uk", "pl", "ar", "tr", "hi", "bn",
+        "zh", "ja", "ko", "id", "vi", "tl",
+    }
     if lang_tag == "multi":
         listen_language = "multi"
-    elif lang_tag in _NOVA3_MULTI_LANGS:
+    elif lang_tag in _NOVA3_SUPPORTED:
         listen_language = lang_tag
     else:
-        # Language not in nova-3 multi — pin it explicitly for best STT accuracy
-        listen_language = lang_tag
+        # Unsupported STT code (sw, kri, su…) — use multi for best-effort recognition
+        listen_language = "multi"
 
     # Deepgram is always the reliable fallback. When an ElevenLabs key is configured the
     # agent tries ElevenLabs Sarah (eleven_turbo_v2_5 — natively multilingual) first;

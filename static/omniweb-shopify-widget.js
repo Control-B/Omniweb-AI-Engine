@@ -41,6 +41,7 @@
 
   const LANGUAGE_OPTIONS = [
     ["multi", "🌐 Auto"],
+    // Western European
     ["en", "🇺🇸 English"],
     ["es", "🇪🇸 Spanish"],
     ["fr", "🇫🇷 French"],
@@ -48,11 +49,32 @@
     ["it", "🇮🇹 Italian"],
     ["pt", "🇵🇹 Portuguese"],
     ["nl", "🇳🇱 Dutch"],
+    ["sv", "🇸🇪 Swedish"],
+    ["ro", "🇷🇴 Romanian"],
+    // Eastern European
+    ["ru", "🇷🇺 Russian"],
+    ["uk", "🇺🇦 Ukrainian"],
+    ["pl", "🇵🇱 Polish"],
+    // Middle East & Turkey
+    ["ar", "🇸🇦 Arabic"],
+    ["tr", "🇹🇷 Turkish"],
+    // South Asia
+    ["hi", "🇮🇳 Hindi"],
+    ["bn", "🇧🇩 Bengali"],
+    // East Asia
+    ["zh", "🇨🇳 Chinese"],
     ["ja", "🇯🇵 Japanese"],
     ["ko", "🇰🇷 Korean"],
-    ["zh", "🇨🇳 Chinese"],
-    ["hi", "🇮🇳 Hindi"],
-    ["ar", "🇸🇦 Arabic"],
+    // Southeast Asia
+    ["id", "🇮🇩 Indonesian"],
+    ["vi", "🇻🇳 Vietnamese"],
+    ["tl", "🇵🇭 Filipino"],
+    // Africa
+    ["sw", "🇰🇪 Swahili"],
+    // West Africa / Creole
+    ["kri", "🇸🇱 Krio"],
+    // Sundanese (West Java)
+    ["su", "🇮🇩 Sundanese"],
   ]
   let selectedLanguage = detectDefaultLanguage()
 

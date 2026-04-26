@@ -38,7 +38,6 @@
   let voiceBusy = false
   let messages = []
   let sending = false
-  let selectedLanguage = detectDefaultLanguage()
 
   const LANGUAGE_OPTIONS = [
     ["multi", "Auto"],
@@ -55,6 +54,7 @@
     ["hi", "Hindi"],
     ["ar", "Arabic"],
   ]
+  let selectedLanguage = detectDefaultLanguage()
 
   /* ── Styles ───────────────────────────────────────────────────── */
   const STYLE = document.createElement("style")

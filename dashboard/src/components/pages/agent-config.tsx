@@ -965,146 +965,190 @@ function AgentVoiceTestPanel({
           ? "Text chat active"
           : "Ready to test";
 
+  const orbActive = status === "listening";
+
   return (
-    <Card className="overflow-hidden border-primary/20 bg-card/95">
-      <CardHeader className="border-b border-border">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle>Test Your Agent</CardTitle>
-            <CardDescription>
-              Uses your last saved configuration. Click Save & Deploy before testing new instructions.
-            </CardDescription>
+    <div className="overflow-hidden rounded-2xl border border-primary/20" style={{ background: "linear-gradient(180deg,#0f1120 0%,#0c0e1a 100%)" }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className={cn("w-2 h-2 rounded-full", sessionActive ? "bg-emerald-400 shadow-[0_0_6px_rgba(74,222,128,0.7)]" : "bg-slate-600")} />
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+              {sessionActive ? "Live Session" : "Talk to Agent"}
+            </span>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {sessionActive && (
+            <button
+              onClick={() => void stopSession()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-red-500/30 bg-red-500/10 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition-colors"
+            >
+              <Square className="h-3 w-3" />
+              End
+            </button>
+          )}
           {widgetUrl && (
-            <Button size="sm" variant="outline" onClick={() => window.open(widgetUrl, "_blank")}>
-              Open Full Page
-            </Button>
+            <button
+              onClick={() => window.open(widgetUrl, "_blank")}
+              className="px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.04] text-slate-400 text-xs font-medium hover:bg-white/[0.08] transition-colors"
+            >
+              Full Page
+            </button>
           )}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4 p-4">
-        <div className="rounded-2xl border border-border bg-background/70 p-4">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-foreground">{agentName}</p>
-              <p className="text-xs text-muted-foreground">{statusLabel}</p>
-            </div>
-            {sessionActive && (
-              <Button size="sm" variant="outline" onClick={() => void stopSession()}>
-                <Square className="h-3.5 w-3.5" />
-                Stop
-              </Button>
-            )}
-          </div>
+      </div>
 
-          <div className="flex min-h-[220px] flex-col items-center justify-center gap-5 rounded-2xl bg-black/40 p-6">
-            <div
-              className={cn(
-                "relative h-32 w-32 rounded-full",
-                sessionActive && "animate-pulse"
-              )}
-              style={{
-                background:
-                  "conic-gradient(from 180deg, #22d3ee, #a855f7, #ec4899, #22d3ee)",
-                boxShadow: "0 0 44px rgba(34, 211, 238, 0.2)",
-              }}
-            >
-              <div className="absolute inset-3 rounded-full bg-background" />
-              <div className="absolute inset-5 rounded-full border border-white/20" />
-            </div>
-
-            <Button
-              className="h-12 min-w-56 bg-emerald-400 text-slate-950 hover:bg-emerald-300"
-              disabled={status === "connecting"}
-              onClick={() => void startSession("voice")}
-            >
-              <Mic className="h-4 w-4" />
-              {status === "listening" ? "Restart Voice Test" : "Talk To Your Agent"}
-            </Button>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Language</Label>
-          <select
-            value={selectedLanguage}
-            disabled={sessionActive || status === "connecting"}
-            onChange={(event) => setSelectedLanguage(event.target.value)}
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-          >
-            {LANGUAGE_OPTIONS.map((language) => (
-              <option key={language.code} value={language.code}>
-                {language.flag} {language.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            {error}
-          </div>
-        )}
-
-        <div className="max-h-56 min-h-24 space-y-2 overflow-y-auto rounded-xl border border-border bg-background/50 p-3">
-          {lines.length === 0 ? (
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Start a voice test or type a message. The transcript will appear here so you can confirm the agent follows your greeting, personality, language, and knowledge instructions.
-            </p>
-          ) : (
-            lines.map((line, index) => (
-              <div
-                key={`${index}-${line.role}`}
-                className={cn(
-                  "rounded-lg px-3 py-2 text-sm",
-                  line.role === "user"
-                    ? "ml-5 bg-secondary text-foreground"
-                    : "mr-5 border border-primary/15 bg-primary/10 text-foreground"
-                )}
-              >
-                <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {line.role === "user" ? "You" : "Agent"}
-                </p>
-                <p className="whitespace-pre-wrap break-words">{line.content}</p>
-              </div>
-            ))
+      {/* Orb area */}
+      <div className="flex flex-col items-center justify-center py-8 gap-5" style={{ background: "radial-gradient(ellipse at 50% 0%,rgba(99,102,241,.12) 0%,transparent 65%)" }}>
+        {/* Orb */}
+        <div className="relative">
+          {/* Glow ring */}
+          {orbActive && (
+            <div className="absolute inset-0 rounded-full animate-ping" style={{ background: "rgba(99,102,241,.15)", animationDuration: "2s" }} />
           )}
-        </div>
-
-        <div className="flex items-end gap-2">
-          <Textarea
-            rows={2}
-            value={textDraft}
-            onChange={(event) => setTextDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                void sendText();
-              }
+          <div
+            className={cn("relative rounded-full transition-all duration-500", orbActive ? "scale-110" : "scale-100")}
+            style={{
+              width: 100,
+              height: 100,
+              background: "conic-gradient(from 180deg,#22d3ee,#818cf8,#a855f7,#ec4899,#f59e0b,#22d3ee)",
+              boxShadow: orbActive
+                ? "0 0 48px rgba(99,102,241,.55), 0 0 80px rgba(168,85,247,.25)"
+                : "0 0 24px rgba(99,102,241,.2)",
             }}
-            placeholder="Type a test message..."
-            className="resize-none"
-          />
-          <Button
-            className="h-10 w-10 shrink-0 rounded-full p-0"
-            disabled={status === "connecting" || !textDraft.trim()}
-            onClick={() => void sendText()}
-            aria-label="Send test message"
           >
-            <ArrowUp className="h-4 w-4" />
-          </Button>
+            <div
+              className="absolute rounded-full"
+              style={{ inset: 5, background: "radial-gradient(circle at 38% 32%,#1e1b4b 0%,#0c0e1a 70%)" }}
+            />
+            {/* Inner ring */}
+            <div className="absolute rounded-full border border-white/10" style={{ inset: 8 }} />
+          </div>
         </div>
 
-        <Button
-          variant="outline"
-          className="w-full"
+        {/* Sound wave bars */}
+        <div className="flex items-center gap-1 h-6">
+          {[0.4, 0.7, 1, 0.65, 0.85, 0.5, 0.9].map((h, i) => (
+            <div
+              key={i}
+              className="w-1 rounded-full transition-all duration-300"
+              style={{
+                height: orbActive ? `${h * 20}px` : "4px",
+                background: orbActive
+                  ? `hsl(${243 + i * 8}, 70%, ${55 + i * 3}%)`
+                  : "rgba(100,116,139,0.4)",
+                transitionDelay: orbActive ? `${i * 60}ms` : "0ms",
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Agent name + status */}
+        <div className="text-center">
+          <p className="text-sm font-bold text-slate-200">{agentName}</p>
+          <p className="text-xs text-slate-500 mt-0.5">{statusLabel}</p>
+        </div>
+
+        {/* Main CTA */}
+        <button
           disabled={status === "connecting"}
-          onClick={() => void startSession("text")}
+          onClick={() => void startSession("voice")}
+          className={cn(
+            "flex items-center gap-2.5 px-7 py-3 rounded-full font-bold text-sm transition-all duration-200",
+            status === "connecting"
+              ? "opacity-50 cursor-not-allowed bg-slate-700 text-slate-400"
+              : orbActive
+              ? "bg-gradient-to-r from-violet-600 to-indigo-500 text-white shadow-[0_4px_20px_rgba(99,102,241,.5)] hover:shadow-[0_6px_28px_rgba(99,102,241,.65)] hover:scale-105"
+              : "bg-gradient-to-r from-indigo-600 to-violet-500 text-white shadow-[0_4px_20px_rgba(99,102,241,.4)] hover:shadow-[0_6px_28px_rgba(99,102,241,.6)] hover:scale-105"
+          )}
         >
-          <MessageCircle className="h-4 w-4" />
-          Start Text-Only Test
+          {status === "connecting" ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Mic className="h-4 w-4" />
+          )}
+          {status === "connecting" ? "Connecting..." : orbActive ? "Restart Voice" : "Talk to Agent"}
+        </button>
+      </div>
+
+      {/* Language selector */}
+      <div className="px-5 pb-3 pt-1">
+        <select
+          value={selectedLanguage}
+          disabled={sessionActive || status === "connecting"}
+          onChange={(event) => setSelectedLanguage(event.target.value)}
+          className="w-full h-9 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs text-slate-300 font-medium focus:outline-none focus:border-primary/50 disabled:opacity-50"
+        >
+          {LANGUAGE_OPTIONS.map((language) => (
+            <option key={language.code} value={language.code} className="bg-slate-900">
+              {language.flag} {language.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Divider */}
+      <div className="h-px bg-white/[0.06] mx-5" />
+
+      {/* Error */}
+      {error && (
+        <div className="mx-5 mt-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          {error}
+        </div>
+      )}
+
+      {/* Transcript */}
+      <div className="mx-5 my-3 max-h-52 min-h-[80px] overflow-y-auto space-y-2 rounded-xl border border-white/[0.06] bg-black/20 p-3 scrollbar-thin">
+        {lines.length === 0 ? (
+          <p className="text-xs leading-relaxed text-slate-600">
+            Start a voice session or type a message below. The transcript will appear here — confirm your agent speaks the right language, greeting, and follows your instructions.
+          </p>
+        ) : (
+          lines.map((line, index) => (
+            <div
+              key={`${index}-${line.role}`}
+              className={cn(
+                "rounded-xl px-3 py-2 text-sm max-w-[88%]",
+                line.role === "user"
+                  ? "ml-auto bg-indigo-600/30 border border-indigo-500/20 text-indigo-100"
+                  : "mr-auto bg-white/[0.04] border border-white/[0.06] text-slate-300"
+              )}
+            >
+              <p className="mb-1 text-[9px] uppercase tracking-widest font-semibold opacity-50">
+                {line.role === "user" ? "You" : agentName}
+              </p>
+              <p className="whitespace-pre-wrap break-words leading-relaxed">{line.content}</p>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Text input */}
+      <div className="flex items-end gap-2 px-5 pb-5">
+        <Textarea
+          rows={2}
+          value={textDraft}
+          onChange={(event) => setTextDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void sendText();
+            }
+          }}
+          placeholder="Type a test message..."
+          className="resize-none bg-white/[0.04] border-white/10 text-slate-200 placeholder:text-slate-600 focus:border-primary/40 rounded-xl text-sm"
+        />
+        <Button
+          className="h-10 w-10 shrink-0 rounded-full p-0 bg-gradient-to-br from-indigo-600 to-violet-600 shadow-[0_2px_12px_rgba(99,102,241,.4)] hover:shadow-[0_4px_18px_rgba(99,102,241,.6)] hover:scale-105 transition-all"
+          disabled={status === "connecting" || !textDraft.trim()}
+          onClick={() => void sendText()}
+          aria-label="Send test message"
+        >
+          <ArrowUp className="h-4 w-4" />
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

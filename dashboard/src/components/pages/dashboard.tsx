@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Phone,
   Users,
@@ -8,13 +8,13 @@ import {
   CalendarCheck,
   PhoneIncoming,
   PhoneOutgoing,
-  PhoneMissed,
-  ArrowUpRight,
-  ArrowDownRight,
   Bot,
   Loader2,
   Wrench,
   AlertCircle,
+  MessageSquareText,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -526,6 +526,9 @@ export function DashboardPage() {
         </CardContent>
       </Card>
 
+      {/* Conversation Summaries */}
+      <ConversationSummariesCard leads={recentLeads} />
+
       {/* AI Agent Status Bar */}
       <Card>
         <CardContent className="p-4">
@@ -562,5 +565,132 @@ export function DashboardPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ── Conversation Summaries Card ───────────────────────────────────────────────
+
+function ConversationSummariesCard({ leads }: { leads: LeadRecord[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const toggle = useCallback((id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const summaryLeads = leads.filter((l) => l.summary && l.summary.trim().length > 0);
+
+  const urgencyColor: Record<string, string> = {
+    emergency: "text-red-400 bg-red-500/10 border-red-500/20",
+    high: "text-orange-400 bg-orange-500/10 border-orange-500/20",
+    medium: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20",
+    low: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquareText className="w-4 h-4 text-primary" />
+            Conversation Summaries
+          </CardTitle>
+          <span className="text-[11px] text-muted-foreground">
+            {summaryLeads.length} recent {summaryLeads.length === 1 ? "summary" : "summaries"}
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {summaryLeads.length === 0 ? (
+          <div className="py-8 text-center">
+            <MessageSquareText className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">
+              Conversation summaries will appear here after your AI agent completes sessions.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {summaryLeads.map((lead) => {
+              const isExpanded = expandedId === lead.id;
+              const initials = (lead.caller_name || "?")
+                .split(" ")
+                .map((n: string) => n[0])
+                .join("")
+                .toUpperCase()
+                .slice(0, 2);
+              const urg = lead.urgency?.toLowerCase() || "low";
+              const urgClass = urgencyColor[urg] || urgencyColor.low;
+
+              return (
+                <div
+                  key={lead.id}
+                  className="rounded-xl border border-border overflow-hidden transition-all"
+                >
+                  {/* Row header — always visible */}
+                  <button
+                    className="w-full flex items-center gap-3 p-3 hover:bg-accent/40 transition-colors text-left"
+                    onClick={() => toggle(lead.id)}
+                  >
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {lead.caller_name || "Unknown Visitor"}
+                        </p>
+                        <span className={cn(
+                          "hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0",
+                          urgClass
+                        )}>
+                          {urg}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        {isExpanded ? "Click to collapse" : lead.summary?.slice(0, 90) + (lead.summary!.length > 90 ? "…" : "")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-muted-foreground">
+                        {timeAgo(lead.created_at)}
+                      </span>
+                      {isExpanded
+                        ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                        : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                    </div>
+                  </button>
+
+                  {/* Expanded summary body */}
+                  {isExpanded && (
+                    <div className="border-t border-border px-4 py-3 bg-muted/30 space-y-3">
+                      <p className="text-sm text-foreground leading-relaxed">{lead.summary}</p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {lead.intent && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs text-primary font-medium">
+                            Intent: {lead.intent}
+                          </span>
+                        )}
+                        {lead.services_requested?.map((s: string) => (
+                          <span key={s} className="inline-flex items-center px-2.5 py-1 rounded-full bg-secondary border border-border text-xs text-muted-foreground">
+                            {s}
+                          </span>
+                        ))}
+                        <span className={cn(
+                          "ml-auto inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border",
+                          lead.status === "booked"
+                            ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                            : "text-muted-foreground bg-secondary border-border"
+                        )}>
+                          {lead.status}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

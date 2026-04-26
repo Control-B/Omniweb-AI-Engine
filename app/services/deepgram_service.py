@@ -138,6 +138,12 @@ def _tts_voice_for_config(config: AgentConfig) -> str:
     return settings.DEEPGRAM_TTS_VOICE
 
 
+def _deepgram_tts_for_language(lang_tag: str, config: AgentConfig) -> str:
+    if lang_tag.lower().startswith("es"):
+        return "aura-2-aquila-es"
+    return _tts_voice_for_config(config)
+
+
 def _elevenlabs_voice_for_config(config: AgentConfig) -> str:
     vid = (config.voice_id or "").strip()
     if vid and "aura" not in vid.lower():
@@ -210,32 +216,34 @@ def build_voice_agent_settings(
         f"message into {_language_name(lang_tag)} while preserving every identity and business detail. "
         f"After the welcome message, wait for the user."
     )
-    tts = _tts_voice_for_config(config)
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
     listen_language = "multi" if lang_tag == "multi" else lang_tag
-    speak: dict[str, Any]
+    deepgram_speak = {
+        "provider": {
+            "type": "deepgram",
+            "model": _deepgram_tts_for_language(lang_tag, config),
+        }
+    }
+    speak: dict[str, Any] | list[dict[str, Any]]
     if settings.ELEVENLABS_API_KEY:
         eleven_voice_id = _elevenlabs_voice_for_config(config)
         language_code = "multi" if lang_tag == "multi" else lang_tag
-        speak = {
-            "provider": {
-                "type": "eleven_labs",
-                "model_id": "eleven_turbo_v2_5",
-                "language_code": language_code,
+        speak = [
+            {
+                "provider": {
+                    "type": "eleven_labs",
+                    "model_id": "eleven_turbo_v2_5",
+                    "language_code": language_code,
+                },
+                "endpoint": {
+                    "url": f"wss://api.elevenlabs.io/v1/text-to-speech/{eleven_voice_id}/multi-stream-input",
+                    "headers": {"xi-api-key": settings.ELEVENLABS_API_KEY},
+                },
             },
-            "endpoint": {
-                "url": f"wss://api.elevenlabs.io/v1/text-to-speech/{eleven_voice_id}/multi-stream-input",
-                "headers": {"xi-api-key": settings.ELEVENLABS_API_KEY},
-            },
-        }
+            deepgram_speak,
+        ]
     else:
-        speak = {
-            "provider": {
-                "type": "deepgram",
-                "model": tts,
-                "language": listen_language,
-            }
-        }
+        speak = deepgram_speak
 
     # Shape must match Deepgram Voice Agent v1 Settings (see voice-agent-settings docs):
     # listen/speak/think use nested { "provider": { "type", "model", ... } }.

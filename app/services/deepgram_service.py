@@ -315,7 +315,6 @@ def build_voice_agent_settings(
             "output": {"encoding": "linear16", "sample_rate": 24000, "container": "none"},
         },
         "agent": {
-            "language": lang_tag,
             "greeting": opening_greeting,
             "listen": {
                 "provider": {

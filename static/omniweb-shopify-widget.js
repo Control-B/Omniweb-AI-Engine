@@ -34,99 +34,132 @@
   let endpoints = {}
   let greeting = ""
   let minimised = true
-  let voiceOpen = false
   let voiceSession = null
   let voiceBusy = false
   let messages = []
   let sending = false
+  let selectedLanguage = detectDefaultLanguage()
+
+  const LANGUAGE_OPTIONS = [
+    ["multi", "Auto"],
+    ["en", "English"],
+    ["es", "Spanish"],
+    ["fr", "French"],
+    ["de", "German"],
+    ["it", "Italian"],
+    ["pt", "Portuguese"],
+    ["nl", "Dutch"],
+    ["ja", "Japanese"],
+    ["ko", "Korean"],
+    ["zh", "Chinese"],
+    ["hi", "Hindi"],
+    ["ar", "Arabic"],
+  ]
 
   /* ── Styles ───────────────────────────────────────────────────── */
   const STYLE = document.createElement("style")
   STYLE.textContent = `
-    #omniweb-chat-fab{position:fixed;bottom:24px;right:24px;z-index:99999;
-      width:60px;height:60px;border-radius:50%;background:#6366f1;color:#fff;
-      border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
-      box-shadow:0 4px 14px rgba(0,0,0,.25);transition:transform .2s}
-    #omniweb-chat-fab:hover{transform:scale(1.08)}
-    #omniweb-chat-fab svg{width:28px;height:28px;fill:currentColor}
-    #omniweb-voice-fab{position:fixed;bottom:24px;right:96px;z-index:99999;
-      height:44px;border-radius:999px;background:#0f172a;color:#fff;border:1px solid rgba(148,163,184,.3);
-      cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 14px;
-      font:600 13px/1 system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.22)}
-    #omniweb-voice-fab:hover{background:#1e293b}
-    #omniweb-voice-panel{position:fixed;bottom:96px;right:24px;z-index:99999;
-      width:min(100vw - 1rem,360px);border-radius:16px;padding:14px;
-      box-shadow:0 12px 48px rgba(0,0,0,.35);background:#0b1220;color:#e5e7eb;
-      display:none;font-family:system-ui,sans-serif}
+    #omniweb-launcher{position:fixed;bottom:24px;right:24px;z-index:99999;
+      min-width:92px;height:58px;border-radius:999px;border:1px solid rgba(255,255,255,.45);
+      background:linear-gradient(135deg,#f9fafb 0%,#9ca3af 18%,#f8fafc 38%,#475569 62%,#f8fafc 100%);
+      color:#0f172a;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
+      padding:0 18px;font:800 13px/1 system-ui,sans-serif;letter-spacing:.02em;
+      box-shadow:0 18px 45px rgba(15,23,42,.28),inset 0 1px 1px rgba(255,255,255,.9);
+      transition:transform .18s,box-shadow .18s,filter .18s}
+    #omniweb-launcher:hover{transform:translateY(-2px) scale(1.03);filter:saturate(1.08);
+      box-shadow:0 22px 58px rgba(15,23,42,.34),inset 0 1px 1px rgba(255,255,255,.95)}
+    #omniweb-launcher .omniweb-orb{width:22px;height:22px;border-radius:50%;
+      background:radial-gradient(circle at 32% 25%,#fff 0 16%,#cbd5e1 17% 38%,#334155 72%,#020617 100%);
+      box-shadow:inset 0 1px 2px rgba(255,255,255,.9),0 0 18px rgba(203,213,225,.72)}
+    #omniweb-chat-window{position:fixed;bottom:96px;right:24px;z-index:99999;
+      width:min(420px,calc(100vw - 24px));max-height:min(720px,calc(100dvh - 112px));border-radius:28px;
+      background:linear-gradient(145deg,rgba(248,250,252,.98),rgba(148,163,184,.94) 46%,rgba(15,23,42,.98));
+      border:1px solid rgba(255,255,255,.55);color:#0f172a;
+      display:flex;flex-direction:column;overflow:hidden;
+      box-shadow:0 30px 90px rgba(2,6,23,.38),inset 0 1px 1px rgba(255,255,255,.86);font-family:system-ui,sans-serif;
+      transition:opacity .2s,transform .2s}
+    #omniweb-chat-window.hidden{opacity:0;transform:translateY(16px) scale(.98);pointer-events:none}
+    #omniweb-chat-header{background:rgba(2,6,23,.86);color:#fff;padding:14px 16px;
+      display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px}
+    #omniweb-chat-header .omniweb-title{font-size:15px;font-weight:800;letter-spacing:.01em}
+    #omniweb-language{border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(15,23,42,.88);
+      color:#fff;padding:7px 26px 7px 10px;font:700 12px/1 system-ui,sans-serif}
+    #omniweb-chat-close{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.1);
+      border:1px solid rgba(255,255,255,.14);color:#fff;cursor:pointer;font-size:20px;line-height:1}
+    #omniweb-mode-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px;background:rgba(15,23,42,.08)}
+    .omniweb-mode{border:0;border-radius:999px;padding:10px 12px;cursor:pointer;
+      background:rgba(255,255,255,.42);color:#334155;font:800 13px/1 system-ui,sans-serif}
+    .omniweb-mode.active{background:#0f172a;color:#fff;box-shadow:0 10px 24px rgba(15,23,42,.25)}
+    #omniweb-chat-messages{flex:1;overflow-y:auto;padding:14px;display:flex;
+      flex-direction:column;gap:10px;min-height:220px;max-height:330px;background:rgba(255,255,255,.88)}
+    .omniweb-msg{padding:10px 14px;border-radius:14px;max-width:82%;
+      font-size:14px;line-height:1.45;word-wrap:break-word}
+    .omniweb-msg.assistant{background:#eef2ff;color:#1e1e2e;align-self:flex-start;
+      border-bottom-left-radius:4px}
+    .omniweb-msg.shopper{background:#0f172a;color:#fff;align-self:flex-end;
+      border-bottom-right-radius:4px}
+    .omniweb-msg.system{background:#f9fafb;color:#64748b;font-size:12px;
+      text-align:center;align-self:center}
+    #omniweb-voice-panel{display:none;padding:12px 14px;background:rgba(15,23,42,.92);color:#e5e7eb}
+    #omniweb-voice-panel.active{display:block}
     #omniweb-voice-panel .omniweb-voice-row{display:flex;align-items:center;gap:10px}
     #omniweb-voice-panel .omniweb-voice-status{flex:1;font-size:13px;color:#cbd5e1}
-    #omniweb-voice-panel .omniweb-voice-title{font-weight:700;font-size:14px;color:#fff}
-    #omniweb-voice-panel button{border:0;border-radius:999px;padding:8px 12px;cursor:pointer;
-      font:600 12px/1 system-ui,sans-serif}
-    #omniweb-voice-action{background:#6366f1;color:#fff}
-    #omniweb-voice-close{background:#1e293b;color:#fff}
-    #omniweb-voice-transcript{margin-top:12px;max-height:180px;overflow:auto;display:flex;
+    #omniweb-voice-panel .omniweb-voice-title{font-weight:800;font-size:14px;color:#fff}
+    #omniweb-voice-panel button{border:0;border-radius:999px;padding:9px 13px;cursor:pointer;
+      font:800 12px/1 system-ui,sans-serif}
+    #omniweb-voice-action{background:linear-gradient(135deg,#f8fafc,#94a3b8,#f8fafc);color:#0f172a}
+    #omniweb-voice-transcript{margin-top:12px;max-height:150px;overflow:auto;display:flex;
       flex-direction:column;gap:8px}
     .omniweb-voice-line{font-size:13px;line-height:1.35;padding:8px 10px;border-radius:12px}
     .omniweb-voice-line.user{background:#312e81;color:#eef2ff;align-self:flex-end}
     .omniweb-voice-line.assistant{background:#172033;color:#e5e7eb;align-self:flex-start}
-    #omniweb-chat-window{position:fixed;bottom:96px;right:24px;z-index:99999;
-      width:380px;max-height:520px;border-radius:16px;background:#fff;
-      display:flex;flex-direction:column;overflow:hidden;
-      box-shadow:0 8px 30px rgba(0,0,0,.18);font-family:system-ui,sans-serif;
-      transition:opacity .2s,transform .2s}
-    #omniweb-chat-window.hidden{opacity:0;transform:translateY(16px);pointer-events:none}
-    #omniweb-chat-header{background:#6366f1;color:#fff;padding:14px 18px;
-      font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
-    #omniweb-chat-header span{flex:1}
-    #omniweb-chat-close{background:none;border:none;color:#fff;cursor:pointer;font-size:20px}
-    #omniweb-chat-messages{flex:1;overflow-y:auto;padding:14px;display:flex;
-      flex-direction:column;gap:10px;min-height:260px;max-height:380px}
-    .omniweb-msg{padding:10px 14px;border-radius:14px;max-width:82%;
-      font-size:14px;line-height:1.45;word-wrap:break-word}
-    .omniweb-msg.assistant{background:#f1f1ff;color:#1e1e2e;align-self:flex-start;
-      border-bottom-left-radius:4px}
-    .omniweb-msg.shopper{background:#6366f1;color:#fff;align-self:flex-end;
-      border-bottom-right-radius:4px}
-    .omniweb-msg.system{background:#f9fafb;color:#888;font-size:12px;
-      text-align:center;align-self:center}
-    #omniweb-chat-input-row{display:flex;border-top:1px solid #eee;padding:8px}
+    #omniweb-chat-input-row{display:flex;border-top:1px solid rgba(15,23,42,.1);padding:10px;background:#fff}
     #omniweb-chat-input{flex:1;border:none;outline:none;padding:10px 12px;
       font-size:14px;background:transparent}
-    #omniweb-chat-send{background:#6366f1;color:#fff;border:none;cursor:pointer;
+    #omniweb-chat-send{background:#0f172a;color:#fff;border:none;cursor:pointer;
       border-radius:10px;padding:8px 16px;font-size:14px;font-weight:600;
       transition:opacity .15s}
     #omniweb-chat-send:disabled{opacity:.5;cursor:default}
-    @media(max-width:480px){#omniweb-chat-window{right:8px;left:8px;
-      bottom:80px;width:auto}#omniweb-voice-fab{right:84px;bottom:18px}
-      #omniweb-voice-panel{right:8px;left:8px;bottom:80px;width:auto;height:min(100dvh - 96px,680px)}}
+    @media(max-width:480px){#omniweb-chat-window{right:8px;left:8px;bottom:84px;width:auto}
+      #omniweb-launcher{right:14px;bottom:16px}#omniweb-chat-header{grid-template-columns:1fr auto}}
   `
   document.head.appendChild(STYLE)
 
   /* ── DOM ──────────────────────────────────────────────────────── */
-  const fab = el("button", { id: "omniweb-chat-fab" })
-  fab.innerHTML = `<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/></svg>`
-  fab.onclick = toggleChat
-  const voiceFab = el("button", { id: "omniweb-voice-fab", textContent: "Voice" })
-  voiceFab.onclick = toggleVoice
+  const launcher = el("button", { id: "omniweb-launcher" })
+  launcher.type = "button"
+  launcher.setAttribute("aria-expanded", "false")
+  launcher.innerHTML = `<span class="omniweb-orb"></span><span>Ask AI</span>`
+  launcher.onclick = toggleChat
+
+  const win = el("div", { id: "omniweb-chat-window", className: "hidden" })
+  const header = el("div", { id: "omniweb-chat-header" })
+  const languageOptions = LANGUAGE_OPTIONS.map(([value, label]) => (
+    `<option value="${value}"${value === selectedLanguage ? " selected" : ""}>${label}</option>`
+  )).join("")
+  header.innerHTML = `
+    <span class="omniweb-title">Omniweb AI</span>
+    <select id="omniweb-language" aria-label="Assistant language">${languageOptions}</select>
+    <button id="omniweb-chat-close" type="button" aria-label="Close">&times;</button>
+  `
+  const modeRow = el("div", { id: "omniweb-mode-row" })
+  modeRow.innerHTML = `
+    <button class="omniweb-mode active" id="omniweb-chat-mode" type="button">Text</button>
+    <button class="omniweb-mode" id="omniweb-voice-mode" type="button">Voice</button>
+  `
+
+  const msgBox = el("div", { id: "omniweb-chat-messages" })
   const voicePanel = el("div", { id: "omniweb-voice-panel" })
   voicePanel.innerHTML = `
     <div class="omniweb-voice-row">
       <div>
-        <div class="omniweb-voice-title">Voice Assistant</div>
-        <div class="omniweb-voice-status" id="omniweb-voice-status">Ready</div>
+        <div class="omniweb-voice-title">Live voice assistant</div>
+        <div class="omniweb-voice-status" id="omniweb-voice-status">Choose a language, then start.</div>
       </div>
       <button id="omniweb-voice-action" type="button">Start</button>
-      <button id="omniweb-voice-close" type="button">Close</button>
     </div>
     <div id="omniweb-voice-transcript"></div>
   `
-
-  const win = el("div", { id: "omniweb-chat-window", className: "hidden" })
-  const header = el("div", { id: "omniweb-chat-header" })
-  header.innerHTML = `<span>💬 Shopping Assistant</span><button id="omniweb-chat-close">&times;</button>`
-
-  const msgBox = el("div", { id: "omniweb-chat-messages" })
   const inputRow = el("div", { id: "omniweb-chat-input-row" })
   const input = el("input", {
     id: "omniweb-chat-input",
@@ -137,15 +170,18 @@
     textContent: "Send",
   })
   inputRow.append(input, sendBtn)
-  win.append(header, msgBox, inputRow)
-  document.body.append(fab, voiceFab, voicePanel, win)
+  win.append(header, modeRow, msgBox, voicePanel, inputRow)
+  document.body.append(launcher, win)
   if (HIDE_LAUNCHER) {
-    fab.style.display = "none"
-    voiceFab.style.display = "none"
+    launcher.style.display = "none"
   }
 
   document.getElementById("omniweb-chat-close").onclick = toggleChat
-  document.getElementById("omniweb-voice-close").onclick = closeVoice
+  document.getElementById("omniweb-language").onchange = (event) => {
+    selectedLanguage = event.target.value || "multi"
+  }
+  document.getElementById("omniweb-chat-mode").onclick = () => setMode("chat")
+  document.getElementById("omniweb-voice-mode").onclick = () => setMode("voice")
   document.getElementById("omniweb-voice-action").onclick = () => {
     if (voiceSession) stopVoice()
     else startVoice()
@@ -174,8 +210,8 @@
       endpoints = data.endpoints || {}
       greeting = data.greeting || "Hi! How can I help you today?"
       if (!data.assistant_enabled) {
-        fab.style.display = "none"
-        voiceFab.style.display = "none"
+        launcher.style.display = "none"
+        win.classList.add("hidden")
         return
       }
     } catch (err) {
@@ -187,23 +223,31 @@
   function setChatOpen(open) {
     minimised = !open
     win.classList.toggle("hidden", minimised)
+    launcher.setAttribute("aria-expanded", String(open))
     if (open && !sessionId) startSession()
+    if (!open && voiceSession) stopVoice().catch(() => {})
   }
 
   function toggleChat() {
     setChatOpen(minimised)
   }
 
+  function setMode(mode) {
+    const voiceMode = mode === "voice"
+    document.getElementById("omniweb-chat-mode").classList.toggle("active", !voiceMode)
+    document.getElementById("omniweb-voice-mode").classList.toggle("active", voiceMode)
+    voicePanel.classList.toggle("active", voiceMode)
+    inputRow.style.display = voiceMode ? "none" : "flex"
+    if (!voiceMode) input.focus()
+  }
+
   function toggleVoice() {
-    if (voiceOpen) return closeVoice()
-    voiceOpen = true
-    voicePanel.style.display = "block"
+    setChatOpen(true)
+    setMode("voice")
     if (!voiceSession && !voiceBusy) startVoice()
   }
 
   async function closeVoice() {
-    voiceOpen = false
-    voicePanel.style.display = "none"
     await stopVoice()
   }
 
@@ -219,7 +263,7 @@
         method: "POST",
         body: JSON.stringify({
           context: ctx,
-          language: (navigator.language || "en").split("-")[0],
+          language: selectedLanguageValue(),
         }),
       })
       if (!res.ok) {
@@ -366,6 +410,15 @@
   }, 1500)
 
   /* ── Helpers ──────────────────────────────────────────────────── */
+  function detectDefaultLanguage() {
+    const lang = (navigator.language || "en").toLowerCase().split("-")[0]
+    return LANGUAGE_OPTIONS.some(([value]) => value === lang) ? lang : "multi"
+  }
+
+  function selectedLanguageValue() {
+    return selectedLanguage || "multi"
+  }
+
   function buildContext() {
     return {
       shop_domain: SHOP,
@@ -373,7 +426,7 @@
       current_page_url: location.href,
       current_page_title: document.title,
       currency: window.Shopify?.currency?.active || "USD",
-      shopper_locale: navigator.language || "en",
+      shopper_locale: selectedLanguageValue(),
     }
   }
 
@@ -629,6 +682,7 @@
     toggleChat,
     openChat: () => setChatOpen(true),
     closeChat: () => setChatOpen(false),
+    openVoice: () => toggleVoice(),
     isOpen: () => !minimised,
   }
 })()

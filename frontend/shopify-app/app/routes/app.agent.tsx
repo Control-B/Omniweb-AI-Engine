@@ -11,6 +11,7 @@ import {
   FormLayout,
   InlineStack,
   Layout,
+  List,
   Page,
   Select,
   Text,
@@ -81,7 +82,8 @@ export async function loader({ request }: { request: Request }) {
     include: { agentConfig: true, subscription: true },
   });
 
-  return json({ shop, engineClientId: shop.engineClientId });
+  const engineUrl = process.env.ENGINE_URL || "https://omniweb-engine-rs6fr.ondigitalocean.app";
+  return json({ shop, engineClientId: shop.engineClientId, engineUrl });
 }
 
 export async function action({ request }: { request: Request }) {
@@ -148,7 +150,7 @@ export async function action({ request }: { request: Request }) {
 }
 
 export default function AgentSettings() {
-  const { shop, engineClientId } = useLoaderData<typeof loader>();
+  const { shop, engineClientId, engineUrl } = useLoaderData<typeof loader>();
   const nav = useNavigation();
   const config = shop.agentConfig;
 
@@ -207,7 +209,6 @@ export default function AgentSettings() {
     }
   };
 
-  const engineUrl = process.env.NEXT_PUBLIC_ENGINE_URL || "https://omniweb-engine-rs6fr.ondigitalocean.app";
   const testWidgetUrl = engineClientId ? `${engineUrl}/widget/${engineClientId}` : null;
 
   return (

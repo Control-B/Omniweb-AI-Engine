@@ -1,3 +1,4 @@
+import type { HeadersFunction } from "@remix-run/node";
 import {
   Links,
   Meta,
@@ -6,8 +7,12 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
+import { addDocumentResponseHeaders } from "./shopify.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
+export const headers: HeadersFunction = (headersArgs) => {
+  return addDocumentResponseHeaders(headersArgs);
+};
 
 export default function App() {
   return (

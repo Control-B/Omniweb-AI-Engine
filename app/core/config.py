@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     RETELL_API_KEY: str = ""
     # Retell agent used for anonymous sessions (marketing site, demos)
     RETELL_LANDING_AGENT_ID: str = ""
+    ELEVENLABS_API_KEY: str = ""
+    ELEVENLABS_DEFAULT_VOICE_ID: str = "EXAVITQu4vr4xnSDxMaL"
 
     # ── Deepgram (voice/web agent orchestration) ─────────────────────────
     DEEPGRAM_API_KEY: str = ""

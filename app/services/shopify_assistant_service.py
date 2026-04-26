@@ -35,6 +35,48 @@ LANGUAGE_NAMES = {
     "ar": "Arabic",
 }
 
+LOCALIZED_COPY = {
+    "welcome": {
+        "es": "¡Hola! Bienvenido. Soy Omniweb AI. Puedo ayudarte a encontrar lo que buscas, responder preguntas y guiarte hacia la mejor opción. ¿Cómo puedo ayudarte hoy?",
+        "fr": "Bonjour ! Bienvenue. Je suis Omniweb AI. Je peux vous aider à trouver ce que vous cherchez, répondre à vos questions et vous guider vers le meilleur choix. Comment puis-je vous aider aujourd'hui ?",
+        "de": "Hallo! Willkommen. Ich bin Omniweb AI. Ich kann dir helfen, das Richtige zu finden, Fragen beantworten und dich zur besten Option führen. Wie kann ich dir heute helfen?",
+        "it": "Ciao! Benvenuto. Sono Omniweb AI. Posso aiutarti a trovare ciò che cerchi, rispondere alle domande e guidarti verso l'opzione migliore. Come posso aiutarti oggi?",
+        "pt": "Olá! Bem-vindo. Sou a Omniweb AI. Posso ajudar você a encontrar o que procura, responder perguntas e orientar você para a melhor opção. Como posso ajudar hoje?",
+        "nl": "Hallo! Welkom. Ik ben Omniweb AI. Ik kan je helpen vinden wat je zoekt, vragen beantwoorden en je naar de beste keuze leiden. Hoe kan ik je vandaag helpen?",
+        "ja": "こんにちは！ようこそ。私はOmniweb AIです。お探しの商品を見つけたり、質問に答えたり、最適な選択肢へ案内できます。本日はどのようにお手伝いできますか？",
+        "ko": "안녕하세요! 환영합니다. 저는 Omniweb AI입니다. 찾는 상품을 찾아드리고, 질문에 답하며, 가장 좋은 선택으로 안내해드릴 수 있어요. 오늘 무엇을 도와드릴까요?",
+        "zh": "你好！欢迎光临。我是 Omniweb AI。可以帮你找到想要的商品、回答问题，并引导你选择最合适的选项。今天我能帮你什么？",
+        "hi": "नमस्ते! आपका स्वागत है। मैं Omniweb AI हूं। मैं आपको सही चीज़ खोजने, सवालों के जवाब देने और बेहतर विकल्प चुनने में मदद कर सकता हूं। आज मैं कैसे मदद करूं?",
+        "ar": "مرحبًا! أهلًا بك. أنا Omniweb AI. يمكنني مساعدتك في العثور على ما تبحث عنه، والإجابة عن الأسئلة، وإرشادك إلى الخيار الأفضل. كيف يمكنني مساعدتك اليوم؟",
+    },
+    "ask_clarifying": {
+        "es": "Cuéntame qué estás buscando, para quién es o qué problema quieres resolver, y lo reduciré rápido.",
+        "fr": "Dites-moi ce que vous cherchez, pour qui c'est, ou le problème que vous voulez résoudre, et je vous aiderai à préciser rapidement.",
+        "de": "Sag mir, wonach du suchst, für wen es ist oder welches Problem du lösen möchtest, und ich grenze es schnell ein.",
+        "it": "Dimmi cosa stai cercando, per chi è o quale problema vuoi risolvere, e restringerò subito le opzioni.",
+        "pt": "Diga-me o que você está procurando, para quem é ou qual problema quer resolver, e eu vou filtrar rápido.",
+        "nl": "Vertel me waar je naar zoekt, voor wie het is of welk probleem je wilt oplossen, dan maak ik snel een selectie.",
+        "ja": "探しているもの、誰のための商品か、または解決したい問題を教えてください。すぐに候補を絞ります。",
+        "ko": "무엇을 찾고 있는지, 누구를 위한 것인지, 어떤 문제를 해결하려는지 알려주시면 빠르게 좁혀드릴게요.",
+        "zh": "告诉我你在找什么、是给谁用的，或者想解决什么问题，我会快速帮你缩小选择范围。",
+        "hi": "बताइए आप क्या खोज रहे हैं, किसके लिए है, या कौन सी समस्या हल करनी है, मैं जल्दी विकल्प कम कर दूंगा।",
+        "ar": "أخبرني عمّا تبحث، ولمن هو، أو ما المشكلة التي تريد حلها، وسأضيّق الخيارات بسرعة.",
+    },
+    "navigation": {
+        "es": "Puedo guiarte a productos, colecciones, carrito, pago o páginas de políticas. Dime a qué sección quieres ir y te llevaré allí.",
+        "fr": "Je peux vous guider vers les produits, collections, panier, paiement ou pages de politique. Dites-moi la section souhaitée et je vous y emmène.",
+        "de": "Ich kann dich zu Produkten, Kollektionen, Warenkorb, Checkout oder Richtlinienseiten führen. Sag mir, wohin du möchtest.",
+        "it": "Posso guidarti verso prodotti, collezioni, carrello, checkout o pagine delle policy. Dimmi quale sezione vuoi.",
+        "pt": "Posso guiar você para produtos, coleções, carrinho, checkout ou páginas de políticas. Diga qual seção você quer.",
+        "nl": "Ik kan je naar producten, collecties, winkelwagen, checkout of beleidspagina's leiden. Vertel me welke sectie je wilt.",
+        "ja": "商品、コレクション、カート、チェックアウト、ポリシーページへ案内できます。行きたい場所を教えてください。",
+        "ko": "상품, 컬렉션, 장바구니, 결제 또는 정책 페이지로 안내할 수 있어요. 원하는 섹션을 알려주세요.",
+        "zh": "我可以引导你到商品、系列、购物车、结账或政策页面。告诉我你想去哪个部分。",
+        "hi": "मैं आपको उत्पाद, कलेक्शन, कार्ट, चेकआउट या नीति पेज तक ले जा सकता हूं। बताइए किस सेक्शन में जाना है।",
+        "ar": "يمكنني إرشادك إلى المنتجات أو المجموعات أو السلة أو الدفع أو صفحات السياسات. أخبرني إلى أي قسم تريد الذهاب.",
+    },
+}
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -53,6 +95,33 @@ class ShopifyAssistantService:
         "payment_guardrail",
         "general_support",
     }
+
+    @staticmethod
+    def language_code_from_session(session: ShopifyAssistantSession) -> str:
+        raw = str(
+            (session.context or {}).get("selected_language")
+            or session.shopper_locale
+            or "multi"
+        ).lower()
+        return raw.split("-")[0] if raw else "multi"
+
+    @staticmethod
+    def localized_copy(key: str, session: ShopifyAssistantSession, fallback: str) -> str:
+        code = ShopifyAssistantService.language_code_from_session(session)
+        if code in {"multi", "en"}:
+            return fallback
+        return LOCALIZED_COPY.get(key, {}).get(code, fallback)
+
+    @staticmethod
+    def localized_copy_for_context(key: str, context: dict[str, Any], fallback: str) -> str:
+        code = str(
+            context.get("selected_language")
+            or context.get("shopper_locale")
+            or "multi"
+        ).lower().split("-")[0]
+        if code in {"multi", "en"}:
+            return fallback
+        return LOCALIZED_COPY.get(key, {}).get(code, fallback)
     SPECIALIST_BY_INTENT = {
         "product_discovery": "Product Expert Agent",
         "product_recommendation": "Product Expert Agent",
@@ -421,8 +490,11 @@ class ShopifyAssistantService:
                     navigate_to = target
                     lines.append("Perfect — I'll take you there now.")
                 else:
-                    lines.append(
-                        "I can guide you to products, collections, cart, checkout, or policy pages. Tell me what section you want and I'll navigate you there."
+                    lines.append(ShopifyAssistantService.localized_copy(
+                        "navigation",
+                        session,
+                        "I can guide you to products, collections, cart, checkout, or policy pages. Tell me what section you want and I'll navigate you there.",
+                        )
                     )
             elif recommendations:
                 action = "navigate_to_product"
@@ -433,8 +505,11 @@ class ShopifyAssistantService:
                 if reason:
                     lines.append(reason)
             else:
-                lines.append(
-                    "Tell me what you're shopping for, who it's for, or the problem you're trying to solve, and I'll narrow it down fast."
+                lines.append(ShopifyAssistantService.localized_copy(
+                    "ask_clarifying",
+                    session,
+                    "Tell me what you're shopping for, who it's for, or the problem you're trying to solve, and I'll narrow it down fast.",
+                    )
                 )
             llm_message = " ".join(part.strip() for part in lines if part and part.strip())
         else:

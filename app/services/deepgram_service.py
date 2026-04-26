@@ -138,6 +138,13 @@ def _tts_voice_for_config(config: AgentConfig) -> str:
     return settings.DEEPGRAM_TTS_VOICE
 
 
+def _elevenlabs_voice_for_config(config: AgentConfig) -> str:
+    vid = (config.voice_id or "").strip()
+    if vid and "aura" not in vid.lower():
+        return vid
+    return settings.ELEVENLABS_DEFAULT_VOICE_ID
+
+
 def _agent_language_tag(config: AgentConfig, requested: str | None) -> str:
     """BCP-47-ish tag for Voice Agent ``agent.language`` (``multi`` when appropriate)."""
     supported = _coerce_supported_languages(config.supported_languages)
@@ -205,6 +212,30 @@ def build_voice_agent_settings(
     )
     tts = _tts_voice_for_config(config)
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
+    listen_language = "multi" if lang_tag == "multi" else lang_tag
+    speak: dict[str, Any]
+    if settings.ELEVENLABS_API_KEY:
+        eleven_voice_id = _elevenlabs_voice_for_config(config)
+        language_code = "multi" if lang_tag == "multi" else lang_tag
+        speak = {
+            "provider": {
+                "type": "eleven_labs",
+                "model_id": "eleven_turbo_v2_5",
+                "language_code": language_code,
+            },
+            "endpoint": {
+                "url": f"wss://api.elevenlabs.io/v1/text-to-speech/{eleven_voice_id}/multi-stream-input",
+                "headers": {"xi-api-key": settings.ELEVENLABS_API_KEY},
+            },
+        }
+    else:
+        speak = {
+            "provider": {
+                "type": "deepgram",
+                "model": tts,
+                "language": listen_language,
+            }
+        }
 
     # Shape must match Deepgram Voice Agent v1 Settings (see voice-agent-settings docs):
     # listen/speak/think use nested { "provider": { "type", "model", ... } }.
@@ -221,6 +252,7 @@ def build_voice_agent_settings(
                 "provider": {
                     "type": "deepgram",
                     "model": settings.DEEPGRAM_STT_MODEL,
+                    "language": listen_language,
                     "smart_format": False,
                 }
             },
@@ -232,11 +264,6 @@ def build_voice_agent_settings(
                 },
                 "prompt": f"{composed}{language_instruction}",
             },
-            "speak": {
-                "provider": {
-                    "type": "deepgram",
-                    "model": tts,
-                }
-            },
+            "speak": speak,
         },
     }

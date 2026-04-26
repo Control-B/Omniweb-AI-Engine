@@ -1162,6 +1162,11 @@ async def _build_welcome_message(
     )
     behavior_summary = ShopifyAssistantService.build_behavior_summary(context.model_dump(exclude_none=True))
     greeting = f"Hi! Welcome to {business_name}. {base} How can I help you today?"
+    greeting = ShopifyAssistantService.localized_copy_for_context(
+        "welcome",
+        context.model_dump(exclude_none=True),
+        greeting,
+    )
     if behavior_summary:
         return f"{greeting} {behavior_summary}"
     return greeting

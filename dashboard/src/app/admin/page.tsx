@@ -11,12 +11,22 @@ import { AdminClientDetail } from "@/components/admin/client-detail";
 import { AdminAgents } from "@/components/admin/agents";
 import { AdminConversations } from "@/components/admin/conversations";
 import { AdminTeam } from "@/components/admin/team";
+import { AgentConfigPage } from "@/components/pages/agent-config";
 import { Loader2 } from "lucide-react";
 
-export type AdminPageId = "overview" | "agents" | "sessions" | "clients" | "templates" | "team" | "client-detail";
+export type AdminPageId =
+  | "overview"
+  | "agent-config"
+  | "agents"
+  | "sessions"
+  | "clients"
+  | "templates"
+  | "team"
+  | "client-detail";
 
 const PAGE_PERMISSIONS: Partial<Record<Exclude<AdminPageId, "client-detail">, UserPermission>> = {
   overview: "overview.read",
+  "agent-config": "agents.read",
   agents: "agents.read",
   sessions: "conversations.read",
   clients: "clients.read",
@@ -82,6 +92,7 @@ export default function AdminDashboard() {
       <AdminSidebar activePage={activePage} onNavigate={(p) => { setActivePage(p); setSelectedClientId(null); }} />
       <main className="flex-1 overflow-y-auto">
         {activePage === "overview" && <AdminOverview />}
+        {activePage === "agent-config" && <AgentConfigPage />}
         {activePage === "agents" && <AdminAgents />}
         {activePage === "sessions" && <AdminConversations />}
         {activePage === "clients" && <AdminClients onViewClient={handleViewClient} />}

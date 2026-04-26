@@ -20,6 +20,7 @@ import { useState } from "react";
 
 const NAV_ITEMS: { id: AdminPageId; label: string; icon: React.ElementType; permission?: UserPermission }[] = [
   { id: "overview", label: "Overview", icon: BarChart3, permission: "overview.read" },
+  { id: "agent-config", label: "AI Agent", icon: Zap, permission: "agents.read" },
   { id: "agents", label: "Agents", icon: Bot, permission: "agents.read" },
   { id: "sessions", label: "Sessions", icon: MessageSquare, permission: "conversations.read" },
   { id: "clients", label: "Clients", icon: Users, permission: "clients.read" },

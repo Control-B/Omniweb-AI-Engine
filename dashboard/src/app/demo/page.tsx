@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
-import { demoLogin, stashAdminToken } from "@/lib/api";
+import { demoLogin, hasStashedAdminToken, restoreAdminToken, stashAdminToken } from "@/lib/api";
 
 export default function DemoPage() {
   const [error, setError] = useState("");
+  const [canReturnToAdmin, setCanReturnToAdmin] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -14,6 +15,7 @@ export default function DemoPage() {
       try {
         // Save any existing admin session so we can return later
         stashAdminToken();
+        setCanReturnToAdmin(hasStashedAdminToken());
         await demoLogin();
         if (!cancelled) {
           const target = new URLSearchParams(window.location.search).get("target");
@@ -48,6 +50,17 @@ export default function DemoPage() {
             >
               Retry
             </button>
+            {canReturnToAdmin && (
+              <button
+                onClick={() => {
+                  restoreAdminToken();
+                  window.location.href = "/admin";
+                }}
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                Back to Admin
+              </button>
+            )}
             <a
               href="/login"
               className="px-4 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-sidebar-accent transition-colors"

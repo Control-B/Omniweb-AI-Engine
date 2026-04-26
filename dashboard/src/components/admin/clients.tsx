@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { adminGetClients, adminImpersonate, setToken } from "@/lib/api";
+import { adminGetClients, adminImpersonate, setToken, stashAdminToken } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth-context";
 import {
   Search,
@@ -89,6 +89,7 @@ export function AdminClients({ onViewClient }: AdminClientsProps) {
   async function handleImpersonate(client: Client) {
     if (!confirm(`Impersonate ${client.email}? You'll be logged in as this client.`)) return;
     try {
+      stashAdminToken();
       const data = await adminImpersonate(client.id);
       setToken(data.access_token);
       window.location.href = "/dashboard";

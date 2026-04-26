@@ -40,19 +40,19 @@
   let sending = false
 
   const LANGUAGE_OPTIONS = [
-    ["multi", "Auto"],
-    ["en", "English"],
-    ["es", "Spanish"],
-    ["fr", "French"],
-    ["de", "German"],
-    ["it", "Italian"],
-    ["pt", "Portuguese"],
-    ["nl", "Dutch"],
-    ["ja", "Japanese"],
-    ["ko", "Korean"],
-    ["zh", "Chinese"],
-    ["hi", "Hindi"],
-    ["ar", "Arabic"],
+    ["multi", "🌐 Auto"],
+    ["en", "🇺🇸 English"],
+    ["es", "🇪🇸 Spanish"],
+    ["fr", "🇫🇷 French"],
+    ["de", "🇩🇪 German"],
+    ["it", "🇮🇹 Italian"],
+    ["pt", "🇵🇹 Portuguese"],
+    ["nl", "🇳🇱 Dutch"],
+    ["ja", "🇯🇵 Japanese"],
+    ["ko", "🇰🇷 Korean"],
+    ["zh", "🇨🇳 Chinese"],
+    ["hi", "🇮🇳 Hindi"],
+    ["ar", "🇸🇦 Arabic"],
   ]
   let selectedLanguage = detectDefaultLanguage()
 
@@ -179,6 +179,10 @@
   document.getElementById("omniweb-chat-close").onclick = toggleChat
   document.getElementById("omniweb-language").onchange = (event) => {
     selectedLanguage = event.target.value || "multi"
+    if (voiceSession) {
+      stopVoice().catch(() => {})
+      setVoiceStatus("Language changed. Press Start to speak in the selected language.")
+    }
   }
   document.getElementById("omniweb-chat-mode").onclick = () => setMode("chat")
   document.getElementById("omniweb-voice-mode").onclick = () => setMode("voice")
@@ -420,13 +424,15 @@
   }
 
   function buildContext() {
+    const language = selectedLanguageValue()
     return {
       shop_domain: SHOP,
       storefront_session_id: sessionId,
       current_page_url: location.href,
       current_page_title: document.title,
       currency: window.Shopify?.currency?.active || "USD",
-      shopper_locale: selectedLanguageValue(),
+      shopper_locale: language,
+      selected_language: language,
     }
   }
 

@@ -19,6 +19,22 @@ from app.services.prompt_engine import compose_system_prompt
 
 logger = get_logger(__name__)
 
+LANGUAGE_NAMES = {
+    "multi": "the shopper's language",
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "zh": "Chinese",
+    "hi": "Hindi",
+    "ar": "Arabic",
+}
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -530,7 +546,18 @@ class ShopifyAssistantService:
         if behavior_summary:
             system += f"Shopper context: {behavior_summary}\n"
 
-        system += f"Detected intent: {intent}\n"
+        language_code = str(
+            (session.context or {}).get("selected_language")
+            or session.shopper_locale
+            or "multi"
+        ).lower().split("-")[0]
+        language_name = LANGUAGE_NAMES.get(language_code, language_code)
+        system += (
+            f"Detected intent: {intent}\n"
+            f"Selected shopper language: {language_name} ({language_code}). "
+            f"Reply only in {language_name}. If the selected language is Auto/the shopper's language, "
+            "infer the best language from the shopper's latest message and reply in that language.\n"
+        )
 
         # Build conversation history
         msgs: list[dict[str, str]] = [{"role": "system", "content": system}]

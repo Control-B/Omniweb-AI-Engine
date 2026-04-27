@@ -86,6 +86,17 @@ function subscriptionStatusForDb(
 
 const BILLING_PLANS = [STARTER_PLAN, GROWTH_PLAN, PRO_PLAN] as const;
 
+/** Shopify Billing GraphQL often returns 403 when Managed app pricing is on (Partner Dashboard). */
+function httpStatusFromUnknown(err: unknown): number | undefined {
+  if (!err || typeof err !== "object") return undefined;
+  const r = (err as { response?: { code?: unknown } }).response;
+  if (r && typeof r === "object" && typeof r.code === "number") return r.code;
+  return undefined;
+}
+
+const BILLING_403_HINT =
+  "Shopify blocked the billing API (403). If this app uses Managed app pricing in the Shopify Partner Dashboard, turn it off to allow in-app subscriptions, or define plans only in the Partner Dashboard. Otherwise confirm the store can accept app charges.";
+
 export async function loader({ request }: { request: Request }) {
   const { session, billing } = await authenticate.admin(request);
   const shop = await prisma.shop.findUnique({
@@ -96,43 +107,53 @@ export async function loader({ request }: { request: Request }) {
   let currentPlan: keyof typeof PLANS =
     (shop?.subscription?.plan as keyof typeof PLANS) || "starter";
   let status = shop?.subscription?.status || "trialing";
+  let billingApiWarning: string | null = null;
 
   const isTest = process.env.NODE_ENV !== "production";
+  const skipBillingApi = process.env.SHOPIFY_SKIP_BILLING_API === "true";
 
-  try {
-    const check = await billing.check({
-      plans: [...BILLING_PLANS],
-      isTest,
-    });
-
-    if (check.hasActivePayment && check.appSubscriptions.length > 0 && shop) {
-      const sub = check.appSubscriptions[0];
-      const slug = planSlugFromShopifyName(sub.name);
-      const dbStatus = subscriptionStatusForDb(sub.status);
-
-      await prisma.subscription.upsert({
-        where: { shopId: shop.id },
-        update: {
-          plan: slug,
-          status: dbStatus,
-          shopifySubscriptionGid: sub.id,
-        },
-        create: {
-          shopId: shop.id,
-          plan: slug,
-          status: dbStatus,
-          shopifySubscriptionGid: sub.id,
-        },
+  if (!skipBillingApi) {
+    try {
+      const check = await billing.check({
+        plans: [...BILLING_PLANS],
+        isTest,
       });
 
-      currentPlan = slug;
-      status = dbStatus;
+      if (check.hasActivePayment && check.appSubscriptions.length > 0 && shop) {
+        const sub = check.appSubscriptions[0];
+        const slug = planSlugFromShopifyName(sub.name);
+        const dbStatus = subscriptionStatusForDb(sub.status);
+
+        await prisma.subscription.upsert({
+          where: { shopId: shop.id },
+          update: {
+            plan: slug,
+            status: dbStatus,
+            shopifySubscriptionGid: sub.id,
+          },
+          create: {
+            shopId: shop.id,
+            plan: slug,
+            status: dbStatus,
+            shopifySubscriptionGid: sub.id,
+          },
+        });
+
+        currentPlan = slug;
+        status = dbStatus;
+      }
+    } catch (err) {
+      const code = httpStatusFromUnknown(err);
+      if (code === 403) {
+        billingApiWarning = BILLING_403_HINT;
+        console.warn("[pricing] billing.check 403 — using DB only. " + BILLING_403_HINT);
+      } else {
+        console.error("[pricing] billing.check failed (using DB cache):", err);
+      }
     }
-  } catch (err) {
-    console.error("[pricing] billing.check failed (using DB cache):", err);
   }
 
-  return json({ currentPlan, status });
+  return json({ currentPlan, status, billingApiWarning });
 }
 
 /**
@@ -140,6 +161,13 @@ export async function loader({ request }: { request: Request }) {
  * Do not use billing.require here — that skips the payment UI when a trial exists.
  */
 export async function action({ request }: { request: Request }) {
+  if (process.env.SHOPIFY_SKIP_BILLING_API === "true") {
+    return json({
+      error:
+        "Billing API is disabled (SHOPIFY_SKIP_BILLING_API). Use Partner Dashboard pricing or unset this variable.",
+    });
+  }
+
   try {
     const { billing } = await authenticate.admin(request);
     const form = await request.formData();
@@ -153,6 +181,9 @@ export async function action({ request }: { request: Request }) {
     });
   } catch (err) {
     if (err instanceof Response) throw err;
+    if (httpStatusFromUnknown(err) === 403) {
+      return json({ error: BILLING_403_HINT });
+    }
     const msg =
       err instanceof Error ? err.message : "Could not open Shopify billing.";
     return json({ error: msg });
@@ -161,7 +192,7 @@ export async function action({ request }: { request: Request }) {
 }
 
 export default function Pricing() {
-  const { currentPlan, status } = useLoaderData<typeof loader>();
+  const { currentPlan, status, billingApiWarning } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
 
   return (
@@ -172,6 +203,13 @@ export default function Pricing() {
     >
       <div className="omni-page-shell">
         <Layout>
+          {billingApiWarning && (
+            <Layout.Section>
+              <Banner title="Billing API unavailable from Shopify" tone="warning">
+                <p>{billingApiWarning}</p>
+              </Banner>
+            </Layout.Section>
+          )}
           <Layout.Section>
             <Banner title="Shopify subscription billing" tone="info">
               <p>

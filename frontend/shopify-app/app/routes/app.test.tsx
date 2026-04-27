@@ -2,239 +2,241 @@ import { json } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
 import { useState } from "react";
 import {
-  Badge,
   BlockStack,
   Button,
-  Card,
   InlineStack,
-  Layout,
   Page,
   Text,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
+import { syncShopToEngine } from "../services/engine.server";
+import { ensureStorefrontAccessToken } from "../services/storefront-token.server";
 
-// Deepgram Aura-2 voices — one female, one male per major language
-const FEMALE_VOICE = "aura-2-asteria-en";  // English, warm female
-const MALE_VOICE   = "aura-2-orion-en";    // English, confident male
+const FEMALE_VOICE = "aura-2-asteria-en";
+const MALE_VOICE   = "aura-2-orion-en";
 
 export async function loader({ request }: { request: Request }) {
-  const { session } = await authenticate.admin(request);
-  const shop = await prisma.shop.findUnique({
+  const { admin, session } = await authenticate.admin(request);
+
+  const shop = await prisma.shop.upsert({
     where: { shopDomain: session.shop },
-    include: { agentConfig: true },
+    update: {},
+    create: { shopDomain: session.shop, status: "installed" },
+    include: { agentConfig: true, subscription: true },
   });
 
-  const engineClientId = shop?.engineClientId ?? null;
-  const engineUrl = process.env.ENGINE_URL || "https://omniweb-engine-rs6fr.ondigitalocean.app";
-  const agentName  = shop?.agentConfig?.agentName  || "Omniweb AI";
-  const greeting   = shop?.agentConfig?.greeting   || "Thank you for visiting our website today... it will be my pleasure to help you";
+  let engineClientId = shop.engineClientId;
 
-  return json({ engineClientId, engineUrl, agentName, greeting });
+  // Try to sync so we always have a fresh client ID
+  try {
+    const storefrontToken = await ensureStorefrontAccessToken({
+      admin,
+      shopId: shop.id,
+      shopDomain: session.shop,
+      encryptedToken: shop.encryptedStorefrontToken,
+    });
+    const sync = await syncShopToEngine({
+      shop_domain: session.shop,
+      engine_client_id: shop.engineClientId,
+      admin_access_token: session.accessToken,
+      storefront_access_token: storefrontToken,
+      granted_scopes: (session.scope || "").split(",").map((s) => s.trim()).filter(Boolean),
+      storefront_api_version: process.env.SHOPIFY_API_VERSION || "2026-07",
+      plan: shop.subscription?.plan || "starter",
+      subscription_status: shop.subscription?.status || "trialing",
+      assistant_enabled: true,
+      agent_config: shop.agentConfig || {},
+    });
+    if (sync.client_id && sync.client_id !== shop.engineClientId) {
+      engineClientId = sync.client_id;
+      await prisma.shop.update({ where: { id: shop.id }, data: { engineClientId } });
+    }
+  } catch {
+    // Non-fatal — use whatever clientId we already have
+  }
+
+  const engineUrl = process.env.ENGINE_URL || "https://omniweb-engine-rs6fr.ondigitalocean.app";
+  const agentName = shop.agentConfig?.agentName || "Omniweb AI";
+  const greeting  = shop.agentConfig?.greeting  || "Thank you for visiting our website today... it will be my pleasure to help you";
+  const shopDomain = session.shop; // e.g. "mystore.myshopify.com"
+
+  return json({ engineClientId, engineUrl, agentName, greeting, shopDomain });
 }
 
 export default function TestConsole() {
-  const { engineClientId, engineUrl, agentName, greeting } = useLoaderData<typeof loader>();
+  const { engineClientId, engineUrl, agentName, greeting, shopDomain } =
+    useLoaderData<typeof loader>();
+
   const [voice, setVoice] = useState<"female" | "male">("female");
-  const [mode,  setMode]  = useState<"voice" | "text">("voice");
 
-  const voiceId = voice === "female" ? FEMALE_VOICE : MALE_VOICE;
-  const widgetBase = engineClientId
-    ? `${engineUrl}/widget/${engineClientId}`
-    : null;
+  const voiceId   = voice === "female" ? FEMALE_VOICE : MALE_VOICE;
+  const widgetBase = engineClientId ? `${engineUrl}/widget/${engineClientId}` : null;
+  const voiceUrl   = widgetBase ? `${widgetBase}?voice=${voiceId}&mode=voice` : null;
+  const textUrl    = widgetBase ? `${widgetBase}?voice=${voiceId}&mode=text`  : null;
+  const storefrontUrl = `https://${shopDomain}`;
 
-  const widgetUrl = widgetBase
-    ? `${widgetBase}?voice=${voiceId}&mode=${mode}`
-    : null;
+  const ready = Boolean(widgetBase);
 
   return (
     <Page
       fullWidth
       title="Agent Test Console"
-      subtitle={`Test how shoppers experience "${agentName}" before going live`}
+      subtitle={`"${agentName}" — test voice and text before shoppers see it`}
       backAction={{ url: "/app/agent", content: "Agent settings" }}
     >
-      <div className="omni-page-shell">
-      <Layout>
-        {/* Hero */}
-        <Layout.Section>
-          <div className="omni-hero-card">
-            <div className="omni-hero-card__inner">
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingLg">
-                  Talk to your AI agent
-                </Text>
-                <Text as="p" tone="subdued">
-                  Select a voice, choose voice or text mode, then launch the session. This is exactly what shoppers will experience.
-                </Text>
-                <Text as="p" tone="subdued" variant="bodySm">
-                  Opening message: <em>"{greeting}"</em>
-                </Text>
-              </BlockStack>
-              {widgetUrl ? (
-                <Button url={widgetUrl} target="_blank" variant="primary" size="large">
-                  {mode === "voice" ? "Start voice session" : "Start text session"}
-                </Button>
-              ) : (
-                <BlockStack gap="100">
-                  <Badge tone="attention">Not configured</Badge>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Save & sync your agent first
-                  </Text>
-                </BlockStack>
-              )}
+      <div className="omni-page-shell omni-test-page">
+
+        {/* ── top bar: voice toggle + storefront link ── */}
+        <div className="omni-test-topbar">
+          <div className="omni-test-topbar__left">
+            <Text as="p" variant="bodySm" tone="subdued">Voice:</Text>
+            <div className="omni-test-voice-toggle">
+              <button
+                type="button"
+                className={`omni-test-voice-btn${voice === "female" ? " active" : ""}`}
+                onClick={() => setVoice("female")}
+              >
+                <span className="omni-test-voice-btn__dot omni-test-voice-btn__dot--female" />
+                Female
+              </button>
+              <button
+                type="button"
+                className={`omni-test-voice-btn${voice === "male" ? " active" : ""}`}
+                onClick={() => setVoice("male")}
+              >
+                <span className="omni-test-voice-btn__dot omni-test-voice-btn__dot--male" />
+                Male
+              </button>
             </div>
           </div>
-        </Layout.Section>
 
-        {/* Voice picker */}
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <div className="omni-card-accent" />
-              <Text as="h2" variant="headingMd">Voice</Text>
-              <Text as="p" tone="subdued">
-                Choose whether your AI agent speaks in a female or male voice. You can change this any time.
-              </Text>
-              <div className="omni-voice-grid">
-                {/* Female */}
-                <button
-                  type="button"
-                  className={`omni-voice-card${voice === "female" ? " omni-voice-card--active" : ""}`}
-                  onClick={() => setVoice("female")}
-                >
-                  <div className="omni-voice-card__avatar omni-voice-card__avatar--female">
-                    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="40" height="40">
-                      <circle cx="24" cy="24" r="24" fill="#fce7f3"/>
-                      <circle cx="24" cy="18" r="8" fill="#f9a8d4"/>
-                      <ellipse cx="24" cy="36" rx="11" ry="7" fill="#f9a8d4"/>
-                    </svg>
-                  </div>
-                  <BlockStack gap="100">
-                    <Text as="p" fontWeight="semibold">Female voice</Text>
-                    <Text as="p" tone="subdued" variant="bodySm">Warm, clear, professional</Text>
-                  </BlockStack>
-                  {voice === "female" && <span className="omni-voice-card__check">✓</span>}
-                </button>
+          <div className="omni-test-topbar__right">
+            {ready ? (
+              <a
+                href={storefrontUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="omni-ask-ai-btn"
+                title="Open your live storefront — the Ask AI widget will appear there"
+              >
+                <span className="omni-ask-ai-btn__orb" />
+                Ask AI
+              </a>
+            ) : (
+              <span className="omni-ask-ai-btn omni-ask-ai-btn--disabled">
+                <span className="omni-ask-ai-btn__orb" />
+                Ask AI
+              </span>
+            )}
+            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+              Opens your storefront
+            </Text>
+          </div>
+        </div>
 
-                {/* Male */}
-                <button
-                  type="button"
-                  className={`omni-voice-card${voice === "male" ? " omni-voice-card--active" : ""}`}
-                  onClick={() => setVoice("male")}
+        {/* ── greeting strip ── */}
+        <div className="omni-test-greeting">
+          <Text as="p" variant="bodySm" tone="subdued">
+            Opening message:&nbsp;
+          </Text>
+          <Text as="p" variant="bodySm">
+            <em>&ldquo;{greeting}&rdquo;</em>
+          </Text>
+        </div>
+
+        {/* ── two widget windows ── */}
+        {ready ? (
+          <div className="omni-test-windows">
+            {/* Voice window */}
+            <div className="omni-test-window">
+              <div className="omni-test-window__header">
+                <span className="omni-test-window__dot omni-test-window__dot--red" />
+                <span className="omni-test-window__dot omni-test-window__dot--yellow" />
+                <span className="omni-test-window__dot omni-test-window__dot--green" />
+                <span className="omni-test-window__title">Voice agent</span>
+                <a
+                  href={voiceUrl!}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="omni-test-window__external"
+                  title="Open in new tab"
                 >
-                  <div className="omni-voice-card__avatar omni-voice-card__avatar--male">
-                    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="40" height="40">
-                      <circle cx="24" cy="24" r="24" fill="#dbeafe"/>
-                      <circle cx="24" cy="18" r="8" fill="#93c5fd"/>
-                      <ellipse cx="24" cy="36" rx="11" ry="7" fill="#93c5fd"/>
-                    </svg>
-                  </div>
-                  <BlockStack gap="100">
-                    <Text as="p" fontWeight="semibold">Male voice</Text>
-                    <Text as="p" tone="subdued" variant="bodySm">Confident, friendly, natural</Text>
-                  </BlockStack>
-                  {voice === "male" && <span className="omni-voice-card__check">✓</span>}
-                </button>
+                  &#x2197;
+                </a>
               </div>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
+              <iframe
+                key={`voice-${voiceId}`}
+                src={voiceUrl!}
+                className="omni-test-window__frame"
+                allow="microphone; camera"
+                title="Voice agent preview"
+              />
+            </div>
 
-        {/* Mode + Launch */}
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <div className="omni-card-accent" />
-              <Text as="h2" variant="headingMd">Session mode</Text>
-              <InlineStack gap="300">
-                <Button
-                  variant={mode === "voice" ? "primary" : "secondary"}
-                  onClick={() => setMode("voice")}
+            {/* Text window */}
+            <div className="omni-test-window">
+              <div className="omni-test-window__header">
+                <span className="omni-test-window__dot omni-test-window__dot--red" />
+                <span className="omni-test-window__dot omni-test-window__dot--yellow" />
+                <span className="omni-test-window__dot omni-test-window__dot--green" />
+                <span className="omni-test-window__title">Text chat</span>
+                <a
+                  href={textUrl!}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="omni-test-window__external"
+                  title="Open in new tab"
                 >
-                  Voice
-                </Button>
-                <Button
-                  variant={mode === "text" ? "primary" : "secondary"}
-                  onClick={() => setMode("text")}
-                >
-                  Text chat
+                  &#x2197;
+                </a>
+              </div>
+              <iframe
+                key={`text-${voiceId}`}
+                src={textUrl!}
+                className="omni-test-window__frame"
+                title="Text chat preview"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="omni-test-not-ready">
+            <div className="omni-test-not-ready__icon">&#9888;</div>
+            <BlockStack gap="200">
+              <Text as="p" fontWeight="semibold">Agent not synced yet</Text>
+              <Text as="p" tone="subdued">
+                Go to <strong>Agent Settings</strong>, fill in your details, and click&nbsp;
+                <strong>Save and sync agent</strong>. Then come back here to test.
+              </Text>
+              <InlineStack>
+                <Button url="/app/agent" variant="primary">
+                  Go to Agent Settings
                 </Button>
               </InlineStack>
-              <Text as="p" tone="subdued">
-                {mode === "voice"
-                  ? "Speak naturally — the agent will respond in real time with voice."
-                  : "Type messages to test how the agent responds to written questions."}
-              </Text>
-
-              {widgetUrl ? (
-                <Button url={widgetUrl} target="_blank" variant="primary" size="large">
-                  {mode === "voice" ? "Open voice session" : "Open text session"}
-                </Button>
-              ) : (
-                <Banner>
-                  <Text as="p">Go to <strong>Agent Settings</strong>, save and sync, then come back to test.</Text>
-                </Banner>
-              )}
             </BlockStack>
-          </Card>
-        </Layout.Section>
+          </div>
+        )}
 
-        {/* Tips sidebar */}
-        <Layout.Section variant="oneThird">
-          <BlockStack gap="400">
-            <Card>
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">What to check</Text>
-                <div className="omni-muted-panel">
-                  <BlockStack gap="200">
-                    <Text as="p" fontWeight="semibold">1. Welcome message</Text>
-                    <Text as="p" tone="subdued">Does the agent greet shoppers with your custom opening?</Text>
-                    <Text as="p" fontWeight="semibold">2. Product questions</Text>
-                    <Text as="p" tone="subdued">Ask about a product — does it answer from your knowledge base?</Text>
-                    <Text as="p" fontWeight="semibold">3. Language</Text>
-                    <Text as="p" tone="subdued">Try switching language if you have multiple enabled.</Text>
-                    <Text as="p" fontWeight="semibold">4. Cart actions</Text>
-                    <Text as="p" tone="subdued">Ask to add something to cart — does it confirm correctly?</Text>
-                  </BlockStack>
-                </div>
-              </BlockStack>
-            </Card>
+        {/* ── checklist ── */}
+        <div className="omni-test-checklist">
+          {[
+            ["Welcome message", "Does the agent open with your custom greeting?"],
+            ["Product questions", "Ask about a product — does it answer from your knowledge base?"],
+            ["Language switching", "Try a different language if you have multiple enabled."],
+            ["Cart actions", "Ask to add something to cart — does it confirm?"],
+            ["Voice quality", "Is the voice clear and natural at the chosen gender?"],
+          ].map(([title, desc], i) => (
+            <div key={i} className="omni-test-checklist__item">
+              <span className="omni-test-checklist__num">{i + 1}</span>
+              <div>
+                <Text as="p" fontWeight="semibold" variant="bodySm">{title}</Text>
+                <Text as="p" tone="subdued" variant="bodySm">{desc}</Text>
+              </div>
+            </div>
+          ))}
+        </div>
 
-            <Card>
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">Voice IDs used</Text>
-                <BlockStack gap="100">
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Female: <code>aura-2-asteria-en</code>
-                  </Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Male: <code>aura-2-orion-en</code>
-                  </Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Powered by Deepgram Aura-2
-                  </Text>
-                </BlockStack>
-              </BlockStack>
-            </Card>
-          </BlockStack>
-        </Layout.Section>
-      </Layout>
       </div>
     </Page>
-  );
-}
-
-// Inline Banner helper (avoid extra import)
-function Banner({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      background: "#fff3cd",
-      border: "1px solid #ffc107",
-      borderRadius: 8,
-      padding: "12px 16px",
-    }}>
-      {children}
-    </div>
   );
 }

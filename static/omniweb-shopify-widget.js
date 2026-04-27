@@ -339,7 +339,7 @@
       tokenExp = Date.now() + 28 * 60 * 1000 // refresh 2 min early
       clientId = data.client_id || null
       endpoints = data.endpoints || {}
-      greeting = data.greeting || "Hi! How can I help you today?"
+      greeting = data.greeting || "Thank you for visiting our website today... it will be my pleasure to help you"
       if (!data.assistant_enabled) {
         launcher.style.display = "none"
         win.classList.add("hidden")

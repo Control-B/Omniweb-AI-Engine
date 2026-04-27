@@ -97,16 +97,45 @@ export default function Dashboard() {
 
   return (
     <Page
+      fullWidth
       title="Omniweb AI"
       subtitle="Your AI Sales & Revenue Agent for Shopify"
     >
+      <div className="omni-page-shell">
       <Layout>
+        <Layout.Section>
+          <div className="omni-hero-card">
+            <div className="omni-hero-card__inner">
+              <BlockStack gap="300">
+                <Badge tone={data.engineConnected ? "success" : "attention"}>
+                  {data.engineConnected ? "Storefront ready" : "Setup in progress"}
+                </Badge>
+                <Text as="h2" variant="headingXl">
+                  Turn visitors into helped shoppers.
+                </Text>
+                <Text as="p" tone="subdued">
+                  Configure your agent, add store knowledge, and keep the storefront widget synced from one embedded workspace.
+                </Text>
+              </BlockStack>
+              <InlineStack gap="300" align="end">
+                <Button url="/app/agent" variant="primary">
+                  Configure agent
+                </Button>
+                <Button url="/app/knowledge">
+                  Add knowledge
+                </Button>
+              </InlineStack>
+            </div>
+          </div>
+        </Layout.Section>
+
         {/* Quick-status strip */}
         <Layout.Section>
           <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
             {/* Subscription */}
             <Card>
               <BlockStack gap="300">
+                <div className="omni-card-accent" />
                 <InlineStack align="space-between">
                   <Text as="h2" variant="headingMd">Subscription</Text>
                   <Icon source={StoreIcon} tone="subdued" />
@@ -126,6 +155,7 @@ export default function Dashboard() {
             {/* Agent */}
             <Card>
               <BlockStack gap="300">
+                <div className="omni-card-accent" />
                 <InlineStack align="space-between">
                   <Text as="h2" variant="headingMd">AI Agent</Text>
                   <Icon source={ChatIcon} tone="subdued" />
@@ -147,6 +177,7 @@ export default function Dashboard() {
             {/* Storefront widget */}
             <Card>
               <BlockStack gap="300">
+                <div className="omni-card-accent" />
                 <InlineStack align="space-between">
                   <Text as="h2" variant="headingMd">Storefront Widget</Text>
                   <Icon source={GlobeIcon} tone="subdued" />
@@ -242,6 +273,7 @@ export default function Dashboard() {
           </Card>
         </Layout.Section>
       </Layout>
+      </div>
     </Page>
   );
 }

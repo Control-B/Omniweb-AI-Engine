@@ -73,6 +73,8 @@ const RESPONSE_LENGTH_OPTIONS = [
   { label: "Detailed – thorough explanations", value: "detailed" },
 ];
 
+const DEFAULT_GREETING = "Thank you for visiting our website today... it will be my pleasure to help you";
+
 export async function loader({ request }: { request: Request }) {
   const { session } = await authenticate.admin(request);
   const shop = await prisma.shop.upsert({
@@ -105,7 +107,7 @@ export async function action({ request }: { request: Request }) {
     update: {
       agentName: String(form.get("agentName") || "Omniweb AI"),
       businessName: String(form.get("businessName") || ""),
-      greeting: String(form.get("greeting") || ""),
+      greeting: String(form.get("greeting") || DEFAULT_GREETING),
       systemPrompt: String(form.get("systemPrompt") || ""),
       supportedLanguages: languagesRaw.split(",").map((l) => l.trim()).filter(Boolean),
     },
@@ -113,7 +115,7 @@ export async function action({ request }: { request: Request }) {
       shopId: shop.id,
       agentName: String(form.get("agentName") || "Omniweb AI"),
       businessName: String(form.get("businessName") || ""),
-      greeting: String(form.get("greeting") || ""),
+      greeting: String(form.get("greeting") || DEFAULT_GREETING),
       systemPrompt: String(form.get("systemPrompt") || ""),
       supportedLanguages: ["en"],
     },
@@ -156,7 +158,7 @@ export default function AgentSettings() {
 
   const [agentName, setAgentName] = useState(config?.agentName || "Omniweb AI");
   const [businessName, setBusinessName] = useState(config?.businessName || "");
-  const [greeting, setGreeting] = useState(config?.greeting || "");
+  const [greeting, setGreeting] = useState(config?.greeting || DEFAULT_GREETING);
   const [systemPrompt, setSystemPrompt] = useState(config?.systemPrompt || "");
   const [responseLength, setResponseLength] = useState("moderate");
 
@@ -213,10 +215,34 @@ export default function AgentSettings() {
 
   return (
     <Page
+      fullWidth
       title="AI Agent Settings"
       subtitle="Configure the sales associate customers meet on your storefront"
     >
+      <div className="omni-page-shell">
       <Layout>
+        <Layout.Section>
+          <div className="omni-hero-card">
+            <div className="omni-hero-card__inner">
+              <BlockStack gap="200">
+                <Text as="h2" variant="headingLg">
+                  Shape how your AI agent sells and supports.
+                </Text>
+                <Text as="p" tone="subdued">
+                  Set the voice, welcome message, goals, languages, and operating rules that sync to the storefront widget.
+                </Text>
+              </BlockStack>
+              {testWidgetUrl ? (
+                <Button url={testWidgetUrl} target="_blank" variant="primary">
+                  Test widget
+                </Button>
+              ) : (
+                <Button disabled>Test after save</Button>
+              )}
+            </div>
+          </div>
+        </Layout.Section>
+
         <Layout.Section>
           <Form method="post">
             {/* Hidden serialized fields */}
@@ -228,6 +254,7 @@ export default function AgentSettings() {
               {/* Basic info */}
               <Card>
                 <BlockStack gap="400">
+                  <div className="omni-card-accent" />
                   <Text as="h2" variant="headingMd">Agent Identity</Text>
                   <FormLayout>
                     <FormLayout.Group>
@@ -278,6 +305,7 @@ export default function AgentSettings() {
               {/* Primary Goals */}
               <Card>
                 <BlockStack gap="400">
+                  <div className="omni-card-accent" />
                   <BlockStack gap="100">
                     <Text as="h2" variant="headingMd">Primary Goals</Text>
                     <Text as="p" tone="subdued">Select what your AI agent should help shoppers accomplish</Text>
@@ -296,6 +324,7 @@ export default function AgentSettings() {
               {/* Languages */}
               <Card>
                 <BlockStack gap="400">
+                  <div className="omni-card-accent" />
                   <BlockStack gap="100">
                     <Text as="h2" variant="headingMd">Supported Languages</Text>
                     <Text as="p" tone="subdued">
@@ -388,6 +417,7 @@ export default function AgentSettings() {
           </BlockStack>
         </Layout.Section>
       </Layout>
+      </div>
     </Page>
   );
 }

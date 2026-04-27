@@ -39,8 +39,8 @@ export async function action({ request }: { request: Request }) {
     return redirect("/app/knowledge");
   }
 
-  const url = String(form.get("url") || "").trim();
-  if (!url) return redirect("/app/knowledge");
+  const url = normalizeKnowledgeUrl(String(form.get("url") || ""));
+  if (!url) return redirect("/app/knowledge?error=invalid-url");
 
   const shop = await prisma.shop.upsert({
     where: { shopDomain: session.shop },
@@ -80,18 +80,35 @@ function statusLabel(status: string) {
   return map[status] ?? status;
 }
 
+function normalizeKnowledgeUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(withProtocol);
+    if (!parsed.hostname.includes(".")) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export default function Knowledge() {
   const { sources } = useLoaderData<typeof loader>();
   const nav = useNavigation();
   const [searchParams] = useSearchParams();
   const justQueued = searchParams.get("queued") === "1";
+  const invalidUrl = searchParams.get("error") === "invalid-url";
   const [url, setUrl] = useState("");
 
   return (
     <Page
+      fullWidth
       title="Knowledge Sources"
       subtitle="Add URLs the AI agent should learn from — FAQ pages, policies, product pages, and more"
     >
+      <div className="omni-page-shell">
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
@@ -99,6 +116,13 @@ export default function Knowledge() {
               <Banner title="URL queued for ingestion" tone="success">
                 <Text as="p">
                   Your URL has been added. The AI agent will process it within a few minutes and start using it to answer shoppers.
+                </Text>
+              </Banner>
+            )}
+            {invalidUrl && (
+              <Banner title="Enter a valid page URL" tone="critical">
+                <Text as="p">
+                  Paste a store page such as your FAQ, shipping policy, returns policy, or product URL.
                 </Text>
               </Banner>
             )}
@@ -114,28 +138,26 @@ export default function Knowledge() {
                 </BlockStack>
                 <Form method="post">
                   <input type="hidden" name="intent" value="add" />
-                  <BlockStack gap="300">
+                  <div className="omni-url-row">
                     <TextField
                       label="Website or page URL"
                       name="url"
                       value={url}
                       onChange={setUrl}
-                      placeholder="https://yourstore.com/pages/faq"
-                      autoComplete="off"
-                      type="url"
+                      placeholder="yourstore.com/pages/faq"
+                      autoComplete="url"
+                      type="text"
                       helpText="The agent will crawl this page and index its content for answering shoppers."
                     />
-                    <InlineStack>
-                      <Button
-                        submit
-                        variant="primary"
-                        loading={nav.state === "submitting"}
-                        disabled={!url.trim()}
-                      >
-                        Add URL
-                      </Button>
-                    </InlineStack>
-                  </BlockStack>
+                    <Button
+                      submit
+                      variant="primary"
+                      loading={nav.state === "submitting"}
+                      disabled={!url.trim()}
+                    >
+                      Add URL
+                    </Button>
+                  </div>
                 </Form>
               </BlockStack>
             </Card>
@@ -155,7 +177,8 @@ export default function Knowledge() {
                     </Text>
                   </BlockStack>
                 ) : (
-                  sources.map(
+                  <div className="omni-scroll-list">
+                  {sources.map(
                     (source: { id: string; url: string | null; status: string; createdAt: string }, i: number) => (
                       <BlockStack gap="0" key={source.id}>
                         {i > 0 && <Divider />}
@@ -190,23 +213,39 @@ export default function Knowledge() {
                         </div>
                       </BlockStack>
                     )
-                  )
+                  )}
+                  </div>
                 )}
               </BlockStack>
             </Card>
+          </BlockStack>
+        </Layout.Section>
 
-            {/* Tips */}
-            <Banner title="Tips for a better knowledge base" tone="info">
+        <Layout.Section variant="oneThird">
+          <BlockStack gap="400">
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd">What to add first</Text>
+                <div className="omni-muted-panel">
+                  <BlockStack gap="200">
+                    <Text as="p">Start with pages shoppers ask about most: FAQs, shipping, returns, product care, sizing, and warranty policies.</Text>
+                    <Text as="p" tone="subdued">Use public storefront URLs. Password-protected admin links cannot be indexed.</Text>
+                  </BlockStack>
+                </div>
+              </BlockStack>
+            </Card>
+
+            <Banner title="Tips for better answers" tone="info">
               <BlockStack gap="100">
-                <Text as="p">• Add your FAQ page so the agent can answer common questions instantly.</Text>
-                <Text as="p">• Add your shipping and returns policies to reduce support tickets.</Text>
-                <Text as="p">• Add individual product pages for richer product recommendations.</Text>
-                <Text as="p">• Sources are re-indexed automatically every 7 days.</Text>
+                <Text as="p">Add one focused page per source.</Text>
+                <Text as="p">Keep policy pages updated before re-indexing.</Text>
+                <Text as="p">Add product pages for richer recommendations.</Text>
               </BlockStack>
             </Banner>
           </BlockStack>
         </Layout.Section>
       </Layout>
+      </div>
     </Page>
   );
 }

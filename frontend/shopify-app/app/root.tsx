@@ -6,8 +6,12 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
+import appStyles from "./styles/app.css?url";
 
-export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
+export const links = () => [
+  { rel: "stylesheet", href: polarisStyles },
+  { rel: "stylesheet", href: appStyles },
+];
 
 export default function App() {
   return (
@@ -18,7 +22,7 @@ export default function App() {
         <Meta />
         <Links />
       </head>
-      <body>
+      <body className="omni-app-frame">
         <Outlet />
         <ScrollRestoration />
         <Scripts />

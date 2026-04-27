@@ -111,15 +111,34 @@ export default function Analytics() {
 
   return (
     <Page
+      fullWidth
       title="Analytics"
       subtitle="Conversation usage, lead quality, and revenue-agent activity"
     >
+      <div className="omni-page-shell">
       <Layout>
+        <Layout.Section>
+          <div className="omni-hero-card">
+            <div className="omni-hero-card__inner">
+              <BlockStack gap="200">
+                <Text as="h2" variant="headingLg">
+                  Storefront activity at a glance
+                </Text>
+                <Text as="p" tone="subdued">
+                  Track conversations, captured leads, discount interest, and the most recent shopper sessions.
+                </Text>
+              </BlockStack>
+              {error ? <Badge tone="critical">Engine unavailable</Badge> : <Badge tone="success">Live data</Badge>}
+            </div>
+          </div>
+        </Layout.Section>
+
         {/* KPI strip */}
         <Layout.Section>
           <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
             <Card>
               <BlockStack gap="100">
+                <div className="omni-card-accent" />
                 <Text as="p" tone="subdued" variant="bodySm">Total conversations</Text>
                 <Text as="p" variant="heading2xl">{analytics.conversations}</Text>
                 <Text as="p" tone="subdued" variant="bodySm">
@@ -129,6 +148,7 @@ export default function Analytics() {
             </Card>
             <Card>
               <BlockStack gap="100">
+                <div className="omni-card-accent" />
                 <Text as="p" tone="subdued" variant="bodySm">Qualified leads</Text>
                 <Text as="p" variant="heading2xl" tone={analytics.qualified_leads > 0 ? "success" : undefined}>
                   {analytics.qualified_leads}
@@ -138,6 +158,7 @@ export default function Analytics() {
             </Card>
             <Card>
               <BlockStack gap="100">
+                <div className="omni-card-accent" />
                 <Text as="p" tone="subdued" variant="bodySm">Discount requests</Text>
                 <Text as="p" variant="heading2xl">{analytics.discount_requests}</Text>
                 <Text as="p" tone="subdued" variant="bodySm">
@@ -147,6 +168,7 @@ export default function Analytics() {
             </Card>
             <Card>
               <BlockStack gap="100">
+                <div className="omni-card-accent" />
                 <Text as="p" tone="subdued" variant="bodySm">Avg. messages / session</Text>
                 <Text as="p" variant="heading2xl">
                   {analytics.conversations > 0
@@ -180,7 +202,8 @@ export default function Analytics() {
                   </Text>
                 </BlockStack>
               ) : (
-                analytics.recent_sessions.map((session: Session, i: number) => (
+                <div className="omni-scroll-list">
+                {analytics.recent_sessions.map((session: Session, i: number) => (
                   <BlockStack gap="0" key={session.id}>
                     {i > 0 && <Divider />}
                     <div style={{ paddingBlock: "12px" }}>
@@ -207,7 +230,8 @@ export default function Analytics() {
                       </InlineStack>
                     </div>
                   </BlockStack>
-                ))
+                ))}
+                </div>
               )}
             </BlockStack>
           </Card>
@@ -271,6 +295,7 @@ export default function Analytics() {
           </Layout.Section>
         )}
       </Layout>
+      </div>
     </Page>
   );
 }

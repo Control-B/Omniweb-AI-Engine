@@ -69,7 +69,7 @@ model AgentConfig {
   shopId             String   @unique
   agentName          String   @default("Omniweb AI")
   businessName       String?
-  greeting           String   @default("Hi, welcome in. How can I help you today?")
+  greeting           String   @default("Thank you for visiting our website today... it will be my pleasure to help you")
   systemPrompt       String   @default("")
   supportedLanguages String[] @default(["en"])
   voiceEnabled       Boolean  @default(true)

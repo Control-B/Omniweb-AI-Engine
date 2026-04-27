@@ -158,7 +158,7 @@ export async function loader({ request }: { request: Request }) {
 
 /**
  * Opens Shopify's app subscription approval flow (merchant pays via Shopify invoice).
- * Do not use billing.require here — that skips the payment UI when a trial exists.
+ * Use Shopify's explicit charge approval flow so the merchant always sees payment.
  */
 export async function action({ request }: { request: Request }) {
   if (process.env.SHOPIFY_SKIP_BILLING_API === "true") {

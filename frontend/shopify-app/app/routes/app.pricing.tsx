@@ -13,17 +13,12 @@ import {
   Page,
   Text,
 } from "@shopify/polaris";
-import {
-  authenticate,
-  STARTER_PLAN,
-  GROWTH_PLAN,
-  PRO_PLAN,
-} from "../shopify.server";
+import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 
 const PLANS = {
   starter: {
-    name: STARTER_PLAN,
+    name: "Starter",
     price: 149,
     tagline: "For small Shopify stores",
     conversations: "500 conversations/mo",
@@ -37,7 +32,7 @@ const PLANS = {
     ],
   },
   growth: {
-    name: GROWTH_PLAN,
+    name: "Growth",
     price: 299,
     tagline: "For growing stores & teams",
     conversations: "2,000 conversations/mo",
@@ -52,7 +47,7 @@ const PLANS = {
     ],
   },
   pro: {
-    name: PRO_PLAN,
+    name: "Pro",
     price: 499,
     tagline: "For agencies & high-volume stores",
     conversations: "Unlimited conversations",

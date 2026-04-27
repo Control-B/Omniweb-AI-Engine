@@ -20,45 +20,49 @@ const PLANS = {
   starter: {
     name: "Starter",
     price: 149,
-    tagline: "For small Shopify stores",
-    conversations: "500 conversations/mo",
+    positioning: "AI Revenue Agent",
+    tagline: "Voice and text AI for storefront shoppers",
+    engagements: "500 AI engagements/mo",
     features: [
-      "1 AI storefront agent",
-      "Text chat + Voice mode",
-      "10 languages supported",
-      "Knowledge base (5 docs)",
-      "Basic analytics",
-      "Email support",
+      "Voice AI agent for guided selling",
+      "Text chat AI agent",
+      "Lead capture and qualification",
+      "Website, product, and service knowledge",
+      "Multilingual shopper support",
+      "Basic analytics and email support",
     ],
   },
   growth: {
     name: "Growth",
     price: 299,
-    tagline: "For growing stores & teams",
-    conversations: "2,000 conversations/mo",
+    badge: "Most Popular",
+    positioning: "Conversion OS",
+    tagline: "Voice, text, and AI Telephony for growing businesses",
+    engagements: "2,000 AI engagements/mo",
     features: [
-      "3 AI storefront agents",
-      "Text chat + Voice mode",
-      "All 26 languages",
+      "Everything in Starter",
+      "AI Telephony",
+      "Call Us storefront widget",
+      "Human escalation by phone and email",
+      "Sales guidance, objections, upsells, and cross-sells",
       "Unlimited knowledge base",
-      "Advanced analytics + summaries",
-      "Shopify native integration",
       "Priority support",
     ],
   },
   pro: {
-    name: "Pro",
+    name: "Scale",
     price: 499,
-    tagline: "For agencies & high-volume stores",
-    conversations: "Unlimited conversations",
+    positioning: "AI Sales Team",
+    tagline: "Higher-volume AI sales coverage across website, voice, and phone",
+    engagements: "5,000 AI engagements/mo",
     features: [
-      "Unlimited AI agents",
-      "Text chat + Voice mode",
-      "All 26 languages",
+      "Everything in Growth",
+      "Higher-volume AI engagement allowance",
+      "Advanced workflows",
+      "Priority orchestration",
+      "Multi-location and team support ready",
       "Unlimited knowledge base",
-      "Full analytics suite",
-      "White-label widget",
-      "Multi-store support",
+      "Advanced analytics + summaries",
       "Dedicated support",
     ],
   },
@@ -71,8 +75,13 @@ export async function loader({ request }: { request: Request }) {
     include: { subscription: true },
   });
 
-  const currentPlan: keyof typeof PLANS =
-    (shop?.subscription?.plan as keyof typeof PLANS) || "starter";
+  const savedPlan = shop?.subscription?.plan || "starter";
+  const currentPlan: keyof typeof PLANS = Object.prototype.hasOwnProperty.call(
+    PLANS,
+    savedPlan,
+  )
+    ? (savedPlan as keyof typeof PLANS)
+    : "starter";
   const status = shop?.subscription?.status || "trialing";
 
   return json({ currentPlan, status });
@@ -97,7 +106,7 @@ export default function Pricing() {
     <Page
       fullWidth
       title="Pricing"
-      subtitle="Pricing is visible while Shopify Billing is temporarily paused during launch stabilization."
+      subtitle="Choose the AI revenue plan that fits your customer volume and sales workflow."
     >
       <div className="omni-page-shell">
         <Layout>
@@ -136,6 +145,12 @@ export default function Pricing() {
                         <Text as="h2" variant="headingLg" fontWeight="bold">
                           {plan.name}
                         </Text>
+                        {"badge" in plan && plan.badge && (
+                          <Badge tone="success">{plan.badge}</Badge>
+                        )}
+                        <Text as="p" fontWeight="semibold">
+                          {plan.positioning}
+                        </Text>
                         <Text as="p" tone="subdued">
                           {plan.tagline}
                         </Text>
@@ -161,7 +176,7 @@ export default function Pricing() {
 
                       <BlockStack gap="100">
                         <Text as="p" fontWeight="semibold">
-                          {plan.conversations}
+                          {plan.engagements}
                         </Text>
                       </BlockStack>
 

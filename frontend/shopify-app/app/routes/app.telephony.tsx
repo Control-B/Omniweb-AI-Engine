@@ -134,7 +134,7 @@ export default function Telephony() {
     <Page
       fullWidth
       title="AI Telephony"
-      subtitle="Let shoppers request a phone call with the same AI agent, powered by Retell AI"
+      subtitle="Let shoppers request a phone call with the same Omniweb AI agent."
     >
       <div className="omni-page-shell">
         <Layout>
@@ -144,7 +144,7 @@ export default function Telephony() {
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingLg">Add a Call Us AI phone widget.</Text>
                   <Text as="p" tone="subdued">
-                    The customer enters their number, Retell calls them, and the AI explains products, services, bundles, objections, and checkout guidance just like the voice widget.
+                    The customer enters their number, Omniweb AI calls them, and the AI explains products, services, bundles, objections, and checkout guidance just like the voice widget.
                   </Text>
                 </BlockStack>
               </div>
@@ -164,16 +164,16 @@ export default function Telephony() {
               <Form method="post">
                 <BlockStack gap="400">
                   <div className="omni-card-accent" />
-                  <Text as="h2" variant="headingMd">Retell AI phone setup</Text>
+                  <Text as="h2" variant="headingMd">Omniweb AI phone setup</Text>
                   <FormLayout>
                     <TextField
-                      label="Retell agent ID"
+                      label="Omniweb AI phone agent ID"
                       name="retellAgentId"
                       value={retellAgentId}
                       onChange={setRetellAgentId}
                       autoComplete="off"
                       placeholder="agent_xxxxxxxxx"
-                      helpText="Use the same Retell agent brain as the AI voice experience."
+                      helpText="Use the same AI brain as the Omniweb voice experience."
                     />
                     <FormLayout.Group>
                       <TextField
@@ -183,7 +183,7 @@ export default function Telephony() {
                         onChange={setPhoneNumber}
                         autoComplete="tel"
                         placeholder="+15551234567"
-                        helpText="The Retell/Twilio number calls customers from."
+                        helpText="The Omniweb AI phone number customers receive calls from."
                       />
                       <TextField
                         label="Human escalation phone"
@@ -227,7 +227,7 @@ export default function Telephony() {
               <BlockStack gap="300">
                 <Text as="h2" variant="headingMd">Call Us widget behavior</Text>
                 <Text as="p" tone="subdued">
-                  This is separate from Ask AI. It appears as a Call Us option, collects the shopper phone number, and starts a Retell AI phone conversation.
+                  This is separate from Ask AI. It appears as a Call Us option, collects the shopper phone number, and starts an Omniweb AI phone conversation.
                 </Text>
                 <Text as="p" tone="subdued">
                   If the AI cannot resolve the request, it uses the human escalation phone and fallback email you set here.

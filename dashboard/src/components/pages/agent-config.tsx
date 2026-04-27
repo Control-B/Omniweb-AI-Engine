@@ -328,7 +328,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
       });
       setTelephonyMessage(`Calling ${res.to_number} now from ${res.from_number}.`);
     } catch (err: any) {
-      setTelephonyMessage(err.message || "Could not start the Retell phone call.");
+      setTelephonyMessage(err.message || "Could not start the Omniweb AI phone call.");
     } finally {
       setTelephonyCalling(false);
     }
@@ -925,19 +925,19 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
             <CardHeader>
               <CardTitle>AI Telephony</CardTitle>
               <CardDescription>
-                Use the same AI voice agent over the phone. Retell calls the customer from your configured number and can escalate to the owner&apos;s phone.
+                Use the same Omniweb AI voice agent over the phone. Omniweb AI calls the customer from your configured number and can escalate to the owner&apos;s phone.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Retell agent ID</Label>
+                  <Label>Omniweb AI phone agent ID</Label>
                   <Input
                     value={config.retell_agent_id || ""}
                     onChange={(e) => update("retell_agent_id", e.target.value)}
                     placeholder="agent_xxxxxxxxx"
                   />
-                  <p className="text-xs text-muted-foreground">Telephony uses the same Retell agent as AI Voice.</p>
+                  <p className="text-xs text-muted-foreground">Telephony uses the same AI brain as your Omniweb voice agent.</p>
                 </div>
                 <div className="space-y-2">
                   <Label>AI telephone number</Label>
@@ -946,7 +946,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
                     onChange={(e) => updateTelephonyWidget("phone_number", e.target.value)}
                     placeholder="+15551234567"
                   />
-                  <p className="text-xs text-muted-foreground">This is the Retell/Twilio number customers see calls from.</p>
+                  <p className="text-xs text-muted-foreground">This is the Omniweb AI phone number customers see calls from.</p>
                 </div>
               </div>
 
@@ -992,7 +992,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
                   <h3 className="font-medium">Call Us widget preview</h3>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  The storefront widget asks the visitor for their phone number, then Retell calls them and starts the AI conversation.
+                  The storefront widget asks the visitor for their phone number, then Omniweb AI calls them and starts the AI conversation.
                 </p>
                 <div className="flex gap-2">
                   <Input
@@ -1011,7 +1011,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
               </div>
 
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-                Save & Deploy after editing. Retell transfer requires the Retell agent to have phone-transfer capability/tooling enabled; this page supplies the human transfer number and prompt context.
+                Save & Deploy after editing. Human transfer uses the phone number and prompt context supplied on this page.
               </div>
             </CardContent>
           </Card>
@@ -1024,7 +1024,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
             <CardHeader>
               <CardTitle>Agent Status</CardTitle>
               <CardDescription>
-                {config.retell_agent_id ? "Your AI agent is live and ready" : "Add your Retell agent ID in Brain settings to go live"}
+                {config.retell_agent_id ? "Your AI agent is live and ready" : "Add your Omniweb AI phone agent ID to go live"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1038,7 +1038,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
               ) : (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <AlertCircle className="w-4 h-4" />
-                  <span className="text-sm">Add your Retell agent ID, save, then embed the script below</span>
+                  <span className="text-sm">Add your Omniweb AI phone agent ID, save, then embed the script below</span>
                 </div>
               )}
             </CardContent>

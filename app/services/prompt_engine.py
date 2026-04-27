@@ -504,7 +504,7 @@ def compose_greeting(
         "customer_service": f"Hey there! I'm {agent_name} from {business_name or 'our team'}. I'm here to get things sorted quickly — what's going on?",
         "appointment_setter": f"Getting in early makes a real difference — most of our best slots fill up fast. I'm {agent_name} with {business_name or 'our office'}, and I can get you booked right now.",
         "intake_specialist": f"Getting started is quick and easy — I'm {agent_name} from {business_name or 'our office'}, and I'll walk you through everything step by step so there's no guesswork.",
-        "general_assistant": f"Hey! I'm {agent_name} from {business_name or 'our team'}. I help people get answers fast and move forward. What's on your mind?",
+        "general_assistant": "Thank you for visiting our website today... it will be my pleasure to help you",
     }
 
     return generic_greetings.get(mode, generic_greetings["general_assistant"])

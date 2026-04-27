@@ -66,7 +66,7 @@ export function OnboardingFlow({ onComplete }: OnboardingProps) {
         website_domain: websiteDomain,
         agent_greeting:
           greeting ||
-          `Hi! Thanks for visiting${businessName ? ` ${businessName}` : ""}. How can I help you today?`,
+          "Thank you for visiting our website today... it will be my pleasure to help you",
         system_prompt: systemPrompt,
         business_type: businessType,
       });
@@ -214,7 +214,7 @@ export function OnboardingFlow({ onComplete }: OnboardingProps) {
                 <Textarea
                   value={greeting}
                   onChange={(e) => setGreeting(e.target.value)}
-                  placeholder="Hi! Thanks for visiting. How can I help you today?"
+                  placeholder="Thank you for visiting our website today... it will be my pleasure to help you"
                   rows={2}
                 />
                 <p className="text-[11px] text-muted-foreground">

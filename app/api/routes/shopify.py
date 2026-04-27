@@ -1155,14 +1155,8 @@ async def _build_welcome_message(
     config = result.scalar_one_or_none()
     business_name = config.business_name if config and config.business_name else store.shop_domain.split(".")[0].replace("-", " ").title()
     agent_name = config.agent_name if config else "Ava"
-    base = compose_greeting(
-        industry_slug="ecommerce",
-        agent_mode="ecommerce_assistant",
-        agent_name=agent_name,
-        business_name=business_name,
-    )
     behavior_summary = ShopifyAssistantService.build_behavior_summary(context.model_dump(exclude_none=True))
-    greeting = f"Hi! Welcome to {business_name}. {base} How can I help you today?"
+    greeting = "Thank you for visiting our website today... it will be my pleasure to help you"
     greeting = ShopifyAssistantService.localized_copy_for_context(
         "welcome",
         context.model_dump(exclude_none=True),

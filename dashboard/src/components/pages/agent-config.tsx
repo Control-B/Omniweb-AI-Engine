@@ -393,7 +393,7 @@ export function AgentConfigPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Greeting Message</Label>
-              <Textarea value={config.agent_greeting || ""} onChange={(e) => update("agent_greeting", e.target.value)} placeholder="Hi, I'd love to help you today..." rows={3} />
+              <Textarea value={config.agent_greeting || ""} onChange={(e) => update("agent_greeting", e.target.value)} placeholder="Thank you for visiting our website today... it will be my pleasure to help you" rows={3} />
               <p className="text-xs text-muted-foreground">The first thing your agent says when a call or chat begins</p>
             </div>
             <div className="space-y-1.5">

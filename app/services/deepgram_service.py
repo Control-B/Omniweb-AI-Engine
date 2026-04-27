@@ -202,7 +202,7 @@ def _opening_greeting(config: AgentConfig) -> str:
 
     agent_name = (config.agent_name or "your AI assistant").strip()
     business_name = (config.business_name or "our business").strip()
-    return f"Hello, this is {agent_name} from {business_name}. How can I help you today?"
+    return "Thank you for visiting our website today... it will be my pleasure to help you"
 
 
 def _localized_opening_greeting(config: AgentConfig, lang_tag: str) -> str:

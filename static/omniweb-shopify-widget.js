@@ -78,6 +78,15 @@
     ["su", "🇮🇩 Sundanese"],
   ]
   let selectedLanguage = detectDefaultLanguage()
+  const DEFAULT_WELCOME_MESSAGE = "Thank you for visiting our website today... it will be a pleasure to help you?"
+  const STALE_GENERIC_PATTERNS = [
+    "problem you're trying to solve",
+    "problem you are trying to solve",
+    "understand your needs",
+    "recommend the right solution",
+    "move forward faster by text or voice",
+    "talk to me",
+  ]
 
   /* ── Styles ───────────────────────────────────────────────────── */
   const STYLE = document.createElement("style")
@@ -374,7 +383,7 @@
       clientId = data.client_id || null
       endpoints = data.endpoints || {}
       telephonyConfig = data.telephony_config || {}
-      greeting = data.greeting || "Thank you for visiting our website today... it will be my pleasure to help you"
+      greeting = normalizeAssistantCopy(data.greeting || DEFAULT_WELCOME_MESSAGE)
       if (!data.assistant_enabled) {
         launcher.style.display = "none"
         win.classList.add("hidden")
@@ -525,7 +534,7 @@
       })
       const data = await res.json()
       sessionId = data.session_id
-      appendMsg("assistant", data.welcome_message || greeting)
+      appendMsg("assistant", normalizeAssistantCopy(data.welcome_message || greeting))
     } catch (err) {
       appendMsg("system", "Couldn't start session. Please try again.")
       console.error("[Omniweb] session error", err)
@@ -689,9 +698,19 @@
     const box = document.getElementById("omniweb-voice-transcript")
     if (!box) return
     const line = el("div", { className: `omniweb-voice-line ${role}` })
-    line.textContent = text
+    line.textContent = role === "assistant" ? normalizeAssistantCopy(text) : text
     box.appendChild(line)
     box.scrollTop = box.scrollHeight
+  }
+
+  function normalizeAssistantCopy(text) {
+    const value = String(text || "").trim()
+    if (!value) return DEFAULT_WELCOME_MESSAGE
+    const normalized = value.toLowerCase().replace(/[’]/g, "'").replace(/\s+/g, " ")
+    if (STALE_GENERIC_PATTERNS.some((pattern) => normalized.includes(pattern))) {
+      return DEFAULT_WELCOME_MESSAGE
+    }
+    return value
   }
 
   function audioContextClass() {
@@ -924,7 +943,7 @@
 
   function appendMsg(role, text) {
     const div = el("div", { className: `omniweb-msg ${role}` })
-    div.textContent = text
+    div.textContent = role === "assistant" ? normalizeAssistantCopy(text) : text
     msgBox.appendChild(div)
     msgBox.scrollTop = msgBox.scrollHeight
   }

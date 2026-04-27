@@ -53,6 +53,28 @@ type BootstrapPayload = {
   settings: Record<string, unknown>;
 };
 
+const DEFAULT_WELCOME_MESSAGE =
+  "Thank you for visiting our website today... it will be a pleasure to help you?";
+
+const STALE_GENERIC_PATTERNS = [
+  "problem you're trying to solve",
+  "problem you are trying to solve",
+  "understand your needs",
+  "recommend the right solution",
+  "move forward faster by text or voice",
+  "talk to me",
+];
+
+function normalizeAssistantCopy(text: string): string {
+  const value = String(text || "").trim();
+  if (!value) return DEFAULT_WELCOME_MESSAGE;
+  const normalized = value.toLowerCase().replace(/[’]/g, "'").replace(/\s+/g, " ");
+  if (STALE_GENERIC_PATTERNS.some((pattern) => normalized.includes(pattern))) {
+    return DEFAULT_WELCOME_MESSAGE;
+  }
+  return value;
+}
+
 export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [langs, setLangs] = useState<LangOption[]>([]);
@@ -173,7 +195,12 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
         const payload = await bootstrap();
         const session = new DeepgramVoiceAgentSession({
           onTranscript: (line) => {
-            setLines((prev) => [...prev, line]);
+            setLines((prev) => [
+              ...prev,
+              line.role === "assistant"
+                ? { ...line, content: normalizeAssistantCopy(line.content) }
+                : line,
+            ]);
           },
           onError: (m) => setErrorMsg(m),
           onClose: () => {

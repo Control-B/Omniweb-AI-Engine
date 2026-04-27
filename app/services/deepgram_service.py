@@ -195,14 +195,28 @@ def _language_name(lang_tag: str) -> str:
     return LANGUAGE_NAMES.get(lang_tag.lower().split("-")[0], lang_tag)
 
 
+DEFAULT_OPENING_GREETING = "Thank you for visiting our website today... it will be a pleasure to help you?"
+
+
+def _is_stale_generic_greeting(text: str) -> bool:
+    normalized = " ".join((text or "").lower().replace("’", "'").split())
+    stale_markers = [
+        "problem you're trying to solve",
+        "problem you are trying to solve",
+        "understand your needs",
+        "recommend the right solution",
+        "move forward faster by text or voice",
+        "talk to me",
+    ]
+    return any(marker in normalized for marker in stale_markers)
+
+
 def _opening_greeting(config: AgentConfig) -> str:
     greeting = (config.agent_greeting or "").strip()
-    if greeting:
+    if greeting and not _is_stale_generic_greeting(greeting):
         return greeting
 
-    agent_name = (config.agent_name or "your AI assistant").strip()
-    business_name = (config.business_name or "our business").strip()
-    return "Thank you for visiting our website today... it will be my pleasure to help you"
+    return DEFAULT_OPENING_GREETING
 
 
 def _localized_opening_greeting(config: AgentConfig, lang_tag: str) -> str:

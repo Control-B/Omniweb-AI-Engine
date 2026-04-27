@@ -1,8 +1,10 @@
 .omni-app-frame {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top right, rgba(0, 128, 96, 0.08), transparent 32rem),
-    linear-gradient(180deg, #f7f7f8 0%, #ffffff 56%);
+    radial-gradient(circle at 12% 0%, rgba(79, 70, 229, 0.16), transparent 28rem),
+    radial-gradient(circle at 100% 10%, rgba(0, 128, 96, 0.18), transparent 32rem),
+    radial-gradient(circle at 60% 100%, rgba(250, 204, 21, 0.12), transparent 30rem),
+    linear-gradient(180deg, #f4f7fb 0%, #ffffff 48%, #f8fbff 100%);
 }
 
 .omni-page-shell {
@@ -11,32 +13,183 @@
 }
 
 .omni-hero-card {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(79, 70, 229, 0.16);
+  border-radius: 22px;
   background:
-    linear-gradient(135deg, rgba(0, 128, 96, 0.12), rgba(250, 204, 21, 0.13)),
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.9), transparent 18rem),
+    linear-gradient(135deg, rgba(79, 70, 229, 0.16), rgba(0, 128, 96, 0.14), rgba(250, 204, 21, 0.16)),
     #ffffff;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.07);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.10);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.omni-hero-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -6rem -8rem auto;
+  width: 18rem;
+  height: 18rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.18), transparent 68%);
+  pointer-events: none;
+}
+
+.omni-hero-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(79, 70, 229, 0.28);
+  box-shadow: 0 30px 82px rgba(15, 23, 42, 0.14);
 }
 
 .omni-hero-card__inner {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 1.25rem;
   align-items: center;
-  padding: 1.25rem;
+  padding: 1.5rem;
 }
 
 .omni-card-accent {
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #008060, #95bf47);
+  background: linear-gradient(90deg, #4f46e5, #008060, #95bf47);
+  box-shadow: 0 0 18px rgba(79, 70, 229, 0.28);
 }
 
 .omni-muted-panel {
   border-radius: 12px;
-  background: #f6f6f7;
+  border: 1px solid rgba(79, 70, 229, 0.10);
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.06), rgba(0, 128, 96, 0.05));
   padding: 1rem;
+}
+
+.omni-value-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.omni-value-pill {
+  border: 1px solid rgba(79, 70, 229, 0.14);
+  border-radius: 18px;
+  padding: 1rem;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.88)),
+    radial-gradient(circle at top right, rgba(0, 128, 96, 0.12), transparent 10rem);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.omni-value-pill:hover {
+  transform: translateY(-3px);
+  border-color: rgba(79, 70, 229, 0.34);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.10);
+}
+
+.omni-value-pill__kicker {
+  margin-bottom: 0.35rem;
+  color: #4f46e5;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.omni-pricing-card {
+  height: 100%;
+  border-radius: 22px;
+  padding: 1px;
+  background: linear-gradient(145deg, rgba(148, 163, 184, 0.35), rgba(255, 255, 255, 0.6));
+  box-shadow: 0 14px 38px rgba(15, 23, 42, 0.08);
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.omni-pricing-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
+}
+
+.omni-pricing-card--featured {
+  background: linear-gradient(145deg, #4f46e5, #008060, #95bf47);
+  box-shadow: 0 24px 70px rgba(79, 70, 229, 0.24);
+}
+
+.omni-pricing-card--current {
+  background: linear-gradient(145deg, #008060, #95bf47);
+}
+
+.omni-pricing-card__surface {
+  height: 100%;
+  border-radius: 21px;
+  background:
+    radial-gradient(circle at top right, rgba(79, 70, 229, 0.10), transparent 13rem),
+    linear-gradient(180deg, #ffffff, #fbfdff);
+  padding: 1.15rem;
+}
+
+.omni-pricing-card--featured .omni-pricing-card__surface {
+  background:
+    radial-gradient(circle at top right, rgba(149, 191, 71, 0.22), transparent 13rem),
+    linear-gradient(180deg, #ffffff, #f7f8ff);
+}
+
+.omni-price-lockup {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+  margin: 0.35rem 0;
+}
+
+.omni-price-lockup__currency {
+  color: #4f46e5;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.omni-price-lockup__amount {
+  color: #111827;
+  font-size: 3rem;
+  font-weight: 850;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+}
+
+.omni-price-lockup__period {
+  color: #6b7280;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.omni-engagement-chip {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  background: rgba(79, 70, 229, 0.09);
+  color: #3730a3;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.omni-engagement-chip::before {
+  content: "";
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: #008060;
+  box-shadow: 0 0 0 4px rgba(0, 128, 96, 0.13);
+}
+
+@media (max-width: 48rem) {
+  .omni-value-strip {
+    grid-template-columns: 1fr;
+  }
 }
 
 .omni-scroll-list {

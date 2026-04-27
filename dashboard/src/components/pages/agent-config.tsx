@@ -13,6 +13,8 @@ import {
   Check,
   Loader2,
   AlertCircle,
+  Search,
+  MapPin,
   Zap,
   Bot,
   Globe,
@@ -24,6 +26,7 @@ import {
   Plus,
   X,
   Mic,
+  Phone,
   PhoneCall,
   Square,
 } from "lucide-react";
@@ -31,7 +34,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Label } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { cn, formatPhone } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
   DeepgramVoiceAgentSession,
@@ -47,6 +50,9 @@ import {
   uploadKbFile,
   deleteKbDocument,
   startRetellPhoneCall,
+  getNumbers,
+  searchAvailableNumbers,
+  buyNumber,
   type WidgetEmbedResponse,
 } from "@/lib/api";
 
@@ -113,6 +119,23 @@ interface AgentConfig {
   [key: string]: any;
 }
 
+interface PhoneNumberRecord {
+  id: string;
+  phone_number: string;
+  friendly_name: string;
+  is_active: boolean;
+  mode?: string;
+  forward_to?: string;
+}
+
+interface AvailableNumber {
+  phone_number: string;
+  friendly_name: string;
+  location?: string;
+  capabilities?: { voice?: boolean; sms?: boolean };
+  monthly_rate?: number;
+}
+
 type AgentConfigTab = "personality" | "voice" | "brain" | "languages" | "knowledge" | "telephony" | "widget" | "test";
 
 export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: AgentConfigTab }) {
@@ -128,6 +151,16 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
   const [telephonyTestNumber, setTelephonyTestNumber] = useState("");
   const [telephonyCalling, setTelephonyCalling] = useState(false);
   const [telephonyMessage, setTelephonyMessage] = useState("");
+  const [telephonyNumbers, setTelephonyNumbers] = useState<PhoneNumberRecord[]>([]);
+  const [telephonyNumbersLoading, setTelephonyNumbersLoading] = useState(false);
+  const [telephonyAreaCode, setTelephonyAreaCode] = useState("");
+  const [telephonyNumberType, setTelephonyNumberType] = useState<"local" | "toll_free">("local");
+  const [telephonySearchResults, setTelephonySearchResults] = useState<AvailableNumber[]>([]);
+  const [telephonySearching, setTelephonySearching] = useState(false);
+  const [telephonyNumberError, setTelephonyNumberError] = useState("");
+  const [telephonyNumberMessage, setTelephonyNumberMessage] = useState("");
+  const [telephonyBuyingNumber, setTelephonyBuyingNumber] = useState<string | null>(null);
+  const [telephonyBuyTarget, setTelephonyBuyTarget] = useState<AvailableNumber | null>(null);
   const [agreedToPolicy, setAgreedToPolicy] = useState(() => {
     try { return localStorage.getItem("omniweb_policy_agreed") === "1"; } catch { return false; }
   });
@@ -183,6 +216,19 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
     }
   }, []);
 
+  const loadTelephonyNumbers = useCallback(async () => {
+    setTelephonyNumbersLoading(true);
+    setTelephonyNumberError("");
+    try {
+      const res = await getNumbers();
+      setTelephonyNumbers(res.numbers || res || []);
+    } catch (err: any) {
+      setTelephonyNumberError(err.message || "Failed to load phone numbers");
+    } finally {
+      setTelephonyNumbersLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
@@ -190,6 +236,10 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
   useEffect(() => {
     if (activeTab === "knowledge") loadKbDocs();
   }, [activeTab, loadKbDocs]);
+
+  useEffect(() => {
+    if (activeTab === "telephony") loadTelephonyNumbers();
+  }, [activeTab, loadTelephonyNumbers]);
 
   const update = (field: string, value: any) => {
     if (!config) return;
@@ -314,6 +364,57 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
       },
     };
     update("widget_config", nextWidget);
+  };
+
+  const selectTelephonyNumber = (phoneNumber: string) => {
+    updateTelephonyWidget("phone_number", phoneNumber);
+    setTelephonyNumberMessage(`${formatPhone(phoneNumber)} selected for AI Telephony. Save & Deploy to publish it.`);
+    setTelephonyNumberError("");
+  };
+
+  const handleTelephonyNumberSearch = async () => {
+    setTelephonySearching(true);
+    setTelephonyNumberError("");
+    setTelephonyNumberMessage("");
+    setTelephonySearchResults([]);
+    setTelephonyBuyTarget(null);
+    try {
+      const res = await searchAvailableNumbers(
+        telephonyAreaCode || undefined,
+        "US",
+        12,
+        telephonyNumberType,
+      );
+      const numbers = res.numbers || [];
+      setTelephonySearchResults(numbers);
+      if (numbers.length === 0) {
+        setTelephonyNumberError("No numbers found. Try a different area code.");
+      }
+    } catch (err: any) {
+      setTelephonyNumberError(err.message || "Could not search available numbers");
+    } finally {
+      setTelephonySearching(false);
+    }
+  };
+
+  const handleTelephonyNumberBuy = async () => {
+    if (!telephonyBuyTarget) return;
+    setTelephonyBuyingNumber(telephonyBuyTarget.phone_number);
+    setTelephonyNumberError("");
+    setTelephonyNumberMessage("");
+    try {
+      const friendlyName = telephonyBuyTarget.friendly_name || "Omniweb AI Phone Line";
+      const purchased = await buyNumber(telephonyBuyTarget.phone_number, friendlyName);
+      const phoneNumber = purchased.phone_number || telephonyBuyTarget.phone_number;
+      selectTelephonyNumber(phoneNumber);
+      setTelephonySearchResults((prev) => prev.filter((n) => n.phone_number !== phoneNumber));
+      setTelephonyBuyTarget(null);
+      await loadTelephonyNumbers();
+    } catch (err: any) {
+      setTelephonyNumberError(err.message || "Could not buy this phone number");
+    } finally {
+      setTelephonyBuyingNumber(null);
+    }
   };
 
   const handleTelephonyTestCall = async () => {
@@ -947,6 +1048,177 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
                     placeholder="+15551234567"
                   />
                   <p className="text-xs text-muted-foreground">This is the Omniweb AI phone number customers see calls from.</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium text-foreground">Get an Omniweb AI phone number</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Search and buy a local or toll-free number, then use it for AI Telephony.
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={loadTelephonyNumbers} disabled={telephonyNumbersLoading}>
+                    {telephonyNumbersLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Refresh"}
+                  </Button>
+                </div>
+
+                {telephonyNumberError && (
+                  <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{telephonyNumberError}</span>
+                  </div>
+                )}
+                {telephonyNumberMessage && (
+                  <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 p-3 text-xs text-primary">
+                    <Check className="w-3.5 h-3.5 shrink-0" />
+                    <span>{telephonyNumberMessage}</span>
+                  </div>
+                )}
+
+                {telephonyNumbers.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Your numbers</p>
+                    <div className="grid md:grid-cols-2 gap-2">
+                      {telephonyNumbers.map((num) => {
+                        const selected = (config.widget_config?.ai_telephony?.phone_number as string) === num.phone_number;
+                        return (
+                          <button
+                            key={num.id}
+                            type="button"
+                            onClick={() => selectTelephonyNumber(num.phone_number)}
+                            className={cn(
+                              "flex items-center gap-3 rounded-lg border p-3 text-left transition-colors",
+                              selected
+                                ? "border-primary/40 bg-primary/10"
+                                : "border-border hover:border-primary/30 hover:bg-accent/30",
+                            )}
+                          >
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                              <Phone className="w-4 h-4 text-primary" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-mono text-sm font-semibold text-foreground">{formatPhone(num.phone_number)}</p>
+                              <p className="truncate text-xs text-muted-foreground">{num.friendly_name || "Omniweb AI line"}</p>
+                            </div>
+                            {selected && <Badge variant="success">Selected</Badge>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div className="flex gap-1 p-0.5 bg-accent/50 rounded-lg w-fit">
+                    <button
+                      type="button"
+                      onClick={() => setTelephonyNumberType("local")}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                        telephonyNumberType === "local"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Local
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTelephonyNumberType("toll_free")}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                        telephonyNumberType === "toll_free"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Toll-Free
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder={telephonyNumberType === "toll_free" ? "Area code, e.g. 800" : "Area code, e.g. 305"}
+                      value={telephonyAreaCode}
+                      onChange={(e) => setTelephonyAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                      className="font-mono"
+                    />
+                    <Button onClick={handleTelephonyNumberSearch} disabled={telephonySearching}>
+                      {telephonySearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      Search
+                    </Button>
+                  </div>
+
+                  {telephonySearchResults.length > 0 && (
+                    <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                      {telephonySearchResults.map((num) => {
+                        const selected = telephonyBuyTarget?.phone_number === num.phone_number;
+                        return (
+                          <div
+                            key={num.phone_number}
+                            className={cn(
+                              "flex items-center gap-3 rounded-lg border p-3",
+                              selected ? "border-primary/40 bg-primary/10" : "border-border",
+                            )}
+                          >
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                              <Phone className="w-4 h-4 text-primary" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-mono text-sm font-semibold text-foreground">{formatPhone(num.phone_number)}</p>
+                              {num.location && (
+                                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <MapPin className="w-3 h-3" /> {num.location}
+                                </p>
+                              )}
+                            </div>
+                            {num.monthly_rate ? (
+                              <span className="text-xs text-muted-foreground">${num.monthly_rate}/mo</span>
+                            ) : null}
+                            <Button
+                              size="sm"
+                              variant={selected ? "default" : "outline"}
+                              onClick={() => setTelephonyBuyTarget(selected ? null : num)}
+                              disabled={telephonyBuyingNumber === num.phone_number}
+                            >
+                              {telephonyBuyingNumber === num.phone_number ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : selected ? (
+                                "Selected"
+                              ) : (
+                                "Select"
+                              )}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {telephonyBuyTarget && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Buy {formatPhone(telephonyBuyTarget.phone_number)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          This purchases the number and fills it into AI Telephony. Save & Deploy when done.
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button onClick={handleTelephonyNumberBuy} disabled={!!telephonyBuyingNumber} size="sm">
+                          {telephonyBuyingNumber ? (
+                            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buying...</>
+                          ) : (
+                            <><Plus className="w-3.5 h-3.5" /> Buy Number</>
+                          )}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setTelephonyBuyTarget(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

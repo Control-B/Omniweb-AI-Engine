@@ -5,7 +5,6 @@ import {
   Banner,
   BlockStack,
   Button,
-  Card,
   Divider,
   InlineGrid,
   Layout,
@@ -111,6 +110,22 @@ export default function Pricing() {
       <div className="omni-page-shell">
         <Layout>
           <Layout.Section>
+            <div className="omni-hero-card">
+              <div className="omni-hero-card__inner">
+                <BlockStack gap="300">
+                  <Badge tone="success">AI Revenue Agent</Badge>
+                  <Text as="h2" variant="headingXl">
+                    Sell, support, and recover shoppers across chat, voice, and phone.
+                  </Text>
+                  <Text as="p" tone="subdued">
+                    Omniweb is positioned as an AI sales teammate, not a commodity chatbot. Every plan is built around guided buying, lead capture, escalation, and higher conversion.
+                  </Text>
+                </BlockStack>
+              </div>
+            </div>
+          </Layout.Section>
+
+          <Layout.Section>
             <Banner title="Billing temporarily paused" tone="warning">
               <p>
                 Shopify subscription checkout is disabled for now so the embedded app can deploy and operate normally. Plans are shown for reference, and billing can be re-enabled after the app is stable.
@@ -130,6 +145,29 @@ export default function Pricing() {
           )}
 
           <Layout.Section>
+            <div className="omni-value-strip">
+              <div className="omni-value-pill">
+                <div className="omni-value-pill__kicker">Conversion First</div>
+                <Text as="p" fontWeight="semibold">
+                  Guides buying decisions, handles objections, and recommends the next best product.
+                </Text>
+              </div>
+              <div className="omni-value-pill">
+                <div className="omni-value-pill__kicker">Multi-Channel</div>
+                <Text as="p" fontWeight="semibold">
+                  Website chat, voice, and AI phone coverage from the same brand experience.
+                </Text>
+              </div>
+              <div className="omni-value-pill">
+                <div className="omni-value-pill__kicker">Human Escalation</div>
+                <Text as="p" fontWeight="semibold">
+                  Sends complex requests to the owner or team by phone and email.
+                </Text>
+              </div>
+            </div>
+          </Layout.Section>
+
+          <Layout.Section>
             <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
               {(
                 Object.entries(PLANS) as [
@@ -138,9 +176,18 @@ export default function Pricing() {
                 ][]
               ).map(([slug, plan]) => {
                 const isCurrent = currentPlan === slug;
+                const isFeatured = "badge" in plan && Boolean(plan.badge);
                 return (
-                  <Card key={slug}>
-                    <BlockStack gap="400">
+                  <div
+                    key={slug}
+                    className={[
+                      "omni-pricing-card",
+                      isFeatured ? "omni-pricing-card--featured" : "",
+                      isCurrent ? "omni-pricing-card--current" : "",
+                    ].filter(Boolean).join(" ")}
+                  >
+                    <div className="omni-pricing-card__surface">
+                      <BlockStack gap="400">
                       <BlockStack gap="200">
                         <Text as="h2" variant="headingLg" fontWeight="bold">
                           {plan.name}
@@ -154,12 +201,11 @@ export default function Pricing() {
                         <Text as="p" tone="subdued">
                           {plan.tagline}
                         </Text>
-                        <Text as="p" variant="heading2xl" fontWeight="bold">
-                          ${plan.price}
-                          <Text as="span" variant="bodyMd" tone="subdued">
-                            /mo
-                          </Text>
-                        </Text>
+                        <div className="omni-price-lockup">
+                          <span className="omni-price-lockup__currency">$</span>
+                          <span className="omni-price-lockup__amount">{plan.price}</span>
+                          <span className="omni-price-lockup__period">/mo</span>
+                        </div>
                         <Text as="p" tone="subdued">
                           7-day free trial
                         </Text>
@@ -175,9 +221,9 @@ export default function Pricing() {
                       <Divider />
 
                       <BlockStack gap="100">
-                        <Text as="p" fontWeight="semibold">
+                        <div className="omni-engagement-chip">
                           {plan.engagements}
-                        </Text>
+                        </div>
                       </BlockStack>
 
                       <List type="bullet">
@@ -194,7 +240,8 @@ export default function Pricing() {
                         {isCurrent ? "Current plan" : "Billing paused"}
                       </Button>
                     </BlockStack>
-                  </Card>
+                    </div>
+                  </div>
                 );
               })}
             </InlineGrid>

@@ -1,5 +1,5 @@
 import { json } from "@remix-run/node";
-import { Form, useLoaderData, useActionData } from "@remix-run/react";
+import { useLoaderData } from "@remix-run/react";
 import {
   Badge,
   Banner,
@@ -69,176 +69,57 @@ const PLANS = {
   },
 } as const;
 
-function planSlugFromShopifyName(name: string): keyof typeof PLANS {
-  if (name === GROWTH_PLAN) return "growth";
-  if (name === PRO_PLAN) return "pro";
-  return "starter";
-}
-
-function subscriptionStatusForDb(
-  status: string,
-): "active" | "trialing" | string {
-  const u = status.toUpperCase();
-  if (u === "ACTIVE" || u === "ACCEPTED") return "active";
-  if (u === "PENDING") return "trialing";
-  return status.toLowerCase();
-}
-
-const BILLING_PLANS = [STARTER_PLAN, GROWTH_PLAN, PRO_PLAN] as const;
-
-/** Shopify Billing GraphQL often returns 403 when Managed app pricing is on (Partner Dashboard). */
-function httpStatusFromUnknown(err: unknown): number | undefined {
-  if (!err || typeof err !== "object") return undefined;
-  const r = (err as { response?: { code?: unknown } }).response;
-  if (r && typeof r === "object" && typeof r.code === "number") return r.code;
-  return undefined;
-}
-
-const BILLING_403_HINT =
-  "Shopify blocked the billing API (403). If this app uses Managed app pricing in the Shopify Partner Dashboard, turn it off to allow in-app subscriptions, or define plans only in the Partner Dashboard. Otherwise confirm the store can accept app charges.";
-
 export async function loader({ request }: { request: Request }) {
-  const { session, billing } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = await prisma.shop.findUnique({
     where: { shopDomain: session.shop },
     include: { subscription: true },
   });
 
-  let currentPlan: keyof typeof PLANS =
+  const currentPlan: keyof typeof PLANS =
     (shop?.subscription?.plan as keyof typeof PLANS) || "starter";
-  let status = shop?.subscription?.status || "trialing";
-  let billingApiWarning: string | null = null;
+  const status = shop?.subscription?.status || "trialing";
 
-  const isTest = process.env.NODE_ENV !== "production";
-  const skipBillingApi = process.env.SHOPIFY_SKIP_BILLING_API === "true";
-
-  if (!skipBillingApi) {
-    try {
-      const check = await billing.check({
-        plans: [...BILLING_PLANS],
-        isTest,
-      });
-
-      if (check.hasActivePayment && check.appSubscriptions.length > 0 && shop) {
-        const sub = check.appSubscriptions[0];
-        const slug = planSlugFromShopifyName(sub.name);
-        const dbStatus = subscriptionStatusForDb(sub.status);
-
-        await prisma.subscription.upsert({
-          where: { shopId: shop.id },
-          update: {
-            plan: slug,
-            status: dbStatus,
-            shopifySubscriptionGid: sub.id,
-          },
-          create: {
-            shopId: shop.id,
-            plan: slug,
-            status: dbStatus,
-            shopifySubscriptionGid: sub.id,
-          },
-        });
-
-        currentPlan = slug;
-        status = dbStatus;
-      }
-    } catch (err) {
-      const code = httpStatusFromUnknown(err);
-      if (code === 403) {
-        billingApiWarning = BILLING_403_HINT;
-        console.warn("[pricing] billing.check 403 — using DB only. " + BILLING_403_HINT);
-      } else {
-        console.error("[pricing] billing.check failed (using DB cache):", err);
-      }
-    }
-  }
-
-  return json({ currentPlan, status, billingApiWarning });
+  return json({ currentPlan, status });
 }
 
 /**
- * Opens Shopify's app subscription approval flow (merchant pays via Shopify invoice).
- * Use Shopify's explicit charge approval flow so the merchant always sees payment.
+ * Billing is intentionally disabled while the app stabilizes. Shopify Billing API
+ * can be re-enabled once Partner Dashboard pricing mode is confirmed.
  */
 export async function action({ request }: { request: Request }) {
-  if (process.env.SHOPIFY_SKIP_BILLING_API === "true") {
-    return json({
-      error:
-        "Billing API is disabled (SHOPIFY_SKIP_BILLING_API). Use Partner Dashboard pricing or unset this variable.",
-    });
-  }
-
-  try {
-    const { billing, session } = await authenticate.admin(request);
-    const form = await request.formData();
-    const planKey = String(form.get("plan") || "starter") as keyof typeof PLANS;
-    const selected = PLANS[planKey] || PLANS.starter;
-    const isTest = process.env.NODE_ENV !== "production";
-    const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
-    const returnUrl = appUrl
-      ? `${appUrl}/app/pricing?shop=${encodeURIComponent(session.shop)}`
-      : undefined;
-
-    await billing.request({
-      plan: selected.name,
-      isTest,
-      returnUrl,
-    });
-  } catch (err) {
-    if (err instanceof Response) throw err;
-    if (httpStatusFromUnknown(err) === 403) {
-      return json({ error: BILLING_403_HINT });
-    }
-    const msg =
-      err instanceof Error ? err.message : "Could not open Shopify billing.";
-    return json({ error: msg });
-  }
-  return json({ error: "Unexpected: billing did not redirect." });
+  await authenticate.admin(request);
+  return json({
+    error:
+      "Billing is temporarily disabled while the Shopify app deployment is stabilized. Your app features remain available.",
+  });
 }
 
 export default function Pricing() {
-  const { currentPlan, status, billingApiWarning } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const { currentPlan, status } = useLoaderData<typeof loader>();
 
   return (
     <Page
       fullWidth
       title="Pricing"
-      subtitle="Plans bill through Shopify: you approve the subscription once in Shopify, and charges appear on your regular Shopify invoice."
+      subtitle="Pricing is visible while Shopify Billing is temporarily paused during launch stabilization."
     >
       <div className="omni-page-shell">
         <Layout>
-          {billingApiWarning && (
-            <Layout.Section>
-              <Banner title="Billing API unavailable from Shopify" tone="warning">
-                <p>{billingApiWarning}</p>
-              </Banner>
-            </Layout.Section>
-          )}
           <Layout.Section>
-            <Banner title="Shopify subscription billing" tone="info">
+            <Banner title="Billing temporarily paused" tone="warning">
               <p>
-                When you choose a plan, Shopify opens a secure page to approve the app
-                charge. Payment is handled entirely by Shopify — not a separate card
-                form on our site.
+                Shopify subscription checkout is disabled for now so the embedded app can deploy and operate normally. Plans are shown for reference, and billing can be re-enabled after the app is stable.
               </p>
             </Banner>
           </Layout.Section>
-
-          {actionData && "error" in actionData && actionData.error && (
-            <Layout.Section>
-              <Banner title="Could not start billing" tone="critical">
-                <p>{actionData.error}</p>
-              </Banner>
-            </Layout.Section>
-          )}
 
           {status === "trialing" && (
             <Layout.Section>
               <Banner title="Free trial" tone="info">
                 <p>
-                  Your trial is active. Pick a plan below to link a Shopify subscription
-                  for when the trial ends.
+                  Your trial is active. Plans are shown below for reference while
+                  Shopify subscription checkout is paused.
                 </p>
               </Banner>
             </Layout.Section>
@@ -295,21 +176,13 @@ export default function Pricing() {
                         ))}
                       </List>
 
-                      <Form method="post">
-                        <input type="hidden" name="plan" value={slug} />
-                        <Button
-                          submit
-                          variant={isCurrent ? "secondary" : "primary"}
-                          fullWidth
-                          disabled={isCurrent && status === "active"}
-                        >
-                          {isCurrent && status === "active"
-                            ? "Current plan"
-                            : isCurrent
-                              ? "Confirm with Shopify"
-                              : `Subscribe with Shopify — ${plan.name}`}
-                        </Button>
-                      </Form>
+                      <Button
+                        variant={isCurrent ? "secondary" : "primary"}
+                        fullWidth
+                        disabled
+                      >
+                        {isCurrent ? "Current plan" : "Billing paused"}
+                      </Button>
                     </BlockStack>
                   </Card>
                 );

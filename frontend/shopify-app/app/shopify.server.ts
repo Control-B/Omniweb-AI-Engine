@@ -2,7 +2,6 @@ import "@shopify/shopify-app-remix/adapters/node";
 import {
   ApiVersion,
   AppDistribution,
-  BillingInterval,
   DeliveryMethod,
   shopifyApp,
 } from "@shopify/shopify-app-remix/server";
@@ -22,38 +21,6 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
-  billing: {
-    [STARTER_PLAN]: {
-      lineItems: [
-        {
-          amount: 149,
-          currencyCode: "USD",
-          interval: BillingInterval.Every30Days,
-        },
-      ],
-      trialDays: 7,
-    },
-    [GROWTH_PLAN]: {
-      lineItems: [
-        {
-          amount: 299,
-          currencyCode: "USD",
-          interval: BillingInterval.Every30Days,
-        },
-      ],
-      trialDays: 7,
-    },
-    [PRO_PLAN]: {
-      lineItems: [
-        {
-          amount: 499,
-          currencyCode: "USD",
-          interval: BillingInterval.Every30Days,
-        },
-      ],
-      trialDays: 7,
-    },
-  },
   future: {
     unstable_newEmbeddedAuthStrategy: true,
   },
@@ -61,10 +28,6 @@ const shopify = shopifyApp({
     APP_UNINSTALLED: {
       deliveryMethod: DeliveryMethod.Http,
       callbackUrl: "/webhooks/app/uninstalled",
-    },
-    APP_SUBSCRIPTIONS_UPDATE: {
-      deliveryMethod: DeliveryMethod.Http,
-      callbackUrl: "/webhooks/app/subscriptions/update",
     },
   },
   hooks: {

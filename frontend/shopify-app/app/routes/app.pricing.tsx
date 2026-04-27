@@ -169,15 +169,20 @@ export async function action({ request }: { request: Request }) {
   }
 
   try {
-    const { billing } = await authenticate.admin(request);
+    const { billing, session } = await authenticate.admin(request);
     const form = await request.formData();
     const planKey = String(form.get("plan") || "starter") as keyof typeof PLANS;
     const selected = PLANS[planKey] || PLANS.starter;
     const isTest = process.env.NODE_ENV !== "production";
+    const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
+    const returnUrl = appUrl
+      ? `${appUrl}/app/pricing?shop=${encodeURIComponent(session.shop)}`
+      : undefined;
 
     await billing.request({
       plan: selected.name,
       isTest,
+      returnUrl,
     });
   } catch (err) {
     if (err instanceof Response) throw err;

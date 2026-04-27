@@ -257,7 +257,11 @@ def build_voice_agent_settings(
         f"The voice session must begin with this complete welcome message. Do not shorten it, "
         f"skip the agent name, skip the business name, or replace it with a generic greeting:\n"
         f"\"{opening_greeting}\"\n\n"
-        f"After the welcome message, wait for the user."
+        f"After the welcome message, wait for the user.\n\n"
+        f"## Voice Focus And Background Noise\n"
+        f"Treat short, unclear, distant, overlapping, or background speech as noise. "
+        f"Only answer when a single nearby shopper clearly addresses the assistant. "
+        f"If the input is unclear, ask the shopper to repeat instead of guessing."
     )
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
     # Languages explicitly supported by Deepgram nova-3 STT with a named code.

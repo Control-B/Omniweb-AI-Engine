@@ -138,9 +138,12 @@ export class DeepgramVoiceAgentSession {
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: false,
           sampleRate: 16000,
+          // Supported by Safari/Chrome on some devices; ignored elsewhere.
+          voiceIsolation: true,
         },
-      });
+      } as MediaStreamConstraints);
       this.micContext = new AudioContextClass();
       await this.micContext.resume();
       this.micSource = this.micContext.createMediaStreamSource(stream);
@@ -151,6 +154,8 @@ export class DeepgramVoiceAgentSession {
       this.processor.onaudioprocess = (ev) => {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.settingsApplied) return;
         const ch = ev.inputBuffer.getChannelData(0);
+        const rms = Math.sqrt(ch.reduce((sum, sample) => sum + sample * sample, 0) / ch.length);
+        if (rms < 0.008) return;
         const pcm = float32To16kHzPcm(ch, inRate);
         if (pcm.byteLength) this.ws.send(pcm);
       };

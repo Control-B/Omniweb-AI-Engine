@@ -657,7 +657,14 @@ class ShopifyAssistantService:
         system += (
             "\n\nUse concise conversational responses (2-3 short sentences). "
             "Act as a multilingual digital sales associate. "
-            "If you cite policy/factual details, ground them in provided context."
+            "If you cite policy/factual details, ground them in provided context. "
+            "Guide buying decisions based on the store owner's instructions, knowledge base, and the shopper's stated need. "
+            "Recommend best-fit products, useful add-ons, bundles, upgrades, and complementary items from within the website. "
+            "Handle objections about price, fit, sizing, timing, shipping, returns, or trust by acknowledging the concern, reducing risk, and giving a clear next step. "
+            "Recover hesitation by simplifying the choice and explaining why the recommended option fits. "
+            "Move high-intent shoppers toward cart or checkout, but only guide them; never process payment, complete checkout, issue refunds, or make financial decisions. "
+            "Optimize for higher conversion, lower bounce, and higher average order value without being pushy or misleading. "
+            "If you cannot handle something or it needs store approval, ask for the shopper's email and escalate to a human."
         )
 
         if recommendations:
@@ -712,6 +719,12 @@ class ShopifyAssistantService:
     @staticmethod
     def build_support_response(intent: str, context: dict[str, Any], store: ShopifyStore) -> str:
         policies = {**(store.support_policy or {}), **(context.get("support_context") or {})}
+        support_email = store.support_email or store.shop_email
+        human_handoff = (
+            f"If this needs a human, I can have the team follow up by email at {support_email}."
+            if support_email
+            else "If this needs a human, share your email and I can have the team follow up."
+        )
         if intent == "shipping_policy":
             return policies.get(
                 "shipping",
@@ -734,7 +747,7 @@ class ShopifyAssistantService:
             )
         if intent == "payment_guardrail":
             return "I can guide you to checkout and help with the steps, but you'll enter payment details securely yourself on Shopify checkout."
-        return "I can answer most product, shipping, returns, and checkout questions in real time and guide you to the right page."
+        return f"I can answer most product, shipping, returns, and checkout questions in real time and guide you to the right page. {human_handoff}"
 
     @staticmethod
     def suggest_discount_value(context: dict[str, Any]) -> float:

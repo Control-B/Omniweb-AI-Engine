@@ -73,13 +73,37 @@ const RESPONSE_LENGTH_OPTIONS = [
 
 const DEFAULT_GREETING = "Thank you for visiting our website today... it will be my pleasure to help you";
 
+function buildKnowledgeContext(
+  sources: Array<{ url: string | null; details?: string | null; status: string }>,
+) {
+  const usable = sources.filter((source) => source.url || (source.details || "").trim());
+  if (!usable.length) return "";
+
+  return usable
+    .map((source, index) => {
+      const details = (source.details || "").trim();
+      return [
+        `Knowledge source ${index + 1}: ${source.url || "Manual subscriber notes"}`,
+        `Status: ${source.status}`,
+        details ? `Subscriber details: ${details}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n");
+}
+
 export async function loader({ request }: { request: Request }) {
   const { session } = await authenticate.admin(request);
   const shop = await prisma.shop.upsert({
     where: { shopDomain: session.shop },
     update: {},
     create: { shopDomain: session.shop, status: "installed" },
-    include: { agentConfig: true, subscription: true },
+    include: {
+      agentConfig: true,
+      subscription: true,
+      knowledgeSources: { orderBy: { updatedAt: "desc" } },
+    },
   });
 
   const engineUrl = process.env.ENGINE_URL || "https://omniweb-engine-rs6fr.ondigitalocean.app";
@@ -98,7 +122,7 @@ export async function action({ request }: { request: Request }) {
       where: { shopDomain: session.shop },
       update: { status: "installed" },
       create: { shopDomain: session.shop, status: "installed" },
-      include: { subscription: true },
+      include: { subscription: true, knowledgeSources: true },
     });
 
     const languagesRaw = String(form.get("supportedLanguages") || "en");
@@ -145,7 +169,12 @@ export async function action({ request }: { request: Request }) {
         plan: shop.subscription?.plan || "starter",
         subscription_status: shop.subscription?.status || "trialing",
         assistant_enabled: true,
-        agent_config: { ...config, primaryGoals: goalsRaw, responseLength: form.get("responseLength") },
+        agent_config: {
+          ...config,
+          primaryGoals: goalsRaw,
+          responseLength: form.get("responseLength"),
+          knowledgeContext: buildKnowledgeContext(shop.knowledgeSources),
+        },
       });
 
       if (engineSync.client_id && engineSync.client_id !== shop.engineClientId) {
@@ -170,6 +199,12 @@ export default function AgentSettings() {
   const actionData = useActionData<typeof action>();
   const nav = useNavigation();
   const config = shop.agentConfig;
+  const knowledgeSources = (shop.knowledgeSources || []) as Array<
+    (typeof shop.knowledgeSources)[number] & { details?: string | null }
+  >;
+  const knowledgeWithDetails = knowledgeSources.filter(
+    (source) => (source.details || "").trim() || source.url,
+  );
 
   const [agentName, setAgentName] = useState(config?.agentName || "Omniweb AI");
   const [businessName, setBusinessName] = useState(config?.businessName || "");
@@ -408,6 +443,49 @@ export default function AgentSettings() {
                 <Text as="p" tone="subdued">
                   Settings sync to the DigitalOcean AI Engine on save. The widget uses the saved config for voice, text, multilingual replies, and navigation.
                 </Text>
+              </BlockStack>
+            </Card>
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="h2" variant="headingMd">Knowledge base context</Text>
+                  <Button url="/app/knowledge" size="slim">
+                    Edit KB
+                  </Button>
+                </InlineStack>
+                {knowledgeWithDetails.length === 0 ? (
+                  <Text as="p" tone="subdued">
+                    Add URLs and subscriber details on the Knowledge page. Those notes will sync into the agent when you save.
+                  </Text>
+                ) : (
+                  <BlockStack gap="200">
+                    <Text as="p" tone="subdued">
+                      These sources and subscriber details are included when the agent syncs.
+                    </Text>
+                    <div className="omni-muted-panel">
+                      <BlockStack gap="200">
+                        {knowledgeWithDetails.slice(0, 4).map((source) => (
+                          <BlockStack gap="100" key={source.id}>
+                            <Text as="p" fontWeight="semibold" variant="bodySm" breakWord>
+                              {source.url || "Manual details"}
+                            </Text>
+                            {source.details?.trim() && (
+                              <Text as="p" tone="subdued" variant="bodySm">
+                                {source.details.trim().slice(0, 180)}
+                                {source.details.trim().length > 180 ? "..." : ""}
+                              </Text>
+                            )}
+                          </BlockStack>
+                        ))}
+                      </BlockStack>
+                    </div>
+                    {knowledgeWithDetails.length > 4 && (
+                      <Text as="p" tone="subdued" variant="bodySm">
+                        Plus {knowledgeWithDetails.length - 4} more knowledge sources.
+                      </Text>
+                    )}
+                  </BlockStack>
+                )}
               </BlockStack>
             </Card>
             <Card>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import re
 import uuid
 from datetime import datetime
 from typing import Any
@@ -168,6 +169,7 @@ class EngineKnowledgeJobRequest(BaseModel):
     shop_domain: str
     source_id: str | None = None
     url: str
+    details: str | None = None
 
 
 def _verify_shopify_engine_secret(secret: str | None) -> None:
@@ -249,6 +251,22 @@ async def _get_or_create_shopify_engine_store(
     return store
 
 
+SHOPIFY_KB_DETAILS_START = "## Shopify App Knowledge Details"
+SHOPIFY_KB_DETAILS_END = "## End Shopify App Knowledge Details"
+
+
+def _upsert_shopify_kb_details_context(existing: str | None, details: str) -> str:
+    """Keep subscriber-written KB details in custom_context without deleting crawled summaries."""
+    base = (existing or "").strip()
+    pattern = rf"\n?\n?{re.escape(SHOPIFY_KB_DETAILS_START)}.*?{re.escape(SHOPIFY_KB_DETAILS_END)}"
+    base = re.sub(pattern, "", base, flags=re.DOTALL).strip()
+    details = details.strip()
+    if not details:
+        return base
+    block = f"{SHOPIFY_KB_DETAILS_START}\n{details}\n{SHOPIFY_KB_DETAILS_END}"
+    return f"{base}\n\n{block}".strip() if base else block
+
+
 async def _sync_engine_agent_config(
     db: AsyncSession,
     *,
@@ -279,10 +297,24 @@ async def _sync_engine_agent_config(
         config.agent_greeting = str(payload["greeting"] or config.agent_greeting)
     if payload.get("systemPrompt") is not None:
         config.system_prompt = str(payload["systemPrompt"] or "")
+    if payload.get("knowledgeContext") is not None:
+        config.custom_context = _upsert_shopify_kb_details_context(
+            config.custom_context,
+            str(payload["knowledgeContext"] or ""),
+        )
     if isinstance(payload.get("supportedLanguages"), list):
         config.supported_languages = [str(lang) for lang in payload["supportedLanguages"] if str(lang).strip()] or ["en"]
     if isinstance(payload.get("widgetSettings"), dict):
         config.widget_config = payload["widgetSettings"]
+    if payload.get("retellAgentId") is not None:
+        config.retell_agent_id = str(payload["retellAgentId"] or "") or None
+    if payload.get("handoffPhone") is not None:
+        config.handoff_phone = str(payload["handoffPhone"] or "") or None
+        config.handoff_enabled = bool(config.handoff_phone)
+    if payload.get("handoffEmail") is not None:
+        config.handoff_email = str(payload["handoffEmail"] or "") or None
+    if payload.get("handoffMessage") is not None:
+        config.handoff_message = str(payload["handoffMessage"] or config.handoff_message)
     if not config.business_name:
         config.business_name = shop_domain
     config.business_type = config.business_type or "ecommerce"
@@ -449,7 +481,9 @@ async def enqueue_shopify_knowledge_job(
 
     existing = (config.custom_context or "").strip()
     source_url = ingest.get("source_url") or body.url
-    section = f"Shopify knowledge source: {source_url}\n{summary}"
+    subscriber_details = (body.details or "").strip()
+    detail_block = f"\nSubscriber-provided details:\n{subscriber_details}" if subscriber_details else ""
+    section = f"Shopify knowledge source: {source_url}{detail_block}\nIndexed page summary:\n{summary}"
     config.custom_context = f"{existing}\n\n{section}".strip() if existing else section
     config.website_domain = source_url
     await db.flush()
@@ -547,10 +581,14 @@ async def get_public_storefront_bootstrap(
     context = StorefrontContext(shop_domain=shop_domain)
     greeting = await _build_welcome_message(db, str(store.client_id), context, store)
     public_token = ShopifyStorefrontBridgeService.issue_public_token(store)
+    agent_result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == store.client_id).limit(1))
+    agent_config = agent_result.scalar_one_or_none()
+    widget_config = agent_config.widget_config if agent_config else {}
     return ShopifyStorefrontBridgeService.bootstrap_payload(
         store=store,
         greeting=greeting,
         public_token=public_token,
+        telephony_config=(widget_config or {}).get("ai_telephony") if isinstance(widget_config, dict) else {},
     )
 
 

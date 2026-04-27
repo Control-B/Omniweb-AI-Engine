@@ -76,6 +76,7 @@ export async function enqueueKnowledgeIngestion(input: {
   shop_domain: string;
   source_id: string;
   url: string;
+  details?: string;
 }) {
   return engineFetch<{ ok: boolean; job_id?: string }>("/api/shopify/engine/knowledge-jobs", {
     method: "POST",

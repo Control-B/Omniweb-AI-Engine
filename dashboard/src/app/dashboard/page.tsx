@@ -21,6 +21,7 @@ export type ClientPageId =
   | "calls"
   | "leads"
   | "agent"
+  | "telephony"
   | "numbers"
   | "sites"
   | "automations"
@@ -31,6 +32,7 @@ const CLIENT_PAGES: ClientPageId[] = [
   "calls",
   "leads",
   "agent",
+  "telephony",
   "numbers",
   "sites",
   "automations",
@@ -123,6 +125,7 @@ export default function ClientDashboard() {
         {activePage === "calls" && <CallsPage />}
         {activePage === "leads" && <LeadsPage />}
         {activePage === "agent" && <AgentConfigPage />}
+        {activePage === "telephony" && <AgentConfigPage initialTab="telephony" />}
         {activePage === "numbers" && <NumbersPage />}
           {activePage === "sites" && <SitesPage />}
         {activePage === "automations" && <AutomationsPage />}

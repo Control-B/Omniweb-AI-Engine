@@ -83,6 +83,46 @@ async def create_web_call(*, agent_id: str, metadata: dict[str, Any] | None = No
         return data
 
 
+async def create_phone_call(
+    *,
+    agent_id: str,
+    from_number: str,
+    to_number: str,
+    metadata: dict[str, Any] | None = None,
+    dynamic_variables: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Create an outbound Retell phone call from an owned number to the shopper."""
+    if not settings.RETELL_API_KEY:
+        raise RuntimeError("RETELL_API_KEY is not configured")
+
+    body: dict[str, Any] = {
+        "from_number": from_number,
+        "to_number": to_number,
+        "override_agent_id": agent_id,
+    }
+    if metadata:
+        body["metadata"] = metadata
+    if dynamic_variables:
+        body["retell_llm_dynamic_variables"] = dynamic_variables
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            f"{RETELL_API_BASE}/v2/create-phone-call",
+            headers=_headers(),
+            json=body,
+        )
+        if resp.status_code >= 400:
+            logger.error(
+                "Retell create-phone-call failed",
+                status=resp.status_code,
+                body=resp.text[:500],
+            )
+            resp.raise_for_status()
+        data = resp.json()
+        logger.info("Retell phone call created", agent_id=agent_id, call_id=data.get("call_id"))
+        return data
+
+
 async def patch_agent(agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """PATCH ``/update-agent/{agent_id}`` (partial update)."""
     if not settings.RETELL_API_KEY:

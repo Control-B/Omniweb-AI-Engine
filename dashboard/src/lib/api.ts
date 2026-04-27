@@ -524,6 +524,27 @@ export async function getWidgetEmbed(clientId: string) {
   return apiFetch<WidgetEmbedResponse>(`/agent-config/${clientId}/widget`);
 }
 
+export async function startRetellPhoneCall(input: {
+  clientId: string;
+  toNumber: string;
+  language?: string;
+}) {
+  return apiFetch<{
+    ok: boolean;
+    call_id?: string | null;
+    agent_id: string;
+    from_number: string;
+    to_number: string;
+  }>("/retell/phone-call", {
+    method: "POST",
+    body: JSON.stringify({
+      client_id: input.clientId,
+      to_number: input.toNumber,
+      language: input.language,
+    }),
+  });
+}
+
 export async function getNumbers(clientId?: string) {
   const params = clientId ? `?client_id=${clientId}` : "";
   return apiFetch(`/numbers${params}`);

@@ -24,6 +24,7 @@ import {
   Plus,
   X,
   Mic,
+  PhoneCall,
   Square,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -45,6 +46,7 @@ import {
   createKbFromUrl,
   uploadKbFile,
   deleteKbDocument,
+  startRetellPhoneCall,
   type WidgetEmbedResponse,
 } from "@/lib/api";
 
@@ -99,6 +101,11 @@ interface AgentConfig {
   business_name: string;
   business_type: string;
   retell_agent_id: string | null;
+  handoff_enabled?: boolean;
+  handoff_phone?: string | null;
+  handoff_email?: string | null;
+  handoff_message?: string;
+  widget_config?: Record<string, any>;
   supported_languages: string[];
   primary_goals: string[];
   escalation_email: string;
@@ -106,7 +113,9 @@ interface AgentConfig {
   [key: string]: any;
 }
 
-export function AgentConfigPage() {
+type AgentConfigTab = "personality" | "voice" | "brain" | "languages" | "knowledge" | "telephony" | "widget" | "test";
+
+export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: AgentConfigTab }) {
   const { user } = useAuth();
   const [config, setConfig] = useState<AgentConfig | null>(null);
   const [widget, setWidget] = useState<WidgetEmbedResponse | null>(null);
@@ -115,7 +124,10 @@ export function AgentConfigPage() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"personality" | "voice" | "brain" | "languages" | "knowledge" | "widget" | "test">("personality");
+  const [activeTab, setActiveTab] = useState<AgentConfigTab>(initialTab);
+  const [telephonyTestNumber, setTelephonyTestNumber] = useState("");
+  const [telephonyCalling, setTelephonyCalling] = useState(false);
+  const [telephonyMessage, setTelephonyMessage] = useState("");
   const [agreedToPolicy, setAgreedToPolicy] = useState(() => {
     try { return localStorage.getItem("omniweb_policy_agreed") === "1"; } catch { return false; }
   });
@@ -204,6 +216,11 @@ export function AgentConfigPage() {
         supported_languages: config.supported_languages,
         primary_goals: config.primary_goals,
         escalation_email: config.escalation_email,
+        handoff_enabled: config.handoff_enabled,
+        handoff_phone: config.handoff_phone,
+        handoff_email: config.handoff_email || config.escalation_email,
+        handoff_message: config.handoff_message,
+        widget_config: config.widget_config,
         response_length: config.response_length,
       });
       setSaved(true);
@@ -287,6 +304,36 @@ export function AgentConfigPage() {
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const updateTelephonyWidget = (field: string, value: any) => {
+    if (!config) return;
+    const nextWidget = {
+      ...(config.widget_config || {}),
+      ai_telephony: {
+        ...((config.widget_config || {}).ai_telephony || {}),
+        [field]: value,
+      },
+    };
+    update("widget_config", nextWidget);
+  };
+
+  const handleTelephonyTestCall = async () => {
+    if (!clientId || !telephonyTestNumber.trim()) return;
+    setTelephonyCalling(true);
+    setTelephonyMessage("");
+    try {
+      const res = await startRetellPhoneCall({
+        clientId,
+        toNumber: telephonyTestNumber,
+        language: config.supported_languages?.[0] || "en",
+      });
+      setTelephonyMessage(`Calling ${res.to_number} now from ${res.from_number}.`);
+    } catch (err: any) {
+      setTelephonyMessage(err.message || "Could not start the Retell phone call.");
+    } finally {
+      setTelephonyCalling(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[400px]">
@@ -319,6 +366,7 @@ export function AgentConfigPage() {
     { id: "brain" as const, label: "AI Brain", icon: Brain },
     { id: "languages" as const, label: "Languages", icon: Globe },
     { id: "knowledge" as const, label: "Knowledge", icon: BookOpen },
+    { id: "telephony" as const, label: "AI Telephony", icon: PhoneCall },
     { id: "widget" as const, label: "Embed", icon: Code },
     { id: "test" as const, label: "Test Agent", icon: Mic },
   ];
@@ -866,6 +914,105 @@ export function AgentConfigPage() {
           <p className="text-xs text-muted-foreground px-1">
             Documents are automatically attached to your AI agent. The agent will use this knowledge when answering questions from callers and chat visitors.
           </p>
+        </div>
+      )}
+
+      {activeTab === "telephony" && (
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Telephony</CardTitle>
+              <CardDescription>
+                Use the same AI voice agent over the phone. Retell calls the customer from your configured number and can escalate to the owner&apos;s phone.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Retell agent ID</Label>
+                  <Input
+                    value={config.retell_agent_id || ""}
+                    onChange={(e) => update("retell_agent_id", e.target.value)}
+                    placeholder="agent_xxxxxxxxx"
+                  />
+                  <p className="text-xs text-muted-foreground">Telephony uses the same Retell agent as AI Voice.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>AI telephone number</Label>
+                  <Input
+                    value={(config.widget_config?.ai_telephony?.phone_number as string) || ""}
+                    onChange={(e) => updateTelephonyWidget("phone_number", e.target.value)}
+                    placeholder="+15551234567"
+                  />
+                  <p className="text-xs text-muted-foreground">This is the Retell/Twilio number customers see calls from.</p>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Human escalation phone</Label>
+                  <Input
+                    value={config.handoff_phone || ""}
+                    onChange={(e) => {
+                      update("handoff_phone", e.target.value);
+                      update("handoff_enabled", Boolean(e.target.value.trim()));
+                    }}
+                    placeholder="+15557654321"
+                  />
+                  <p className="text-xs text-muted-foreground">When the AI cannot handle something, it should transfer/escalate here.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Escalation email fallback</Label>
+                  <Input
+                    value={config.handoff_email || config.escalation_email || ""}
+                    onChange={(e) => {
+                      update("handoff_email", e.target.value);
+                      update("escalation_email", e.target.value);
+                    }}
+                    placeholder="owner@example.com"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Escalation message</Label>
+                <Textarea
+                  value={config.handoff_message || ""}
+                  onChange={(e) => update("handoff_message", e.target.value)}
+                  rows={3}
+                  placeholder="Let me connect you with a human who can help with this directly."
+                />
+              </div>
+
+              <div className="rounded-xl border border-border bg-secondary/40 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <PhoneCall className="w-4 h-4 text-primary" />
+                  <h3 className="font-medium">Call Us widget preview</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  The storefront widget asks the visitor for their phone number, then Retell calls them and starts the AI conversation.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    value={telephonyTestNumber}
+                    onChange={(e) => setTelephonyTestNumber(e.target.value)}
+                    placeholder="+15551234567"
+                  />
+                  <Button onClick={handleTelephonyTestCall} disabled={telephonyCalling || !telephonyTestNumber.trim()}>
+                    {telephonyCalling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5" />}
+                    Call me
+                  </Button>
+                </div>
+                {telephonyMessage && (
+                  <p className="text-xs text-muted-foreground">{telephonyMessage}</p>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+                Save & Deploy after editing. Retell transfer requires the Retell agent to have phone-transfer capability/tooling enabled; this page supplies the human transfer number and prompt context.
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 

@@ -88,6 +88,7 @@ model KnowledgeSource {
   type        String
   url         String?
   title       String?
+  details     String   @default("")
   status      String   @default("pending")
   lastIndexedAt DateTime?
   error       String?

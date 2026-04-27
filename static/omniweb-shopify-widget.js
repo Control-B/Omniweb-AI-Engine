@@ -38,6 +38,7 @@
   let voiceBusy = false
   let messages = []
   let sending = false
+  let telephonyConfig = {}
 
   const LANGUAGE_OPTIONS = [
     ["multi", "🌐 Auto"],
@@ -102,6 +103,23 @@
       width:20px;height:20px;border-radius:50%;flex-shrink:0;
       background:conic-gradient(from 135deg,#a5b4fc,#818cf8,#6366f1,#4f46e5,#a5b4fc);
       box-shadow:0 0 10px rgba(165,180,252,.7),inset 0 1px 1px rgba(255,255,255,.4)}
+    #omniweb-call-launcher{
+      position:fixed;bottom:88px;right:24px;z-index:99999;
+      min-width:116px;height:46px;border-radius:999px;border:1px solid rgba(16,185,129,.45);
+      background:linear-gradient(135deg,#064e3b,#10b981);color:#fff;cursor:pointer;
+      display:none;align-items:center;justify-content:center;gap:8px;padding:0 18px;
+      font:700 13px/1 system-ui,sans-serif;box-shadow:0 4px 22px rgba(16,185,129,.35)}
+    #omniweb-call-launcher:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(16,185,129,.5)}
+    #omniweb-call-panel{
+      position:fixed;bottom:144px;right:24px;z-index:99999;width:min(340px,calc(100vw - 20px));
+      border-radius:20px;padding:16px;background:#0c0e1a;border:1px solid rgba(16,185,129,.25);
+      box-shadow:0 20px 60px rgba(0,0,0,.55);font-family:system-ui,sans-serif;color:#f1f5f9}
+    #omniweb-call-panel.hidden{display:none}
+    #omniweb-call-panel h3{margin:0 0 6px;font-size:15px;color:#d1fae5}
+    #omniweb-call-panel p{margin:0 0 12px;font-size:12px;line-height:1.45;color:#94a3b8}
+    #omniweb-call-input{width:100%;box-sizing:border-box;border:1px solid rgba(16,185,129,.25);border-radius:12px;background:rgba(16,185,129,.08);color:#ecfdf5;padding:10px 12px;font-size:14px;outline:none}
+    #omniweb-call-submit{margin-top:10px;width:100%;border:0;border-radius:12px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;padding:11px 12px;font:700 13px/1 system-ui,sans-serif;cursor:pointer}
+    #omniweb-call-status{margin-top:9px;font-size:12px;color:#a7f3d0}
 
     /* ── Chat window ── */
     #omniweb-chat-window{
@@ -248,6 +266,8 @@
     @media(max-width:480px){
       #omniweb-chat-window{right:8px;left:8px;bottom:80px;width:auto}
       #omniweb-launcher{right:14px;bottom:16px}
+      #omniweb-call-launcher{right:14px;bottom:76px}
+      #omniweb-call-panel{right:8px;left:8px;bottom:132px;width:auto}
       #omniweb-chat-header{grid-template-columns:1fr auto auto}}
   `
   document.head.appendChild(STYLE)
@@ -259,6 +279,19 @@
   launcher.innerHTML = `<span class="omniweb-orb"></span><span>Ask AI</span>`
   launcher.onclick = toggleChat
 
+  const callLauncher = el("button", { id: "omniweb-call-launcher" })
+  callLauncher.type = "button"
+  callLauncher.innerHTML = `<span>☎</span><span>Call Us</span>`
+  callLauncher.onclick = toggleCallPanel
+
+  const callPanel = el("div", { id: "omniweb-call-panel", className: "hidden" })
+  callPanel.innerHTML = `
+    <h3>Talk by phone</h3>
+    <p>Enter your phone number and our AI assistant will call you now. If needed, it can escalate to a human team member.</p>
+    <input id="omniweb-call-input" type="tel" placeholder="+15551234567" />
+    <button id="omniweb-call-submit" type="button">Call me now</button>
+    <div id="omniweb-call-status"></div>
+  `
 
   const win = el("div", { id: "omniweb-chat-window", className: "hidden" })
   const header = el("div", { id: "omniweb-chat-header" })
@@ -298,12 +331,13 @@
   sendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>`
   inputRow.append(input, sendBtn)
   win.append(header, modeRow, msgBox, voicePanel, inputRow)
-  document.body.append(launcher, win)
+  document.body.append(launcher, callLauncher, callPanel, win)
   if (HIDE_LAUNCHER) {
     launcher.style.display = "none"
   }
 
   document.getElementById("omniweb-chat-close").onclick = toggleChat
+  document.getElementById("omniweb-call-submit").onclick = startPhoneCall
   document.getElementById("omniweb-language").onchange = (event) => {
     selectedLanguage = event.target.value || "multi"
     if (voiceSession) {
@@ -339,11 +373,15 @@
       tokenExp = Date.now() + 28 * 60 * 1000 // refresh 2 min early
       clientId = data.client_id || null
       endpoints = data.endpoints || {}
+      telephonyConfig = data.telephony_config || {}
       greeting = data.greeting || "Thank you for visiting our website today... it will be my pleasure to help you"
       if (!data.assistant_enabled) {
         launcher.style.display = "none"
         win.classList.add("hidden")
         return
+      }
+      if (telephonyConfig.enabled && clientId) {
+        callLauncher.style.display = "flex"
       }
     } catch (err) {
       console.error("[Omniweb] bootstrap error", err)
@@ -361,6 +399,40 @@
 
   function toggleChat() {
     setChatOpen(minimised)
+  }
+
+  function toggleCallPanel() {
+    callPanel.classList.toggle("hidden")
+  }
+
+  async function startPhoneCall() {
+    const input = document.getElementById("omniweb-call-input")
+    const status = document.getElementById("omniweb-call-status")
+    const phone = (input?.value || "").trim()
+    if (!phone) {
+      status.textContent = "Enter your phone number first."
+      return
+    }
+    status.textContent = "Starting your call..."
+    try {
+      const res = await fetch(`${API}${endpoints.phone_call || "/api/retell/phone-call"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: clientId,
+          to_number: phone,
+          language: selectedLanguage,
+        }),
+      })
+      if (!res.ok) {
+        const raw = await res.text()
+        throw new Error(raw || `Call failed (${res.status})`)
+      }
+      status.textContent = "Calling you now. Please answer the phone."
+    } catch (err) {
+      status.textContent = "We could not start the call. Please try again or use Ask AI."
+      console.error("[Omniweb] phone call error", err)
+    }
   }
 
   function setMode(mode) {

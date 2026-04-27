@@ -18,6 +18,7 @@ import { Loader2 } from "lucide-react";
 export type AdminPageId =
   | "overview"
   | "agent-config"
+  | "ai-telephony"
   | "agents"
   | "sessions"
   | "clients"
@@ -29,6 +30,7 @@ export type AdminPageId =
 const PAGE_PERMISSIONS: Partial<Record<Exclude<AdminPageId, "client-detail">, UserPermission>> = {
   overview: "overview.read",
   "agent-config": "agents.read",
+  "ai-telephony": "agents.read",
   agents: "agents.read",
   sessions: "conversations.read",
   clients: "clients.read",
@@ -95,6 +97,7 @@ export default function AdminDashboard() {
       <main className="flex-1 overflow-y-auto">
         {activePage === "overview" && <AdminOverview />}
         {activePage === "agent-config" && <AgentConfigPage />}
+        {activePage === "ai-telephony" && <AgentConfigPage initialTab="telephony" />}
         {activePage === "agents" && <AdminAgents />}
         {activePage === "sessions" && <AdminConversations />}
         {activePage === "clients" && <AdminClients onViewClient={handleViewClient} />}

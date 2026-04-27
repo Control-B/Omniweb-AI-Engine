@@ -79,7 +79,13 @@ class ShopifyStorefrontBridgeService:
         return authorization[len(prefix):].strip()
 
     @staticmethod
-    def bootstrap_payload(*, store: ShopifyStore, greeting: str, public_token: dict[str, Any]) -> dict[str, Any]:
+    def bootstrap_payload(
+        *,
+        store: ShopifyStore,
+        greeting: str,
+        public_token: dict[str, Any],
+        telephony_config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return {
             "assistant_enabled": store.assistant_enabled,
             "shop_domain": store.shop_domain,
@@ -88,11 +94,13 @@ class ShopifyStorefrontBridgeService:
             "support_email": store.support_email,
             "nav_config": store.nav_config,
             "checkout_config": store.checkout_config,
+            "telephony_config": telephony_config or {},
             "public_token": public_token["token"],
             "public_token_expires_at": public_token["expires_at"],
             "endpoints": {
                 "start_session": "/api/shopify/public/sessions",
                 "voice_session": "/api/shopify/public/voice/session",
+                "phone_call": "/api/retell/phone-call",
                 "update_context": "/api/shopify/public/sessions/{session_id}/context",
                 "send_message": "/api/shopify/public/sessions/{session_id}/reply",
                 "track_event": "/api/shopify/public/sessions/{session_id}/events",

@@ -73,6 +73,11 @@ async def list_clients(
                 "name": c.name,
                 "email": c.email,
                 "plan": c.plan,
+                "plan_minutes_used": c.plan_minutes_used,
+                "stripe_customer_id": c.stripe_customer_id,
+                "stripe_subscription_id": c.stripe_subscription_id,
+                "trial_ends_at": c.trial_ends_at.isoformat() if c.trial_ends_at else None,
+                "embed_domain": c.embed_domain,
                 "is_active": c.is_active,
                 "created_at": c.created_at.isoformat() if c.created_at else None,
             }
@@ -118,6 +123,11 @@ async def get_client(
         "email": client.email,
         "plan": client.plan,
         "role": client.role,
+        "plan_minutes_used": client.plan_minutes_used,
+        "stripe_customer_id": client.stripe_customer_id,
+        "stripe_subscription_id": client.stripe_subscription_id,
+        "trial_ends_at": client.trial_ends_at.isoformat() if client.trial_ends_at else None,
+        "embed_domain": client.embed_domain,
         "is_active": client.is_active,
         "created_at": client.created_at.isoformat() if client.created_at else None,
         "updated_at": client.updated_at.isoformat() if client.updated_at else None,
@@ -507,6 +517,16 @@ async def platform_stats(
     total_calls = await db.scalar(select(func.count(Call.id))) or 0
     total_leads = await db.scalar(select(func.count(Lead.id))) or 0
     total_numbers = await db.scalar(select(func.count(PhoneNumber.id))) or 0
+    total_minutes_used = await db.scalar(
+        select(func.coalesce(func.sum(Client.plan_minutes_used), 0)).where(Client.role == "client")
+    ) or 0
+    active_subscribers = await db.scalar(
+        select(func.count(Client.id)).where(
+            Client.role == "client",
+            Client.stripe_subscription_id.is_not(None),
+            Client.is_active == True,
+        )
+    ) or 0
 
     # Today counts
     calls_today = await db.scalar(
@@ -628,6 +648,8 @@ async def platform_stats(
     return {
         "total_clients": total_clients,
         "active_clients": active_clients,
+        "active_subscribers": active_subscribers,
+        "total_minutes_used": int(total_minutes_used),
         "total_calls": total_calls,
         "total_leads": total_leads,
         "total_numbers": total_numbers,

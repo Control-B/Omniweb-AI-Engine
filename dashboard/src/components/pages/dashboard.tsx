@@ -375,7 +375,7 @@ export function DashboardPage() {
                         call.status === "completed"
                           ? "bg-emerald-500/10 text-emerald-400"
                           : call.status === "no_answer" || call.status === "missed"
-                          ? "bg-amber-500/10 text-amber-400"
+                          ? "bg-sky-500/10 text-sky-400"
                           : "bg-red-500/10 text-red-400"
                       )}
                     >
@@ -582,7 +582,7 @@ function ConversationSummariesCard({ leads }: { leads: LeadRecord[] }) {
   const urgencyColor: Record<string, string> = {
     emergency: "text-red-400 bg-red-500/10 border-red-500/20",
     high: "text-orange-400 bg-orange-500/10 border-orange-500/20",
-    medium: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20",
+    medium: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
     low: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
   };
 

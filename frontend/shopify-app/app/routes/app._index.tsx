@@ -1,7 +1,7 @@
 import { json } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
+import type { ReactNode } from "react";
 import {
-  Badge,
   BlockStack,
   Button,
   Card,
@@ -83,10 +83,26 @@ function planLabel(plan: string) {
   return plan.charAt(0).toUpperCase() + plan.slice(1);
 }
 
-function statusTone(status: string): "success" | "attention" | "info" {
-  if (status === "active") return "success";
-  if (status === "trialing") return "attention";
-  return "info";
+function StatusPill({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone: "success" | "setup" | "sync";
+}) {
+  return (
+    <span className={`omni-status-pill omni-status-pill--${tone}`}>
+      {children}
+    </span>
+  );
+}
+
+function StepPill({ done, children }: { done?: boolean; children: ReactNode }) {
+  return (
+    <span className={`omni-step-pill ${done ? "omni-step-pill--done" : ""}`}>
+      {children}
+    </span>
+  );
 }
 
 export default function Dashboard() {
@@ -107,9 +123,9 @@ export default function Dashboard() {
           <div className="omni-hero-card">
             <div className="omni-hero-card__inner">
               <BlockStack gap="300">
-                <Badge tone={data.engineConnected ? "success" : "attention"}>
+                <StatusPill tone={data.engineConnected ? "success" : "setup"}>
                   {data.engineConnected ? "Storefront ready" : "Setup in progress"}
-                </Badge>
+                </StatusPill>
                 <Text as="h2" variant="headingXl">
                   Turn visitors into helped shoppers.
                 </Text>
@@ -140,9 +156,9 @@ export default function Dashboard() {
                   <Text as="h2" variant="headingMd">Subscription</Text>
                   <Icon source={StoreIcon} tone="subdued" />
                 </InlineStack>
-                <Badge tone={statusTone(data.status)}>
+                <StatusPill tone={data.status === "active" ? "success" : "setup"}>
                   {data.status === "trialing" ? "Free trial" : data.status}
-                </Badge>
+                </StatusPill>
                 <Text as="p" tone="subdued">
                   Plan: <strong>{planLabel(data.plan)}</strong>
                 </Text>
@@ -160,9 +176,9 @@ export default function Dashboard() {
                   <Text as="h2" variant="headingMd">AI Agent</Text>
                   <Icon source={ChatIcon} tone="subdued" />
                 </InlineStack>
-                <Badge tone={data.agentConfigured ? "success" : "attention"}>
+                <StatusPill tone={data.agentConfigured ? "success" : "setup"}>
                   {data.agentConfigured ? "Configured" : "Needs setup"}
-                </Badge>
+                </StatusPill>
                 <Text as="p" tone="subdued">
                   {data.agentConfigured
                     ? `"${data.agentName}" — ${data.languageCount} language${data.languageCount !== 1 ? "s" : ""} active`
@@ -182,9 +198,9 @@ export default function Dashboard() {
                   <Text as="h2" variant="headingMd">Storefront Widget</Text>
                   <Icon source={GlobeIcon} tone="subdued" />
                 </InlineStack>
-                <Badge tone={data.engineConnected ? "success" : "attention"}>
+                <StatusPill tone={data.engineConnected ? "success" : "sync"}>
                   {data.engineConnected ? "Engine synced" : "Needs sync"}
-                </Badge>
+                </StatusPill>
                 <Text as="p" tone="subdued">
                   {data.engineSyncError
                     ? data.engineSyncError
@@ -224,7 +240,9 @@ export default function Dashboard() {
                     Test live widget
                   </Button>
                 ) : (
-                  <Button disabled>Test live widget</Button>
+                  <Button url="/app/test" variant="secondary">
+                    Test live widget
+                  </Button>
                 )}
               </InlineGrid>
             </BlockStack>
@@ -239,9 +257,9 @@ export default function Dashboard() {
               <InlineGrid columns={{ xs: 1, md: 3 }} gap="300">
                 <BlockStack gap="200">
                   <InlineStack gap="200" align="start">
-                    <Badge tone={data.agentConfigured ? "success" : "attention"}>
-                      {data.agentConfigured ? "✓ Done" : "1"}
-                    </Badge>
+                    <StepPill done={data.agentConfigured}>
+                      {data.agentConfigured ? "✓" : "1"}
+                    </StepPill>
                     <Text as="p" fontWeight="semibold">Configure your agent</Text>
                   </InlineStack>
                   <Text as="p" tone="subdued">
@@ -250,7 +268,7 @@ export default function Dashboard() {
                 </BlockStack>
                 <BlockStack gap="200">
                   <InlineStack gap="200" align="start">
-                    <Badge tone="attention">2</Badge>
+                    <StepPill>2</StepPill>
                     <Text as="p" fontWeight="semibold">Add knowledge sources</Text>
                   </InlineStack>
                   <Text as="p" tone="subdued">
@@ -259,9 +277,9 @@ export default function Dashboard() {
                 </BlockStack>
                 <BlockStack gap="200">
                   <InlineStack gap="200" align="start">
-                    <Badge tone={data.engineConnected ? "success" : "attention"}>
-                      {data.engineConnected ? "✓ Done" : "3"}
-                    </Badge>
+                    <StepPill done={data.engineConnected}>
+                      {data.engineConnected ? "✓" : "3"}
+                    </StepPill>
                     <Text as="p" fontWeight="semibold">Enable storefront widget</Text>
                   </InlineStack>
                   <Text as="p" tone="subdued">

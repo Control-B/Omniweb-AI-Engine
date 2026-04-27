@@ -235,9 +235,9 @@ export default function Pricing() {
                       <Button
                         variant={isCurrent ? "secondary" : "primary"}
                         fullWidth
-                        disabled
+                        url="mailto:support@omniweb.ai?subject=Omniweb%20plan%20change"
                       >
-                        {isCurrent ? "Current plan" : "Billing paused"}
+                        {isCurrent ? "Current plan" : "Contact support to change plan"}
                       </Button>
                     </BlockStack>
                     </div>

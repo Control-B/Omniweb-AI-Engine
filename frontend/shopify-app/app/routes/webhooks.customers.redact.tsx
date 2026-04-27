@@ -1,7 +1,12 @@
 import { authenticate } from "../shopify.server";
+import { forwardShopifyGdprToEngine } from "../services/engine.server";
 
 export async function action({ request }: { request: Request }) {
-  await authenticate.webhook(request);
-  // TODO: redact customer PII in local analytics and request redaction from the AI Engine.
+  const { payload } = await authenticate.webhook(request);
+  try {
+    await forwardShopifyGdprToEngine("customers-redact", payload);
+  } catch {
+    // Shopify expects a fast acknowledgement; Engine GDPR work can be retried operationally.
+  }
   return new Response();
 }

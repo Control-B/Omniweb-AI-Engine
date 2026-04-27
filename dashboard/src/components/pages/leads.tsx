@@ -166,7 +166,7 @@ export function LeadsPage() {
                     lead.urgency === "emergency" || lead.urgency === "high"
                       ? "bg-red-400"
                       : lead.urgency === "medium"
-                      ? "bg-amber-400"
+                      ? "bg-cyan-400"
                       : "bg-slate-400"
                   )}
                 />

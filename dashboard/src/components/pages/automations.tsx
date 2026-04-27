@@ -83,7 +83,7 @@ function StepCard({
         className={cn(
           "flex items-center justify-center w-8 h-8 rounded-lg shrink-0",
           step.type === "sms" && "bg-blue-500/10 text-blue-400",
-          step.type === "wait" && "bg-amber-500/10 text-amber-400",
+          step.type === "wait" && "bg-cyan-500/10 text-cyan-400",
           step.type === "call" && "bg-emerald-500/10 text-emerald-400"
         )}
       >
@@ -198,7 +198,7 @@ function SequenceCard({
                 {seq.enabled ? "on" : "off"}
               </Badge>
               {seq._dirty && (
-                <Badge variant="outline" className="text-amber-400 border-amber-400/30">
+                <Badge variant="outline" className="text-cyan-400 border-cyan-400/30">
                   unsaved
                 </Badge>
               )}

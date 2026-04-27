@@ -1,7 +1,12 @@
 import { authenticate } from "../shopify.server";
+import { forwardShopifyGdprToEngine } from "../services/engine.server";
 
 export async function action({ request }: { request: Request }) {
-  await authenticate.webhook(request);
-  // TODO: enqueue GDPR customer data export for conversations tied to this customer.
+  const { payload } = await authenticate.webhook(request);
+  try {
+    await forwardShopifyGdprToEngine("customers-data-request", payload);
+  } catch {
+    // Shopify expects a fast acknowledgement; Engine GDPR work can be retried operationally.
+  }
   return new Response();
 }

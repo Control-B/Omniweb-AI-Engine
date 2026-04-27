@@ -72,6 +72,16 @@ export async function disableShopInEngine(input: {
   });
 }
 
+export async function forwardShopifyGdprToEngine(
+  topic: "customers-data-request" | "customers-redact" | "shop-redact",
+  payload: unknown,
+) {
+  return engineFetch<{ ok: boolean }>(`/api/shopify/engine/gdpr/${topic}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function enqueueKnowledgeIngestion(input: {
   shop_domain: string;
   source_id: string;

@@ -543,7 +543,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
             </div>
             <div className="space-y-1.5">
               <Label>Greeting Message</Label>
-              <Textarea value={config.agent_greeting || ""} onChange={(e) => update("agent_greeting", e.target.value)} placeholder="Thank you for visiting our website today... it will be my pleasure to help you" rows={3} />
+              <Textarea value={config.agent_greeting || ""} onChange={(e) => update("agent_greeting", e.target.value)} placeholder="Thank you for visiting our website today... it will be my pleasure to help you?" rows={3} />
               <p className="text-xs text-muted-foreground">The first thing your agent says when a call or chat begins</p>
             </div>
             <div className="space-y-1.5">
@@ -1282,7 +1282,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
                 )}
               </div>
 
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-sm text-cyan-100">
                 Save & Deploy after editing. Human transfer uses the phone number and prompt context supplied on this page.
               </div>
             </CardContent>
@@ -1560,7 +1560,7 @@ function AgentVoiceTestPanel({
             style={{
               width: 100,
               height: 100,
-              background: "conic-gradient(from 180deg,#22d3ee,#818cf8,#a855f7,#ec4899,#f59e0b,#22d3ee)",
+              background: "conic-gradient(from 180deg,#22d3ee,#818cf8,#4f46e5,#14b8a6,#008060,#22d3ee)",
               boxShadow: orbActive
                 ? "0 0 48px rgba(99,102,241,.55), 0 0 80px rgba(168,85,247,.25)"
                 : "0 0 24px rgba(99,102,241,.2)",

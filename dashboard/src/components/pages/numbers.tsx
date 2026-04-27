@@ -399,10 +399,10 @@ export function NumbersPage() {
                 <div className="flex items-center gap-4">
                   <div className={cn(
                     "flex items-center justify-center w-11 h-11 rounded-xl",
-                    num.mode === "forward" ? "bg-amber-500/10" : "bg-primary/10",
+                    num.mode === "forward" ? "bg-teal-500/10" : "bg-primary/10",
                   )}>
                     {num.mode === "forward"
-                      ? <PhoneForwarded className="w-5 h-5 text-amber-500" />
+                      ? <PhoneForwarded className="w-5 h-5 text-teal-500" />
                       : <Bot className="w-5 h-5 text-primary" />
                     }
                   </div>
@@ -415,19 +415,19 @@ export function NumbersPage() {
                         {num.is_active ? "active" : "inactive"}
                       </Badge>
                       {num.mode === "forward" ? (
-                        <Badge variant="secondary" className="text-[9px] bg-amber-500/10 text-amber-500 border-amber-500/20">
+                        <Badge variant="secondary" className="text-[9px] bg-teal-500/10 text-teal-500 border-teal-500/20">
                           <PhoneForwarded className="w-2.5 h-2.5 mr-0.5" /> Forwarding
                         </Badge>
                       ) : (
                         <Badge variant="default" className="text-[9px]">
-                          <Bot className="w-2.5 h-2.5 mr-0.5" /> AI (Retell)
+                          <Bot className="w-2.5 h-2.5 mr-0.5" /> AI Voice
                         </Badge>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {num.friendly_name}
                       {num.mode === "forward" && num.forward_to && (
-                        <span className="ml-1 text-amber-500">&rarr; {formatPhone(num.forward_to)}</span>
+                        <span className="ml-1 text-teal-500">&rarr; {formatPhone(num.forward_to)}</span>
                       )}
                     </p>
                   </div>

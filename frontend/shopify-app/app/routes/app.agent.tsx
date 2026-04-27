@@ -71,7 +71,7 @@ const RESPONSE_LENGTH_OPTIONS = [
   { label: "Detailed – thorough explanations", value: "detailed" },
 ];
 
-const DEFAULT_GREETING = "Thank you for visiting our website today... it will be my pleasure to help you";
+const DEFAULT_GREETING = "Thank you for visiting our website today... it will be my pleasure to help you?";
 
 function buildKnowledgeContext(
   sources: Array<{ url: string | null; details?: string | null; status: string }>,
@@ -290,7 +290,9 @@ export default function AgentSettings() {
                     </Button>
                   </>
                 ) : (
-                  <Button disabled>Test after save</Button>
+                  <Button url="/app/test" variant="secondary">
+                    Test after save
+                  </Button>
                 )}
               </InlineStack>
             </div>

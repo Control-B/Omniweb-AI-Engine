@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -450,6 +450,42 @@ async def disable_store_from_shopify_app(
         store.shopify_subscription_status = "cancelled"
     await db.flush()
     return {"ok": True, "client_id": str(store.client_id), "shop_domain": store.shop_domain}
+
+
+@router.post("/engine/gdpr/customers-data-request")
+async def handle_engine_customers_data_request(
+    body: dict[str, Any] = Body(...),
+    x_omniweb_shopify_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Process Shopify customers/data_request events forwarded by the embedded app."""
+    _verify_shopify_engine_secret(x_omniweb_shopify_secret or x_engine_secret)
+    return await ShopifyWebhookService.handle_customers_data_request(db, body)
+
+
+@router.post("/engine/gdpr/customers-redact")
+async def handle_engine_customers_redact(
+    body: dict[str, Any] = Body(...),
+    x_omniweb_shopify_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Redact customer PII from AI Engine conversations for Shopify GDPR requests."""
+    _verify_shopify_engine_secret(x_omniweb_shopify_secret or x_engine_secret)
+    return await ShopifyWebhookService.handle_customers_redact(db, body)
+
+
+@router.post("/engine/gdpr/shop-redact")
+async def handle_engine_shop_redact(
+    body: dict[str, Any] = Body(...),
+    x_omniweb_shopify_secret: str | None = Header(None),
+    x_engine_secret: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Delete Shopify tenant data from the AI Engine for shop/redact requests."""
+    _verify_shopify_engine_secret(x_omniweb_shopify_secret or x_engine_secret)
+    return await ShopifyWebhookService.handle_shop_redact(db, body)
 
 
 @router.post("/engine/knowledge-jobs")
@@ -1194,7 +1230,7 @@ async def _build_welcome_message(
     business_name = config.business_name if config and config.business_name else store.shop_domain.split(".")[0].replace("-", " ").title()
     agent_name = config.agent_name if config else "Ava"
     behavior_summary = ShopifyAssistantService.build_behavior_summary(context.model_dump(exclude_none=True))
-    greeting = "Thank you for visiting our website today... it will be my pleasure to help you"
+    greeting = "Thank you for visiting our website today... it will be my pleasure to help you?"
     greeting = ShopifyAssistantService.localized_copy_for_context(
         "welcome",
         context.model_dump(exclude_none=True),

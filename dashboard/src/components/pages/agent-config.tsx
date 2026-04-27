@@ -317,7 +317,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
   };
 
   const handleTelephonyTestCall = async () => {
-    if (!clientId || !telephonyTestNumber.trim()) return;
+    if (!config || !clientId || !telephonyTestNumber.trim()) return;
     setTelephonyCalling(true);
     setTelephonyMessage("");
     try {
@@ -423,6 +423,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
       </div>
 
       {activeTab === "personality" && (
+        <>
         <Card>
           <CardHeader>
             <CardTitle>Agent Personality</CardTitle>
@@ -544,6 +545,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
             </div>
           </CardContent>
         </Card>
+        </>
       )}
 
       {activeTab === "voice" && (

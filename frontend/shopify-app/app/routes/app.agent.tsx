@@ -87,6 +87,9 @@ export async function loader({ request }: { request: Request }) {
 }
 
 export async function action({ request }: { request: Request }) {
+  let saved = false;
+  let error: string | null = null;
+
   try {
     const { admin, session } = await authenticate.admin(request);
     const form = await request.formData();
@@ -101,6 +104,7 @@ export async function action({ request }: { request: Request }) {
     const languagesRaw = String(form.get("supportedLanguages") || "en");
     const goalsRaw = String(form.get("primaryGoals") || "all");
 
+    // Always save to DB first — this is the authoritative save.
     const config = await prisma.agentConfig.upsert({
       where: { shopId: shop.id },
       update: {
@@ -120,38 +124,45 @@ export async function action({ request }: { request: Request }) {
       },
     });
 
-    const storefrontToken = await ensureStorefrontAccessToken({
-      admin,
-      shopId: shop.id,
-      shopDomain: session.shop,
-      encryptedToken: shop.encryptedStorefrontToken,
-    });
+    saved = true; // DB save succeeded
 
-    const engineSync = await syncShopToEngine({
-      shop_domain: session.shop,
-      engine_client_id: shop.engineClientId,
-      admin_access_token: session.accessToken,
-      storefront_access_token: storefrontToken,
-      granted_scopes: (session.scope || "").split(",").map((s) => s.trim()).filter(Boolean),
-      storefront_api_version: process.env.SHOPIFY_API_VERSION || "2026-07",
-      plan: shop.subscription?.plan || "starter",
-      subscription_status: shop.subscription?.status || "trialing",
-      assistant_enabled: true,
-      agent_config: { ...config, primaryGoals: goalsRaw, responseLength: form.get("responseLength") },
-    });
-
-    if (engineSync.client_id && engineSync.client_id !== shop.engineClientId) {
-      await prisma.shop.update({
-        where: { id: shop.id },
-        data: { engineClientId: engineSync.client_id },
+    // Engine sync is best-effort — a failure here does not block saving.
+    try {
+      const storefrontToken = await ensureStorefrontAccessToken({
+        admin,
+        shopId: shop.id,
+        shopDomain: session.shop,
+        encryptedToken: shop.encryptedStorefrontToken,
       });
-    }
 
-    return json({ saved: true, error: null });
+      const engineSync = await syncShopToEngine({
+        shop_domain: session.shop,
+        engine_client_id: shop.engineClientId,
+        admin_access_token: session.accessToken,
+        storefront_access_token: storefrontToken,
+        granted_scopes: (session.scope || "").split(",").map((s) => s.trim()).filter(Boolean),
+        storefront_api_version: process.env.SHOPIFY_API_VERSION || "2026-07",
+        plan: shop.subscription?.plan || "starter",
+        subscription_status: shop.subscription?.status || "trialing",
+        assistant_enabled: true,
+        agent_config: { ...config, primaryGoals: goalsRaw, responseLength: form.get("responseLength") },
+      });
+
+      if (engineSync.client_id && engineSync.client_id !== shop.engineClientId) {
+        await prisma.shop.update({
+          where: { id: shop.id },
+          data: { engineClientId: engineSync.client_id },
+        });
+      }
+    } catch (syncErr) {
+      // Log but don't surface to user — DB is the source of truth.
+      console.error("[agent] engine sync failed (non-fatal):", syncErr);
+    }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Save failed. Please try again.";
-    return json({ saved: false, error: msg });
+    error = err instanceof Error ? err.message : "Save failed. Please try again.";
   }
+
+  return json({ saved, error });
 }
 
 export default function AgentSettings() {

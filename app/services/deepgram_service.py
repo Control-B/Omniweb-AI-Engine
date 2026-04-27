@@ -224,6 +224,7 @@ def build_voice_agent_settings(
     config: AgentConfig,
     *,
     language: str | None = None,
+    voice_override: str | None = None,
 ) -> dict[str, Any]:
     """Build a Voice Agent ``Settings`` object (see Deepgram message-flow docs)."""
     composed = compose_system_prompt(
@@ -275,17 +276,20 @@ def build_voice_agent_settings(
         # Unsupported STT code (sw, kri, su…) — use multi for best-effort recognition
         listen_language = "multi"
 
-    # Deepgram is always the reliable fallback. When an ElevenLabs key is configured the
-    # agent tries ElevenLabs Sarah (eleven_turbo_v2_5 — natively multilingual) first;
-    # Deepgram Voice Agent v1 supports an ordered fallback array so if ElevenLabs fails
-    # Deepgram takes over automatically without silence.
+    # If a specific Deepgram Aura voice is requested (e.g. male from test console),
+    # use Deepgram directly and skip ElevenLabs so the caller hears the correct voice.
+    requested_aura = (voice_override or "").strip()
+    use_aura_direct = bool(requested_aura and "aura" in requested_aura.lower())
+
+    deepgram_model = requested_aura if use_aura_direct else _deepgram_tts_for_language(lang_tag, config)
     deepgram_speak: dict[str, Any] = {
         "provider": {
             "type": "deepgram",
-            "model": _deepgram_tts_for_language(lang_tag, config),
+            "model": deepgram_model,
         }
     }
-    if settings.ELEVENLABS_API_KEY:
+
+    if settings.ELEVENLABS_API_KEY and not use_aura_direct:
         eleven_voice_id = _elevenlabs_voice_for_config(config)
         # Do NOT pass language_code — eleven_turbo_v2_5 is natively multilingual and
         # auto-detects the language from the LLM-generated text.  Specifying a code

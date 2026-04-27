@@ -65,6 +65,8 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [textDraft, setTextDraft] = useState("");
   const sessionRef = useRef<DeepgramVoiceAgentSession | null>(null);
+  // Read ?voice= and ?mode= from the URL (set by the test console iframe src).
+  const [voiceOverride, setVoiceOverride] = useState<string | null>(null);
 
   const useLanding = !agentId?.trim();
 
@@ -74,6 +76,10 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
       if (q.get("panel") === "1" || q.get("open") === "1") {
         setPanelOpen(true);
       }
+      const v = q.get("voice");
+      if (v) setVoiceOverride(v.trim());
+      const m = q.get("mode") as UiMode | null;
+      if (m === "text" || m === "voice") setMode(m);
     } catch {
       /* ignore */
     }
@@ -120,9 +126,10 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
   }, [stopSession]);
 
   const bootstrap = useCallback(async (): Promise<BootstrapPayload> => {
-    const body: { client_id?: string; language: string } = {
+    const body: { client_id?: string; language: string; voice_override?: string } = {
       language: selectedLang?.code || "en",
     };
+    if (voiceOverride) body.voice_override = voiceOverride;
     const landingClientId = publicLandingClientId();
     if (agentId?.trim()) {
       body.client_id = agentId.trim();
@@ -155,7 +162,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
       throw new Error(msg);
     }
     return (await res.json()) as BootstrapPayload;
-  }, [agentId, selectedLang?.code]);
+  }, [agentId, selectedLang?.code, voiceOverride]);
 
   const startSession = useCallback(
     async (withMic: boolean) => {

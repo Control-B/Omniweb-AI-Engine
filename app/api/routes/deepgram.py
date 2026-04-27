@@ -23,6 +23,7 @@ router = APIRouter(prefix="/deepgram", tags=["deepgram"])
 class VoiceAgentBootstrapRequest(BaseModel):
     client_id: str | None = None
     language: str | None = None
+    voice_override: str | None = None  # e.g. "aura-2-orion-en" from test console
 
 
 async def run_voice_agent_bootstrap(
@@ -80,6 +81,7 @@ async def run_voice_agent_bootstrap(
         voice_settings = deepgram_service.build_voice_agent_settings(
             config,
             language=req.language,
+            voice_override=req.voice_override,
         )
     except Exception as exc:
         logger.exception(

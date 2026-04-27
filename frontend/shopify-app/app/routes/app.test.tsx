@@ -112,23 +112,16 @@ export default function TestConsole() {
           </div>
 
           <div className="omni-test-topbar__right">
-            {ready ? (
-              <a
-                href={storefrontUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="omni-ask-ai-btn"
-                title="Open your live storefront — the Ask AI widget will appear there"
-              >
-                <span className="omni-ask-ai-btn__orb" />
-                Ask AI
-              </a>
-            ) : (
-              <span className="omni-ask-ai-btn omni-ask-ai-btn--disabled">
-                <span className="omni-ask-ai-btn__orb" />
-                Ask AI
-              </span>
-            )}
+            <a
+              href={storefrontUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="omni-ask-ai-btn"
+              title="Open your live storefront — the Ask AI widget will appear there"
+            >
+              <span className="omni-ask-ai-btn__orb" />
+              Ask AI
+            </a>
             <Text as="p" variant="bodySm" tone="subdued" alignment="center">
               Opens your storefront
             </Text>

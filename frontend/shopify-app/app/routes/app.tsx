@@ -18,7 +18,7 @@ export default function EmbeddedAppLayout() {
         <a href="/app/agent">AI Agent</a>
         <a href="/app/test">Test Console</a>
         <a href="/app/knowledge">Knowledge</a>
-        <a href="/app/billing">Pricing</a>
+        <a href="/app/pricing">Pricing</a>
         <a href="/app/analytics">Analytics</a>
       </NavMenu>
       <Outlet />

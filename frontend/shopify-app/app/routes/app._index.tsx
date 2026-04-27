@@ -146,7 +146,7 @@ export default function Dashboard() {
                 <Text as="p" tone="subdued">
                   Plan: <strong>{planLabel(data.plan)}</strong>
                 </Text>
-                <Button url="/app/billing" variant="secondary" size="slim">
+                <Button url="/app/pricing" variant="secondary" size="slim">
                   Manage plan
                 </Button>
               </BlockStack>

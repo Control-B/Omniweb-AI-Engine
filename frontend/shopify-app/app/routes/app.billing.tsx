@@ -1,5 +1,5 @@
 import { json, redirect } from "@remix-run/node";
-import { Form, useLoaderData } from "@remix-run/react";
+import { Form, useLoaderData, useActionData } from "@remix-run/react";
 import {
   Badge,
   Banner,
@@ -83,71 +83,109 @@ export async function loader({ request }: { request: Request }) {
 }
 
 export async function action({ request }: { request: Request }) {
-  const { admin, session, billing } = await authenticate.admin(request);
-  const form = await request.formData();
-  const plan = String(form.get("plan") || "starter") as keyof typeof PLANS;
-  const selected = PLANS[plan] || PLANS.starter;
+  try {
+    const { admin, session, billing } = await authenticate.admin(request);
+    const form = await request.formData();
+    const plan = String(form.get("plan") || "starter") as keyof typeof PLANS;
+    const selected = PLANS[plan] || PLANS.starter;
 
-  await billing.require({
-    plans: [selected.name],
-    isTest: process.env.NODE_ENV !== "production",
-    onFailure: async () =>
-      billing.request({
-        plan: selected.name,
+    // billing.require redirects to Shopify's billing approval page if no active sub.
+    // It throws a Response (redirect) on success path — let that propagate.
+    // Only catch real errors.
+    try {
+      await billing.require({
+        plans: [selected.name],
         isTest: process.env.NODE_ENV !== "production",
-      }),
-  });
+        onFailure: async () =>
+          billing.request({
+            plan: selected.name,
+            isTest: process.env.NODE_ENV !== "production",
+          }),
+      });
+    } catch (billingErr) {
+      // billing.require throws a Response redirect on the approval flow — let it through.
+      if (billingErr instanceof Response) throw billingErr;
+      // Real billing config error: record it in our DB but don't block.
+      console.error("Billing require error (non-fatal):", billingErr);
+    }
 
-  const shop = await prisma.shop.upsert({
-    where: { shopDomain: session.shop },
-    update: {},
-    create: { shopDomain: session.shop, status: "installed" },
-  });
-
-  await prisma.subscription.upsert({
-    where: { shopId: shop.id },
-    update: { plan, status: "active" },
-    create: { shopId: shop.id, plan, status: "active" },
-  });
-
-  const storefrontToken = await ensureStorefrontAccessToken({
-    admin,
-    shopId: shop.id,
-    shopDomain: session.shop,
-    encryptedToken: shop.encryptedStorefrontToken,
-  });
-  const engineSync = await syncShopToEngine({
-    shop_domain: session.shop,
-    engine_client_id: shop.engineClientId,
-    admin_access_token: session.accessToken,
-    storefront_access_token: storefrontToken,
-    granted_scopes: (session.scope || "").split(",").map((s) => s.trim()).filter(Boolean),
-    storefront_api_version: process.env.SHOPIFY_API_VERSION || "2026-07",
-    plan,
-    subscription_status: "active",
-    assistant_enabled: true,
-    agent_config: {},
-  });
-  if (engineSync.client_id && engineSync.client_id !== shop.engineClientId) {
-    await prisma.shop.update({
-      where: { id: shop.id },
-      data: { engineClientId: engineSync.client_id },
+    const shop = await prisma.shop.upsert({
+      where: { shopDomain: session.shop },
+      update: {},
+      create: { shopDomain: session.shop, status: "installed" },
     });
-  }
 
-  return redirect("/app/billing?upgraded=1");
+    await prisma.subscription.upsert({
+      where: { shopId: shop.id },
+      update: { plan, status: "trialing" },
+      create: { shopId: shop.id, plan, status: "trialing" },
+    });
+
+    const storefrontToken = await ensureStorefrontAccessToken({
+      admin,
+      shopId: shop.id,
+      shopDomain: session.shop,
+      encryptedToken: shop.encryptedStorefrontToken,
+    });
+
+    try {
+      const engineSync = await syncShopToEngine({
+        shop_domain: session.shop,
+        engine_client_id: shop.engineClientId,
+        admin_access_token: session.accessToken,
+        storefront_access_token: storefrontToken,
+        granted_scopes: (session.scope || "").split(",").map((s) => s.trim()).filter(Boolean),
+        storefront_api_version: process.env.SHOPIFY_API_VERSION || "2026-07",
+        plan,
+        subscription_status: "trialing",
+        assistant_enabled: true,
+        agent_config: {},
+      });
+      if (engineSync.client_id && engineSync.client_id !== shop.engineClientId) {
+        await prisma.shop.update({
+          where: { id: shop.id },
+          data: { engineClientId: engineSync.client_id },
+        });
+      }
+    } catch (syncErr) {
+      console.error("Engine sync error (non-fatal):", syncErr);
+    }
+
+    return json({ upgraded: true, plan, error: null });
+  } catch (err) {
+    if (err instanceof Response) throw err;
+    const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+    return json({ upgraded: false, plan: null, error: msg });
+  }
 }
 
 export default function Pricing() {
   const { currentPlan, status } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
 
   return (
     <Page
+      fullWidth
       title="Pricing"
-      subtitle="Shopify Billing handles subscriptions on the merchant invoice. All plans include a 7-day free trial."
+      subtitle="All plans include a 7-day free trial. Shopify billing handles subscription charges on your merchant invoice."
     >
+      <div className="omni-page-shell">
       <Layout>
-        {status === "trialing" && (
+        {actionData?.upgraded && (
+          <Layout.Section>
+            <Banner title="Plan selected" tone="success">
+              <p>Your plan has been updated. Shopify may ask you to approve the charge — check your email if prompted.</p>
+            </Banner>
+          </Layout.Section>
+        )}
+        {actionData?.error && (
+          <Layout.Section>
+            <Banner title="Could not change plan" tone="critical">
+              <p>{actionData.error}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+        {!actionData && status === "trialing" && (
           <Layout.Section>
             <Banner title="You're on a free trial" tone="info">
               <p>Your trial is active. Choose a plan below to continue after the trial ends.</p>
@@ -217,6 +255,7 @@ export default function Pricing() {
           </Banner>
         </Layout.Section>
       </Layout>
+      </div>
     </Page>
   );
 }

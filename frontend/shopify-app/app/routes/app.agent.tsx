@@ -1,5 +1,5 @@
-import { json, redirect } from "@remix-run/node";
-import { Form, useLoaderData, useNavigation } from "@remix-run/react";
+import { json } from "@remix-run/node";
+import { Form, useLoaderData, useNavigation, useActionData } from "@remix-run/react";
 import { useState, useEffect } from "react";
 import {
   Banner,
@@ -23,32 +23,30 @@ import { syncShopToEngine } from "../services/engine.server";
 import { ensureStorefrontAccessToken } from "../services/storefront-token.server";
 
 const LANGUAGE_CHOICES = [
-  { label: "🌐 Auto (detect language)", value: "multi" },
-  { label: "🇺🇸 English", value: "en" },
-  { label: "🇪🇸 Spanish", value: "es" },
-  { label: "🇫🇷 French", value: "fr" },
-  { label: "🇩🇪 German", value: "de" },
-  { label: "🇮🇹 Italian", value: "it" },
-  { label: "🇵🇹 Portuguese", value: "pt" },
-  { label: "🇳🇱 Dutch", value: "nl" },
-  { label: "🇸🇪 Swedish", value: "sv" },
-  { label: "🇷🇴 Romanian", value: "ro" },
-  { label: "🇷🇺 Russian", value: "ru" },
-  { label: "🇺🇦 Ukrainian", value: "uk" },
-  { label: "🇵🇱 Polish", value: "pl" },
-  { label: "🇸🇦 Arabic", value: "ar" },
-  { label: "🇹🇷 Turkish", value: "tr" },
-  { label: "🇮🇳 Hindi", value: "hi" },
-  { label: "🇧🇩 Bengali", value: "bn" },
-  { label: "🇨🇳 Chinese", value: "zh" },
-  { label: "🇯🇵 Japanese", value: "ja" },
-  { label: "🇰🇷 Korean", value: "ko" },
-  { label: "🇮🇩 Indonesian", value: "id" },
-  { label: "🇻🇳 Vietnamese", value: "vi" },
-  { label: "🇵🇭 Filipino", value: "tl" },
-  { label: "🇰🇪 Swahili", value: "sw" },
-  { label: "🇸🇱 Krio", value: "kri" },
-  { label: "🇮🇩 Sundanese", value: "su" },
+  { label: "Auto (detect language)", value: "multi" },
+  { label: "English", value: "en" },
+  { label: "Spanish", value: "es" },
+  { label: "French", value: "fr" },
+  { label: "German", value: "de" },
+  { label: "Italian", value: "it" },
+  { label: "Portuguese", value: "pt" },
+  { label: "Dutch", value: "nl" },
+  { label: "Swedish", value: "sv" },
+  { label: "Romanian", value: "ro" },
+  { label: "Russian", value: "ru" },
+  { label: "Ukrainian", value: "uk" },
+  { label: "Polish", value: "pl" },
+  { label: "Arabic", value: "ar" },
+  { label: "Turkish", value: "tr" },
+  { label: "Hindi", value: "hi" },
+  { label: "Bengali", value: "bn" },
+  { label: "Chinese", value: "zh" },
+  { label: "Japanese", value: "ja" },
+  { label: "Korean", value: "ko" },
+  { label: "Indonesian", value: "id" },
+  { label: "Vietnamese", value: "vi" },
+  { label: "Filipino", value: "tl" },
+  { label: "Swahili", value: "sw" },
 ];
 
 const ALL_LANGUAGE_VALUES = LANGUAGE_CHOICES.map((l) => l.value);
@@ -89,70 +87,76 @@ export async function loader({ request }: { request: Request }) {
 }
 
 export async function action({ request }: { request: Request }) {
-  const { admin, session } = await authenticate.admin(request);
-  const form = await request.formData();
+  try {
+    const { admin, session } = await authenticate.admin(request);
+    const form = await request.formData();
 
-  const shop = await prisma.shop.upsert({
-    where: { shopDomain: session.shop },
-    update: { status: "installed" },
-    create: { shopDomain: session.shop, status: "installed" },
-    include: { subscription: true },
-  });
-
-  const languagesRaw = String(form.get("supportedLanguages") || "en");
-  const goalsRaw = String(form.get("primaryGoals") || "all");
-
-  const config = await prisma.agentConfig.upsert({
-    where: { shopId: shop.id },
-    update: {
-      agentName: String(form.get("agentName") || "Omniweb AI"),
-      businessName: String(form.get("businessName") || ""),
-      greeting: String(form.get("greeting") || DEFAULT_GREETING),
-      systemPrompt: String(form.get("systemPrompt") || ""),
-      supportedLanguages: languagesRaw.split(",").map((l) => l.trim()).filter(Boolean),
-    },
-    create: {
-      shopId: shop.id,
-      agentName: String(form.get("agentName") || "Omniweb AI"),
-      businessName: String(form.get("businessName") || ""),
-      greeting: String(form.get("greeting") || DEFAULT_GREETING),
-      systemPrompt: String(form.get("systemPrompt") || ""),
-      supportedLanguages: ["en"],
-    },
-  });
-
-  const storefrontToken = await ensureStorefrontAccessToken({
-    admin,
-    shopId: shop.id,
-    shopDomain: session.shop,
-    encryptedToken: shop.encryptedStorefrontToken,
-  });
-
-  const engineSync = await syncShopToEngine({
-    shop_domain: session.shop,
-    engine_client_id: shop.engineClientId,
-    admin_access_token: session.accessToken,
-    storefront_access_token: storefrontToken,
-    granted_scopes: (session.scope || "").split(",").map((s) => s.trim()).filter(Boolean),
-    storefront_api_version: process.env.SHOPIFY_API_VERSION || "2026-07",
-    plan: shop.subscription?.plan || "starter",
-    subscription_status: shop.subscription?.status || "trialing",
-    assistant_enabled: true,
-    agent_config: { ...config, primaryGoals: goalsRaw, responseLength: form.get("responseLength") },
-  });
-
-  if (engineSync.client_id && engineSync.client_id !== shop.engineClientId) {
-    await prisma.shop.update({
-      where: { id: shop.id },
-      data: { engineClientId: engineSync.client_id },
+    const shop = await prisma.shop.upsert({
+      where: { shopDomain: session.shop },
+      update: { status: "installed" },
+      create: { shopDomain: session.shop, status: "installed" },
+      include: { subscription: true },
     });
-  }
 
-  return redirect("/app/agent?saved=1");
+    const languagesRaw = String(form.get("supportedLanguages") || "en");
+    const goalsRaw = String(form.get("primaryGoals") || "all");
+
+    const config = await prisma.agentConfig.upsert({
+      where: { shopId: shop.id },
+      update: {
+        agentName: String(form.get("agentName") || "Omniweb AI"),
+        businessName: String(form.get("businessName") || ""),
+        greeting: String(form.get("greeting") || DEFAULT_GREETING),
+        systemPrompt: String(form.get("systemPrompt") || ""),
+        supportedLanguages: languagesRaw.split(",").map((l) => l.trim()).filter(Boolean),
+      },
+      create: {
+        shopId: shop.id,
+        agentName: String(form.get("agentName") || "Omniweb AI"),
+        businessName: String(form.get("businessName") || ""),
+        greeting: String(form.get("greeting") || DEFAULT_GREETING),
+        systemPrompt: String(form.get("systemPrompt") || ""),
+        supportedLanguages: ["en"],
+      },
+    });
+
+    const storefrontToken = await ensureStorefrontAccessToken({
+      admin,
+      shopId: shop.id,
+      shopDomain: session.shop,
+      encryptedToken: shop.encryptedStorefrontToken,
+    });
+
+    const engineSync = await syncShopToEngine({
+      shop_domain: session.shop,
+      engine_client_id: shop.engineClientId,
+      admin_access_token: session.accessToken,
+      storefront_access_token: storefrontToken,
+      granted_scopes: (session.scope || "").split(",").map((s) => s.trim()).filter(Boolean),
+      storefront_api_version: process.env.SHOPIFY_API_VERSION || "2026-07",
+      plan: shop.subscription?.plan || "starter",
+      subscription_status: shop.subscription?.status || "trialing",
+      assistant_enabled: true,
+      agent_config: { ...config, primaryGoals: goalsRaw, responseLength: form.get("responseLength") },
+    });
+
+    if (engineSync.client_id && engineSync.client_id !== shop.engineClientId) {
+      await prisma.shop.update({
+        where: { id: shop.id },
+        data: { engineClientId: engineSync.client_id },
+      });
+    }
+
+    return json({ saved: true, error: null });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Save failed. Please try again.";
+    return json({ saved: false, error: msg });
+  }
 }
 
 export default function AgentSettings() {
   const { shop, engineClientId, engineUrl } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
   const nav = useNavigation();
   const config = shop.agentConfig;
 
@@ -162,16 +166,13 @@ export default function AgentSettings() {
   const [systemPrompt, setSystemPrompt] = useState(config?.systemPrompt || "");
   const [responseLength, setResponseLength] = useState("moderate");
 
-  // Languages: multi-select with "All" toggle
   const savedLangs = config?.supportedLanguages || ["en"];
   const [selectedLangs, setSelectedLangs] = useState<string[]>(
     savedLangs.length === ALL_LANGUAGE_VALUES.length ? ALL_LANGUAGE_VALUES : savedLangs
   );
 
-  // Primary goals: checkboxes with "All" at top
   const [selectedGoals, setSelectedGoals] = useState<string[]>(ALL_GOAL_VALUES);
 
-  // Keep hidden input values in sync
   const [langsHidden, setLangsHidden] = useState(selectedLangs.filter((l) => l !== "all").join(","));
   const [goalsHidden, setGoalsHidden] = useState(selectedGoals.join(","));
 
@@ -229,29 +230,49 @@ export default function AgentSettings() {
                   Shape how your AI agent sells and supports.
                 </Text>
                 <Text as="p" tone="subdued">
-                  Set the voice, welcome message, goals, languages, and operating rules that sync to the storefront widget.
+                  Set the welcome message, goals, languages, and operating rules that sync to your storefront widget.
                 </Text>
               </BlockStack>
-              {testWidgetUrl ? (
-                <Button url={testWidgetUrl} target="_blank" variant="primary">
-                  Test widget
-                </Button>
-              ) : (
-                <Button disabled>Test after save</Button>
-              )}
+              <InlineStack gap="200">
+                {testWidgetUrl ? (
+                  <>
+                    <Button url={`/app/test`} variant="primary">
+                      Test agent
+                    </Button>
+                    <Button url={testWidgetUrl} target="_blank">
+                      Open widget
+                    </Button>
+                  </>
+                ) : (
+                  <Button disabled>Test after save</Button>
+                )}
+              </InlineStack>
             </div>
           </div>
         </Layout.Section>
 
         <Layout.Section>
+          {actionData?.saved && (
+            <Banner title="Agent saved and synced" tone="success">
+              <Text as="p">
+                Your agent settings have been saved and synced to the storefront widget.
+              </Text>
+            </Banner>
+          )}
+          {actionData?.error && (
+            <Banner title="Save failed" tone="critical">
+              <Text as="p">{actionData.error}</Text>
+            </Banner>
+          )}
+        </Layout.Section>
+
+        <Layout.Section>
           <Form method="post">
-            {/* Hidden serialized fields */}
             <input type="hidden" name="supportedLanguages" value={langsHidden} />
             <input type="hidden" name="primaryGoals" value={goalsHidden} />
             <input type="hidden" name="responseLength" value={responseLength} />
 
             <BlockStack gap="500">
-              {/* Basic info */}
               <Card>
                 <BlockStack gap="400">
                   <div className="omni-card-accent" />
@@ -302,7 +323,6 @@ export default function AgentSettings() {
                 </BlockStack>
               </Card>
 
-              {/* Primary Goals */}
               <Card>
                 <BlockStack gap="400">
                   <div className="omni-card-accent" />
@@ -321,14 +341,13 @@ export default function AgentSettings() {
                 </BlockStack>
               </Card>
 
-              {/* Languages */}
               <Card>
                 <BlockStack gap="400">
                   <div className="omni-card-accent" />
                   <BlockStack gap="100">
                     <Text as="h2" variant="headingMd">Supported Languages</Text>
                     <Text as="p" tone="subdued">
-                      The widget will show a language picker to shoppers. Your agent will respond in the chosen language using ElevenLabs voice and Deepgram speech recognition.
+                      The widget will show a language picker to shoppers. Your agent will respond in the chosen language.
                     </Text>
                   </BlockStack>
                   <ChoiceList
@@ -342,16 +361,15 @@ export default function AgentSettings() {
                 </BlockStack>
               </Card>
 
-              {/* Financial Policy Agreement */}
               <Banner title="Financial Transaction Policy — Required" tone="warning">
                 <BlockStack gap="200">
                   <Text as="p">By saving, you agree that the Omniweb AI agent will:</Text>
                   <List type="bullet">
-                    <List.Item>✓ Add products to the shopper's cart</List.Item>
-                    <List.Item>✓ Send cart abandonment reminders</List.Item>
-                    <List.Item>✗ NOT process checkouts or complete payments</List.Item>
-                    <List.Item>✗ NOT issue refunds or access billing information</List.Item>
-                    <List.Item>✗ NOT handle any financial transactions</List.Item>
+                    <List.Item>Add products to the shopper's cart</List.Item>
+                    <List.Item>Send cart abandonment reminders</List.Item>
+                    <List.Item>NOT process checkouts or complete payments</List.Item>
+                    <List.Item>NOT issue refunds or access billing information</List.Item>
+                    <List.Item>NOT handle any financial transactions</List.Item>
                   </List>
                   <Text as="p" tone="subdued">
                     Any financial request from a shopper will be immediately escalated to a human representative.
@@ -371,42 +389,32 @@ export default function AgentSettings() {
           </Form>
         </Layout.Section>
 
-        {/* Right sidebar */}
         <Layout.Section variant="oneThird">
           <BlockStack gap="400">
             <Card>
               <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">Runtime</Text>
+                <Text as="h2" variant="headingMd">Engine sync</Text>
                 <Text as="p" tone="subdued">
-                  These settings sync to the DigitalOcean AI Engine. The storefront widget uses the saved config for voice, text, multilingual replies, product guidance, and navigation.
+                  Settings sync to the DigitalOcean AI Engine on save. The widget uses the saved config for voice, text, multilingual replies, and navigation.
                 </Text>
               </BlockStack>
             </Card>
-
-            {/* Test Agent */}
             <Card>
               <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">Test Your Agent</Text>
+                <Text as="h2" variant="headingMd">Test your agent</Text>
                 <Text as="p" tone="subdued">
-                  Open the voice + text widget to test your agent's responses, language switching, and greeting before shoppers see it.
+                  Save first, then test your agent's voice, language switching, and greeting before shoppers see it.
                 </Text>
                 <Divider />
                 {testWidgetUrl ? (
-                  <InlineStack gap="200">
-                    <Button
-                      url={testWidgetUrl}
-                      target="_blank"
-                      variant="primary"
-                    >
-                      Open Voice Widget
+                  <BlockStack gap="200">
+                    <Button url="/app/test" variant="primary">
+                      Open test console
                     </Button>
-                    <Button
-                      url={testWidgetUrl + "?mode=text"}
-                      target="_blank"
-                    >
-                      Text Only
+                    <Button url={testWidgetUrl} target="_blank">
+                      Open full widget
                     </Button>
-                  </InlineStack>
+                  </BlockStack>
                 ) : (
                   <Text as="p" tone="subdued">
                     Save and sync your agent first to enable testing.

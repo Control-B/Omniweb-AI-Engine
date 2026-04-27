@@ -58,3 +58,64 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Agent test console ─────────────────────────────────────────────────── */
+.omni-voice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 36rem) {
+  .omni-voice-grid { grid-template-columns: 1fr; }
+}
+
+.omni-voice-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
+  border: 2px solid #e3e3e3;
+  border-radius: 12px;
+  background: #fafafa;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  font: inherit;
+  width: 100%;
+}
+
+.omni-voice-card:hover {
+  border-color: #008060;
+  background: #f0faf6;
+  box-shadow: 0 2px 12px rgba(0, 128, 96, 0.12);
+}
+
+.omni-voice-card--active {
+  border-color: #008060;
+  background: #f0faf6;
+  box-shadow: 0 0 0 3px rgba(0, 128, 96, 0.18);
+}
+
+.omni-voice-card__avatar {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.omni-voice-card__avatar--female { background: #fce7f3; }
+.omni-voice-card__avatar--male   { background: #dbeafe; }
+
+.omni-voice-card__check {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.75rem;
+  font-size: 1rem;
+  color: #008060;
+  font-weight: 700;
+}

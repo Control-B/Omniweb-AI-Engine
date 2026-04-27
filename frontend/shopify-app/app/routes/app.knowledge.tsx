@@ -63,19 +63,19 @@ export async function action({ request }: { request: Request }) {
 
 function statusTone(status: string): "success" | "attention" | "info" | "critical" {
   if (status === "ready" || status === "done") return "success";
-  if (status === "queued" || status === "processing") return "attention";
+  if (status === "queued" || status === "processing") return "info";
   if (status === "error" || status === "failed") return "critical";
   return "info";
 }
 
 function statusLabel(status: string) {
   const map: Record<string, string> = {
-    queued: "Queued",
-    processing: "Processing…",
-    ready: "Ready",
-    done: "Ready",
-    error: "Error",
-    failed: "Failed",
+    queued: "Added — indexing",
+    processing: "Indexing…",
+    ready: "Indexed",
+    done: "Indexed",
+    error: "Error — retry",
+    failed: "Error — retry",
   };
   return map[status] ?? status;
 }
@@ -113,9 +113,9 @@ export default function Knowledge() {
         <Layout.Section>
           <BlockStack gap="400">
             {justQueued && (
-              <Banner title="URL queued for ingestion" tone="success">
+              <Banner title="URL added successfully" tone="success">
                 <Text as="p">
-                  Your URL has been added. The AI agent will process it within a few minutes and start using it to answer shoppers.
+                  Your URL has been saved and is being indexed now. It will appear below and the agent will start using it within a few minutes.
                 </Text>
               </Banner>
             )}

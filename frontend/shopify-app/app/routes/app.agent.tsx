@@ -71,7 +71,7 @@ const RESPONSE_LENGTH_OPTIONS = [
   { label: "Detailed – thorough explanations", value: "detailed" },
 ];
 
-const DEFAULT_GREETING = "Thank you for visiting our website today... it will be a pleasure to help you?";
+const DEFAULT_GREETING = "Thank you for visiting today, I am your AI assistant... how can I assist you?";
 
 function buildKnowledgeContext(
   sources: Array<{ url: string | null; details?: string | null; status: string }>,

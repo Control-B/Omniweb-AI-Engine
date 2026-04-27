@@ -543,7 +543,7 @@ export function AgentConfigPage({ initialTab = "personality" }: { initialTab?: A
             </div>
             <div className="space-y-1.5">
               <Label>Greeting Message</Label>
-              <Textarea value={config.agent_greeting || ""} onChange={(e) => update("agent_greeting", e.target.value)} placeholder="Thank you for visiting our website today... it will be a pleasure to help you?" rows={3} />
+              <Textarea value={config.agent_greeting || ""} onChange={(e) => update("agent_greeting", e.target.value)} placeholder="Thank you for visiting today, I am your AI assistant... how can I assist you?" rows={3} />
               <p className="text-xs text-muted-foreground">The first thing your agent says when a call or chat begins</p>
             </div>
             <div className="space-y-1.5">

@@ -195,7 +195,7 @@ def _language_name(lang_tag: str) -> str:
     return LANGUAGE_NAMES.get(lang_tag.lower().split("-")[0], lang_tag)
 
 
-DEFAULT_OPENING_GREETING = "Thank you for visiting our website today... it will be a pleasure to help you?"
+DEFAULT_OPENING_GREETING = "Thank you for visiting today, I am your AI assistant... how can I assist you?"
 
 
 def _is_stale_generic_greeting(text: str) -> bool:

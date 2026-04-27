@@ -217,7 +217,7 @@ class TemplateCreate(BaseModel):
     agent_mode: str = "lead_qualifier"
     is_default: bool = False
     agent_name: str = "AI Assistant"
-    agent_greeting: str = "Thank you for visiting our website today... it will be a pleasure to help you?"
+    agent_greeting: str = "Thank you for visiting today, I am your AI assistant... how can I assist you?"
     system_prompt: str = ""
     voice_id: str = "EXAVITQu4vr4xnSDxMaL"
     voice_stability: float = 0.5

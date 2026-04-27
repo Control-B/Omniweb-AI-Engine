@@ -58,7 +58,7 @@ export async function loader({ request }: { request: Request }) {
 
   const engineUrl = process.env.ENGINE_URL || "https://omniweb-engine-rs6fr.ondigitalocean.app";
   const agentName = shop.agentConfig?.agentName || "Omniweb AI";
-  const greeting  = shop.agentConfig?.greeting  || "Thank you for visiting our website today... it will be a pleasure to help you?";
+  const greeting  = shop.agentConfig?.greeting  || "Thank you for visiting today, I am your AI assistant... how can I assist you?";
   const shopDomain = session.shop; // e.g. "mystore.myshopify.com"
 
   return json({ engineClientId, engineUrl, agentName, greeting, shopDomain });

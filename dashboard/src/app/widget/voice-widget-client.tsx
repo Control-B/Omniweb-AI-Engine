@@ -54,7 +54,7 @@ type BootstrapPayload = {
 };
 
 const DEFAULT_WELCOME_MESSAGE =
-  "Thank you for visiting our website today... it will be a pleasure to help you?";
+  "Thank you for visiting today, I am your AI assistant... how can I assist you?";
 
 const STALE_GENERIC_PATTERNS = [
   "problem you're trying to solve",

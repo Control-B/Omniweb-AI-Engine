@@ -118,7 +118,7 @@ class AgentConfig(Base):
     agent_name: Mapped[str] = mapped_column(String(100), default="Alex", nullable=False)
     agent_greeting: Mapped[str] = mapped_column(
         Text,
-        default="Thank you for visiting our website today... it will be a pleasure to help you?",
+        default="Thank you for visiting today, I am your AI assistant... how can I assist you?",
         nullable=False,
     )
 
@@ -656,7 +656,7 @@ class AgentTemplate(Base):
 
     # Template config (same fields as AgentConfig)
     agent_name: Mapped[str] = mapped_column(String(100), default="AI Assistant", nullable=False)
-    agent_greeting: Mapped[str] = mapped_column(Text, default="Thank you for visiting our website today... it will be a pleasure to help you?", nullable=False)
+    agent_greeting: Mapped[str] = mapped_column(Text, default="Thank you for visiting today, I am your AI assistant... how can I assist you?", nullable=False)
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
     voice_id: Mapped[str] = mapped_column(String(100), default="EXAVITQu4vr4xnSDxMaL", nullable=False)
     voice_stability: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)

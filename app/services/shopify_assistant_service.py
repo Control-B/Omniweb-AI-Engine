@@ -560,7 +560,7 @@ class ShopifyAssistantService:
                 lines.append(ShopifyAssistantService.localized_copy(
                     "ask_clarifying",
                     session,
-                    "Thank you for visiting our website today... it will be a pleasure to help you?",
+                    "Thank you for visiting today, I am your AI assistant... how can I assist you?",
                     )
                 )
             llm_message = " ".join(part.strip() for part in lines if part and part.strip())

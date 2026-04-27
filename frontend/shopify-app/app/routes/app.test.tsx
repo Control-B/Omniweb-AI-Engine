@@ -145,7 +145,7 @@ export default function TestConsole() {
             <div className="omni-test-window">
               <div className="omni-test-window__header">
                 <span className="omni-test-window__dot omni-test-window__dot--red" />
-                <span className="omni-test-window__dot omni-test-window__dot--yellow" />
+                <span className="omni-test-window__dot omni-test-window__dot--teal" />
                 <span className="omni-test-window__dot omni-test-window__dot--green" />
                 <span className="omni-test-window__title">Voice agent</span>
                 <a
@@ -171,7 +171,7 @@ export default function TestConsole() {
             <div className="omni-test-window">
               <div className="omni-test-window__header">
                 <span className="omni-test-window__dot omni-test-window__dot--red" />
-                <span className="omni-test-window__dot omni-test-window__dot--yellow" />
+                <span className="omni-test-window__dot omni-test-window__dot--teal" />
                 <span className="omni-test-window__dot omni-test-window__dot--green" />
                 <span className="omni-test-window__title">Text chat</span>
                 <a

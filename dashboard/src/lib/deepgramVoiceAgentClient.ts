@@ -65,6 +65,10 @@ export class DeepgramVoiceAgentSession {
   private playHead = 0;
   private readonly outputSampleRate = 24000;
   private welcomeTimer: ReturnType<typeof setTimeout> | null = null;
+  private micNoiseFloor = 0.006;
+  private micSpeechFrames = 0;
+  private micSilenceFrames = 0;
+  private micIsSpeaking = false;
 
   constructor(handlers: VoiceAgentHandlers) {
     this.handlers = handlers;
@@ -153,9 +157,42 @@ export class DeepgramVoiceAgentSession {
       const inRate = this.micContext.sampleRate;
       this.processor.onaudioprocess = (ev) => {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.settingsApplied) return;
+        // Avoid feeding the assistant's own speaker output back into the microphone.
+        if (this.scheduledSources.size > 0) return;
         const ch = ev.inputBuffer.getChannelData(0);
         const rms = Math.sqrt(ch.reduce((sum, sample) => sum + sample * sample, 0) / ch.length);
-        if (rms < 0.008) return;
+        let peak = 0;
+        for (let i = 0; i < ch.length; i += 1) {
+          peak = Math.max(peak, Math.abs(ch[i] ?? 0));
+        }
+
+        const speechThreshold = Math.max(0.018, this.micNoiseFloor * 3.4);
+        const releaseThreshold = Math.max(0.012, this.micNoiseFloor * 2.2);
+        const hasSpeechEnergy = rms >= speechThreshold && peak >= speechThreshold * 1.7;
+
+        if (!this.micIsSpeaking && !hasSpeechEnergy) {
+          this.micNoiseFloor = this.micNoiseFloor * 0.96 + rms * 0.04;
+          this.micSpeechFrames = 0;
+          return;
+        }
+
+        if (hasSpeechEnergy) {
+          this.micSpeechFrames += 1;
+          this.micSilenceFrames = 0;
+        } else {
+          this.micSilenceFrames += 1;
+        }
+
+        if (!this.micIsSpeaking && this.micSpeechFrames < 3) return;
+        this.micIsSpeaking = true;
+
+        if (this.micIsSpeaking && rms < releaseThreshold && this.micSilenceFrames > 12) {
+          this.micIsSpeaking = false;
+          this.micSpeechFrames = 0;
+          this.micSilenceFrames = 0;
+          return;
+        }
+
         const pcm = float32To16kHzPcm(ch, inRate);
         if (pcm.byteLength) this.ws.send(pcm);
       };
@@ -268,6 +305,10 @@ export class DeepgramVoiceAgentSession {
     this.pendingSettingsJson = null;
     this.settingsApplied = false;
     this.pendingInjects = [];
+    this.micNoiseFloor = 0.006;
+    this.micSpeechFrames = 0;
+    this.micSilenceFrames = 0;
+    this.micIsSpeaking = false;
     if (this.ws) {
       try {
         this.ws.removeEventListener("message", this.onMessage);

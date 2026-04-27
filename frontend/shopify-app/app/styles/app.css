@@ -3,7 +3,7 @@
   background:
     radial-gradient(circle at 12% 0%, rgba(79, 70, 229, 0.16), transparent 28rem),
     radial-gradient(circle at 100% 10%, rgba(0, 128, 96, 0.18), transparent 32rem),
-    radial-gradient(circle at 60% 100%, rgba(250, 204, 21, 0.12), transparent 30rem),
+    radial-gradient(circle at 60% 100%, rgba(14, 165, 233, 0.10), transparent 30rem),
     linear-gradient(180deg, #f4f7fb 0%, #ffffff 48%, #f8fbff 100%);
 }
 
@@ -19,7 +19,7 @@
   border-radius: 22px;
   background:
     radial-gradient(circle at top right, rgba(255, 255, 255, 0.9), transparent 18rem),
-    linear-gradient(135deg, rgba(79, 70, 229, 0.16), rgba(0, 128, 96, 0.14), rgba(250, 204, 21, 0.16)),
+    linear-gradient(135deg, rgba(30, 58, 138, 0.16), rgba(0, 128, 96, 0.14), rgba(14, 165, 233, 0.12)),
     #ffffff;
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.10);
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
@@ -55,7 +55,7 @@
 .omni-card-accent {
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #4f46e5, #008060, #95bf47);
+  background: linear-gradient(90deg, #1e3a8a, #008060, #14b8a6);
   box-shadow: 0 0 18px rgba(79, 70, 229, 0.28);
 }
 
@@ -113,12 +113,12 @@
 }
 
 .omni-pricing-card--featured {
-  background: linear-gradient(145deg, #4f46e5, #008060, #95bf47);
+  background: linear-gradient(145deg, #1e3a8a, #008060, #14b8a6);
   box-shadow: 0 24px 70px rgba(79, 70, 229, 0.24);
 }
 
 .omni-pricing-card--current {
-  background: linear-gradient(145deg, #008060, #95bf47);
+  background: linear-gradient(145deg, #008060, #14b8a6);
 }
 
 .omni-pricing-card__surface {
@@ -132,7 +132,7 @@
 
 .omni-pricing-card--featured .omni-pricing-card__surface {
   background:
-    radial-gradient(circle at top right, rgba(149, 191, 71, 0.22), transparent 13rem),
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.20), transparent 13rem),
     linear-gradient(180deg, #ffffff, #f7f8ff);
 }
 
@@ -367,7 +367,7 @@
 }
 
 .omni-test-window__dot--red    { background: #ff5f57; }
-.omni-test-window__dot--yellow { background: #ffbd2e; }
+.omni-test-window__dot--teal   { background: #14b8a6; }
 .omni-test-window__dot--green  { background: #28c840; }
 
 .omni-test-window__title {

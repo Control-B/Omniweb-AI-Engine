@@ -261,7 +261,9 @@ def build_voice_agent_settings(
         f"## Voice Focus And Background Noise\n"
         f"Treat short, unclear, distant, overlapping, or background speech as noise. "
         f"Only answer when a single nearby shopper clearly addresses the assistant. "
-        f"If the input is unclear, ask the shopper to repeat instead of guessing."
+        f"Do not answer breathing, clicks, typing, TV/music, side conversations, or partial words. "
+        f"If there is no clear request, remain silent and wait. "
+        f"If a nearby shopper clearly addressed you but the words are unclear, ask them to repeat instead of guessing."
     )
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
     # Languages explicitly supported by Deepgram nova-3 STT with a named code.

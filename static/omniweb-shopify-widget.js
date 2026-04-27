@@ -728,6 +728,10 @@
       this.sources = new Set()
       this.playHead = 0
       this.welcomeTimer = null
+      this.micNoiseFloor = 0.006
+      this.micSpeechFrames = 0
+      this.micSilenceFrames = 0
+      this.micIsSpeaking = false
     }
 
     async connect(params) {
@@ -766,7 +770,14 @@
       this.playHead = this.ttsContext.currentTime
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, sampleRate: 16000 },
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+          sampleRate: 16000,
+          voiceIsolation: true,
+        },
       })
       this.micContext = new AudioCtx()
       await this.micContext.resume()
@@ -777,7 +788,45 @@
       const inputRate = this.micContext.sampleRate
       this.processor.onaudioprocess = (ev) => {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.settingsApplied) return
-        const pcm = floatTo16kPcm(ev.inputBuffer.getChannelData(0), inputRate)
+        // Do not stream the assistant's own speaker output back into the agent.
+        if (this.sources.size > 0) return
+        const channel = ev.inputBuffer.getChannelData(0)
+        let sum = 0
+        let peak = 0
+        for (let i = 0; i < channel.length; i += 1) {
+          const sample = channel[i] || 0
+          sum += sample * sample
+          peak = Math.max(peak, Math.abs(sample))
+        }
+        const rms = Math.sqrt(sum / channel.length)
+        const speechThreshold = Math.max(0.018, this.micNoiseFloor * 3.4)
+        const releaseThreshold = Math.max(0.012, this.micNoiseFloor * 2.2)
+        const hasSpeechEnergy = rms >= speechThreshold && peak >= speechThreshold * 1.7
+
+        if (!this.micIsSpeaking && !hasSpeechEnergy) {
+          this.micNoiseFloor = this.micNoiseFloor * 0.96 + rms * 0.04
+          this.micSpeechFrames = 0
+          return
+        }
+
+        if (hasSpeechEnergy) {
+          this.micSpeechFrames += 1
+          this.micSilenceFrames = 0
+        } else {
+          this.micSilenceFrames += 1
+        }
+
+        if (!this.micIsSpeaking && this.micSpeechFrames < 3) return
+        this.micIsSpeaking = true
+
+        if (this.micIsSpeaking && rms < releaseThreshold && this.micSilenceFrames > 12) {
+          this.micIsSpeaking = false
+          this.micSpeechFrames = 0
+          this.micSilenceFrames = 0
+          return
+        }
+
+        const pcm = floatTo16kPcm(channel, inputRate)
         if (pcm.byteLength) this.ws.send(pcm)
       }
       await this.ttsContext.resume()
@@ -840,6 +889,10 @@
       this.welcomeTimer = null
       this.pendingSettingsJson = null
       this.settingsApplied = false
+      this.micNoiseFloor = 0.006
+      this.micSpeechFrames = 0
+      this.micSilenceFrames = 0
+      this.micIsSpeaking = false
       if (this.ws) {
         try {
           this.ws.removeEventListener("message", this.onMessage)

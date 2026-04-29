@@ -1,7 +1,7 @@
 [project]
 name = "omniweb-agent-engine"
 version = "2.0.0"
-description = "Omniweb AI Agent Engine — multi-tenant AI voice + text platform powered by Retell + Twilio"
+description = "Omniweb AI Agent Engine — multi-tenant AI voice + text platform powered by ElevenLabs + Twilio"
 requires-python = ">=3.12"
 dependencies = [
     # Web framework
@@ -27,12 +27,11 @@ dependencies = [
     # Stripe
     "stripe>=10.0.0",
 
-    # HTTP client (Retell REST + integrations)
+    # HTTP client (ElevenLabs API calls)
     "httpx>=0.27.0",
 
     # Auth / security
     "PyJWT>=2.8.0",
-    "cryptography>=43.0.0",
 
     # Config
     "pydantic-settings>=2.5.0",

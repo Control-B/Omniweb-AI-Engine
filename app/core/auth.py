@@ -18,7 +18,7 @@ Four auth strategies:
 4. **Internal Key** — shared secret between FastAPI and the agent worker.
    Passed as `X-Internal-Key: ...` header.
 
-Webhooks (Retell, Stripe) have their own signature verification — no JWT.
+Webhooks (ElevenLabs, Stripe) have their own signature verification — no JWT.
 """
 import hashlib
 import hmac
@@ -313,7 +313,7 @@ async def _resolve_clerk_token(token: str) -> dict:
     and link the account; if still not found, we auto-provision a new Client.
     """
     from app.core.database import AsyncSessionLocal
-    from app.models.models import Client
+    from app.models.models import AgentConfig, Client
 
     jwks_client = _get_clerk_jwks_client()
     if not jwks_client:
@@ -385,6 +385,18 @@ async def _resolve_clerk_token(token: str) -> dict:
                 trial_ends_at=trial_end,
             )
             db.add(client)
+            await db.flush()
+
+            agent_config = AgentConfig(
+                client_id=client.id,
+                agent_name="AI Assistant",
+                agent_greeting="Hello! How can I help you today?",
+                system_prompt="You are a helpful AI assistant.",
+                llm_model="gpt-4o",
+                business_name=full_name,
+            )
+            db.add(agent_config)
+
             await db.commit()
             await db.refresh(client)
             logger.info(f"Auto-provisioned client {client.id} from Clerk user {clerk_user_id} (trial until {trial_end.date()})")
@@ -400,8 +412,6 @@ async def _resolve_clerk_token(token: str) -> dict:
         return {
             "client_id": str(client.id),
             "email": client.email,
-                            "name": getattr(client, "name", full_name) or full_name,
-                            "first_name": (getattr(client, "name", "") or full_name).split()[0] if (getattr(client, "name", "") or full_name) else "",
             "plan": client.plan,
             "role": client.role,
               "permissions": get_effective_permissions(client.role, getattr(client, "permissions", None)),

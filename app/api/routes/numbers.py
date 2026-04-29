@@ -1,6 +1,6 @@
-"""Phone Numbers API — provision and manage client phone numbers (Twilio).
+"""Phone Numbers API — provision and manage client phone numbers.
 
-AI answering is configured by connecting the purchased Twilio number to Retell.
+Flow: Buy from Twilio → Import into ElevenLabs → Assign to agent.
 """
 from typing import Optional
 from uuid import UUID
@@ -14,13 +14,14 @@ from app.api.deps import get_session
 from app.core.auth import get_current_client
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.models import AgentConfig, PhoneNumber
-from app.services import sip_provisioning_service
+from app.models.models import AgentConfig, PhoneNumber, Client
+from app.services import sip_provisioning_service, elevenlabs_service
 
 logger = get_logger(__name__)
 settings = get_settings()
 router = APIRouter(prefix="/numbers", tags=["numbers"])
 
+# Plan limits for phone numbers
 PLAN_NUMBER_LIMITS = {
     "starter": 1,
     "growth": 3,
@@ -38,7 +39,7 @@ def _resolve_client_id(current_client: dict, client_id: str | None) -> str:
 class ProvisionRequest(BaseModel):
     phone_number: str
     friendly_name: str
-    client_id: Optional[str] = None
+    client_id: Optional[str] = None  # admin can specify; otherwise uses caller's
 
 
 @router.get("/available")
@@ -46,7 +47,7 @@ async def list_available(
     area_code: Optional[str] = Query(None),
     country: str = Query("US"),
     limit: int = Query(20, le=50),
-    number_type: str = Query("local"),
+    number_type: str = Query("local"),  # "local" or "toll_free"
 ) -> dict:
     """Search available phone numbers from Twilio."""
     numbers = await sip_provisioning_service.list_available_numbers(
@@ -61,9 +62,10 @@ async def provision_number(
     current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Buy a Twilio number for the client."""
+    """Buy a Twilio number and import it into ElevenLabs for the client's agent."""
     cid = _resolve_client_id(current_client, body.client_id)
 
+    # ── Plan enforcement: check number limit ──────────────────────────
     plan = current_client.get("plan", "starter")
     max_numbers = PLAN_NUMBER_LIMITS.get(plan, 1)
     existing_count_result = await db.execute(
@@ -77,26 +79,26 @@ async def provision_number(
             f"You currently have {existing_count}. Upgrade your plan to add more.",
         )
 
+    # Look up the client's ElevenLabs agent ID
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == cid)
     )
     config = result.scalar_one_or_none()
-    retell_agent_id = config.retell_agent_id if config else None
+    elevenlabs_agent_id = config.elevenlabs_agent_id if config else None
 
     number = await sip_provisioning_service.provision_new_number(
         db=db,
         client_id=cid,
         phone_number=body.phone_number,
         friendly_name=body.friendly_name,
-        retell_agent_id=retell_agent_id,
+        elevenlabs_agent_id=elevenlabs_agent_id,
     )
     return {
         "id": str(number.id),
         "phone_number": number.phone_number,
         "friendly_name": number.friendly_name,
         "twilio_sid": number.twilio_sid,
-        "retell_agent_id": retell_agent_id,
-        "hint": "Connect this Twilio number to your Retell agent for AI answering.",
+        "elevenlabs_phone_number_id": number.elevenlabs_phone_number_id,
     }
 
 
@@ -119,6 +121,7 @@ async def list_numbers(
                 "friendly_name": n.friendly_name,
                 "is_active": n.is_active,
                 "twilio_sid": n.twilio_sid,
+                "elevenlabs_phone_number_id": n.elevenlabs_phone_number_id,
                 "mode": n.mode,
                 "forward_to": n.forward_to,
             }
@@ -134,6 +137,7 @@ async def deprovision_number(
     current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
+    """Remove a phone number from ElevenLabs and optionally release from Twilio."""
     number = await db.get(PhoneNumber, number_id)
     if not number:
         raise HTTPException(404, "Phone number not found")
@@ -146,8 +150,8 @@ async def deprovision_number(
 
 
 class SetModeRequest(BaseModel):
-    mode: str
-    forward_to: Optional[str] = None
+    mode: str  # "ai" or "forward"
+    forward_to: Optional[str] = None  # required when mode is "forward"
 
 
 @router.post("/{number_id}/mode")
@@ -157,6 +161,7 @@ async def set_number_mode(
     current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
+    """Switch a phone number between AI agent mode and call forwarding mode."""
     if body.mode not in ("ai", "forward"):
         raise HTTPException(400, "mode must be 'ai' or 'forward'")
     if body.mode == "forward" and not body.forward_to:
@@ -168,22 +173,24 @@ async def set_number_mode(
     if current_client.get("role") != "admin" and str(number.client_id) != current_client["client_id"]:
         raise HTTPException(404, "Phone number not found")
 
-    result = await db.execute(
-        select(AgentConfig).where(AgentConfig.client_id == number.client_id)
-    )
-    config = result.scalar_one_or_none()
-    retell_agent_id = config.retell_agent_id if config else None
+    # Get agent ID for switching back to AI mode
+    elevenlabs_agent_id = None
+    if body.mode == "ai":
+        result = await db.execute(
+            select(AgentConfig).where(AgentConfig.client_id == number.client_id)
+        )
+        config = result.scalar_one_or_none()
+        elevenlabs_agent_id = config.elevenlabs_agent_id if config else None
 
     try:
         await sip_provisioning_service.set_number_mode(
-            db,
-            number,
+            db, number,
             mode=body.mode,
             forward_to=body.forward_to,
-            retell_agent_id=retell_agent_id,
+            elevenlabs_agent_id=elevenlabs_agent_id,
         )
     except Exception as exc:
-        raise HTTPException(500, f"Failed to switch mode: {exc}") from exc
+        raise HTTPException(500, f"Failed to switch mode: {exc}")
 
     return {
         "ok": True,
@@ -199,23 +206,30 @@ async def assign_number_to_agent(
     current_client: dict = Depends(get_current_client),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Inbound AI routing is completed in Retell when linking the Twilio number."""
+    """Assign (or reassign) a phone number to the client's ElevenLabs agent."""
     number = await db.get(PhoneNumber, number_id)
     if not number:
         raise HTTPException(404, "Phone number not found")
     if current_client.get("role") != "admin" and str(number.client_id) != current_client["client_id"]:
         raise HTTPException(404, "Phone number not found")
 
+    # Get client's agent
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == number.client_id)
     )
     config = result.scalar_one_or_none()
-    if not config or not config.retell_agent_id:
-        raise HTTPException(400, "Client has no Retell agent configured")
+    if not config or not config.elevenlabs_agent_id:
+        raise HTTPException(400, "Client has no ElevenLabs agent configured")
 
+    if not number.elevenlabs_phone_number_id:
+        raise HTTPException(400, "Number not imported into ElevenLabs yet")
+
+    await elevenlabs_service.assign_phone_to_agent(
+        number.elevenlabs_phone_number_id,
+        config.elevenlabs_agent_id,
+    )
     return {
         "ok": True,
         "phone_number": number.phone_number,
-        "retell_agent_id": config.retell_agent_id,
-        "message": "Finish phone binding in the Retell dashboard (connect this Twilio DID to the agent).",
+        "agent_id": config.elevenlabs_agent_id,
     }

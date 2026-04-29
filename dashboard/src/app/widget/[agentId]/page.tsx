@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
-import { Room, RoomEvent, Track } from "livekit-client";
+import { DeepgramVoiceAgentSession } from "@/lib/deepgramVoiceAgentClient";
 
 /**
  * Voice-first widget page.
  *
  * Renders a compact, brand-free voice UI that connects to the current
- * Omniweb LiveKit voice agent runtime. No text input, no chat bubbles,
+ * Omniweb Deepgram voice agent runtime. No text input, no chat bubbles,
  * no expandable panels — just a mic orb and status text.
  *
  * URL: /widget/{agentId}
@@ -20,10 +20,14 @@ import { Room, RoomEvent, Track } from "livekit-client";
 
 type ConvStatus = "idle" | "connecting" | "connected" | "error";
 
-type SessionTokenResponse = {
-  token: string;
-  room_name: string;
-  livekit_url: string;
+type DeepgramBootstrapResponse = {
+  ok: boolean;
+  client_id: string;
+  agent_name: string;
+  websocket_url: string;
+  access_token: string;
+  expires_in?: number;
+  settings: Record<string, unknown>;
 };
 
 function engineBaseUrl(): string {
@@ -40,8 +44,7 @@ export default function VoiceWidgetPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [micMuted, setMicMuted] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const roomRef = useRef<Room | null>(null);
-  const audioElementsRef = useRef<HTMLElement[]>([]);
+  const sessionRef = useRef<DeepgramVoiceAgentSession | null>(null);
   const isMountedRef = useRef(true);
   const apiBase = useMemo(() => engineBaseUrl(), []);
 
@@ -51,17 +54,6 @@ export default function VoiceWidgetPage() {
     };
   }, []);
 
-  const cleanupAudioElements = useCallback(() => {
-    audioElementsRef.current.forEach((element) => {
-      try {
-        element.remove();
-      } catch {
-        /* ignore */
-      }
-    });
-    audioElementsRef.current = [];
-  }, []);
-
   // Start the voice session
   const startSession = useCallback(async () => {
     if (!agentId) return;
@@ -69,70 +61,54 @@ export default function VoiceWidgetPage() {
     setErrorMsg("");
 
     try {
-      const tokenRes = await fetch(`${apiBase}/api/livekit/token`, {
+      const bootstrapRes = await fetch(`${apiBase}/api/deepgram/voice-agent/bootstrap`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client_id: agentId,
-          channel: "embed",
           language: "en",
         }),
       });
-      const tokenBody = (await tokenRes.json().catch(() => null)) as SessionTokenResponse | { detail?: string } | null;
-      if (!tokenRes.ok || !tokenBody || !("token" in tokenBody)) {
-        const detail = tokenBody && "detail" in tokenBody ? tokenBody.detail : undefined;
+      const bootstrapBody = (await bootstrapRes.json().catch(() => null)) as DeepgramBootstrapResponse | { detail?: string } | null;
+      if (!bootstrapRes.ok || !bootstrapBody || !("access_token" in bootstrapBody)) {
+        const detail = bootstrapBody && "detail" in bootstrapBody ? bootstrapBody.detail : undefined;
         throw new Error(detail || "Failed to initialize voice session");
       }
 
-      const room = new Room({
-        adaptiveStream: false,
-        dynacast: false,
-      });
-
-      room
-        .on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
-          if (track.kind !== Track.Kind.Audio || participant.isLocal) return;
-          const element = track.attach();
-          element.autoplay = true;
-          element.setAttribute("data-omniweb-audio", "true");
-          element.style.display = "none";
-          document.body.appendChild(element);
-          audioElementsRef.current.push(element);
-        })
-        .on(RoomEvent.TrackUnsubscribed, (track) => {
-          if (track.kind !== Track.Kind.Audio) return;
-          track.detach().forEach((element) => {
-            try {
-              element.remove();
-            } catch {
-              /* ignore */
-            }
-          });
-          audioElementsRef.current = audioElementsRef.current.filter(
-            (element) => element.isConnected,
-          );
-        })
-        .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      const session = new DeepgramVoiceAgentSession({
+        onStructuredMessage: (data) => {
           if (!isMountedRef.current) return;
-          const remoteSpeakerActive = speakers.some((speaker) => !speaker.isLocal);
-          setIsSpeaking(remoteSpeakerActive);
-        })
-        .on(RoomEvent.Disconnected, () => {
+          const type = String(data.type ?? "");
+          if (type === "AgentStartedSpeaking") {
+            setIsSpeaking(true);
+          }
+          if (type === "AgentAudioDone" || type === "AgentStoppedSpeaking" || type === "UserStartedSpeaking") {
+            setIsSpeaking(false);
+          }
+        },
+        onError: (message) => {
           if (!isMountedRef.current) return;
+          setErrorMsg(message || "Voice session failed.");
+          setConvStatus("error");
+        },
+        onClose: () => {
+          if (!isMountedRef.current) return;
+          sessionRef.current = null;
           setIsSpeaking(false);
           setConvStatus((current) => (current === "error" ? current : "idle"));
-          cleanupAudioElements();
-        });
+        },
+      });
 
-      roomRef.current = room;
-      await room.connect(tokenBody.livekit_url, tokenBody.token);
-      await room.localParticipant.setMicrophoneEnabled(true);
-      if (micMuted) {
-        await room.localParticipant.setMicrophoneEnabled(false);
-      }
+      sessionRef.current = session;
+      await session.connect({
+        websocketUrl: bootstrapBody.websocket_url,
+        accessToken: bootstrapBody.access_token,
+        settings: bootstrapBody.settings,
+        enableMic: !micMuted,
+      });
 
       if (!isMountedRef.current) {
-        await room.disconnect();
+        await session.disconnect();
         return;
       }
 
@@ -147,36 +123,34 @@ export default function VoiceWidgetPage() {
       }
       setConvStatus("error");
     }
-  }, [agentId, apiBase, cleanupAudioElements, micMuted]);
+    }, [agentId, apiBase, micMuted]);
 
   // End the voice session
   const endSession = useCallback(async () => {
     try {
-      await roomRef.current?.disconnect();
+      await sessionRef.current?.disconnect();
     } catch {
       // ignore
     }
-    roomRef.current = null;
-    cleanupAudioElements();
+    sessionRef.current = null;
     setIsSpeaking(false);
     setConvStatus("idle");
-  }, [cleanupAudioElements]);
+  }, []);
 
   // Toggle mic mute
   const toggleMic = useCallback(() => {
     setMicMuted((prev) => {
       const next = !prev;
-      void roomRef.current?.localParticipant.setMicrophoneEnabled(!next);
+      sessionRef.current?.setMicrophoneEnabled(!next);
       return next;
     });
   }, []);
 
   useEffect(() => {
     return () => {
-      cleanupAudioElements();
-      void roomRef.current?.disconnect();
+      void sessionRef.current?.disconnect();
     };
-  }, [cleanupAudioElements]);
+  }, []);
 
   // Determine the visual state
   const isActive = convStatus === "connected";

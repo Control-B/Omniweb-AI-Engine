@@ -34,6 +34,7 @@ export class DeepgramVoiceAgentSession {
   private micContext: AudioContext | null = null;
   private ttsContext: AudioContext | null = null;
   private micSource: MediaStreamAudioSourceNode | null = null;
+  private micStream: MediaStream | null = null;
   private processor: ScriptProcessorNode | null = null;
   private ttsAnalyser: AnalyserNode | null = null;
   private handlers: VoiceAgentHandlers;
@@ -112,6 +113,7 @@ export class DeepgramVoiceAgentSession {
           sampleRate: 16000,
         },
       });
+        this.micStream = stream;
       this.micContext = new AudioContextClass();
       await this.micContext.resume();
       this.micSource = this.micContext.createMediaStreamSource(stream);
@@ -127,6 +129,12 @@ export class DeepgramVoiceAgentSession {
 
     await this.ttsContext.resume();
   }
+
+    setMicrophoneEnabled(enabled: boolean) {
+      this.micStream?.getAudioTracks().forEach((track) => {
+        track.enabled = enabled;
+      });
+    }
 
   private onMessage = (ev: MessageEvent) => {
     if (ev.data instanceof ArrayBuffer) {
@@ -240,9 +248,12 @@ export class DeepgramVoiceAgentSession {
       } catch {
         /* ignore */
       }
-      this.micSource.mediaStream.getTracks().forEach((tr) => tr.stop());
       this.micSource = null;
     }
+      if (this.micStream) {
+        this.micStream.getTracks().forEach((track) => track.stop());
+        this.micStream = null;
+      }
     if (this.micContext) {
       try {
         await this.micContext.close();

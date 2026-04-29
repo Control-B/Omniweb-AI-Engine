@@ -1,35 +1,63 @@
-"""Chat API — widget configuration for voice (Deepgram Voice Agent + optional Retell)."""
+"""Chat API — text chat proxy, welcome audio, and widget configuration.
+
+Endpoints:
+    POST /chat/welcome-audio         — synthesize welcome audio for frontend
+    GET  /chat/widget/{client_id}     — get widget embed code
+    GET  /chat/config/{client_id}     — get chat config (agent_id for frontend)
+    POST /chat/conversations          — list text conversations for a client
+"""
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import Response
 
 from app.api.deps import get_session
 from app.core.auth import get_current_client
-from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig
-from app.services import retell_service
+from app.services import elevenlabs_service
 
 logger = get_logger(__name__)
-settings = get_settings()
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+class WelcomeAudioRequest(BaseModel):
+    text: str
+    language: str | None = None
+    voice_id: str | None = None
+
+
 @router.post("/welcome-audio")
-async def get_welcome_audio():
-    """Welcome clips are produced inside the Retell voice session."""
-    raise HTTPException(
-        501,
-        detail="Welcome audio is handled by Retell during the live web/phone call.",
-    )
+async def get_welcome_audio(body: WelcomeAudioRequest) -> Response:
+    """Public endpoint to synthesize short welcome audio for the widget."""
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "Text is required")
+    if len(text) > 400:
+        raise HTTPException(400, "Text must be 400 characters or fewer")
+
+    try:
+        audio_bytes = await elevenlabs_service.synthesize_speech(
+            text=text,
+            language=body.language,
+            voice_id=body.voice_id,
+        )
+    except Exception as exc:
+        logger.error(f"Failed to synthesize welcome audio: {exc}")
+        raise HTTPException(502, "Failed to synthesize welcome audio") from exc
+
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
 @router.get("/languages")
 async def get_chat_languages() -> dict:
-    """Public language options for widgets (Retell-aligned)."""
+    """Return the public language and voice options for the landing widget."""
     return {
-        "default_language": "en",
-        "languages": retell_service.language_options_public(),
+        "default_language": elevenlabs_service._normalize_language_code(
+            elevenlabs_service.settings.ELEVENLABS_DEFAULT_LANGUAGE
+        ),
+        "languages": elevenlabs_service.get_language_options(),
     }
 
 
@@ -38,30 +66,26 @@ async def get_widget(
     client_id: str,
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Public widget metadata for embedding (Deepgram Voice Agent or Retell web call)."""
+    """Get the embeddable chat widget HTML for a client's agent.
+
+    This is a public endpoint — used by the client's website to embed the widget.
+    """
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client_id)
     )
     config = result.scalar_one_or_none()
-    if not config:
+    if not config or not config.elevenlabs_agent_id:
         raise HTTPException(404, "No agent configured for this client")
 
-    engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL).rstrip("/")
-    out: dict = {
-        "client_id": client_id,
-        "agent_name": config.agent_name,
-        "engine_url": engine_url,
-    }
-    if settings.deepgram_configured:
-        out["voice_provider"] = "deepgram"
-        out["deepgram_bootstrap_path"] = "/api/deepgram/voice-agent/bootstrap"
-    if config.retell_agent_id:
-        out["retell_agent_id"] = config.retell_agent_id
-        out["web_call_path"] = "/api/retell/web-call"
-    if not settings.deepgram_configured and not config.retell_agent_id:
-        raise HTTPException(404, "No voice provider configured for this client")
+    embed_data = elevenlabs_service.get_widget_embed_code(config.elevenlabs_agent_id)
 
-    return out
+    return {
+        "agent_id": config.elevenlabs_agent_id,
+        "embed_code": embed_data["iframe"],
+        "legacy_embed_code": embed_data["legacy"],
+        "widget_url": embed_data["widget_url"],
+        "agent_name": config.agent_name,
+    }
 
 
 @router.get("/config/{client_id}")
@@ -69,7 +93,11 @@ async def get_chat_config(
     client_id: str,
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Configuration for frontend SDK integration (Deepgram and/or Retell)."""
+    """Get chat configuration for the frontend SDK integration.
+
+    Returns the ElevenLabs agent_id so the frontend can connect directly
+    via the ElevenLabs WebSocket or React SDK.
+    """
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client_id)
     )
@@ -77,21 +105,12 @@ async def get_chat_config(
     if not config:
         raise HTTPException(404, "No agent configured for this client")
 
-    engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL).rstrip("/")
-    out: dict = {
-        "client_id": client_id,
-        "retell_agent_id": config.retell_agent_id,
+    return {
+        "agent_id": config.elevenlabs_agent_id,
         "agent_name": config.agent_name,
         "greeting": config.agent_greeting,
         "business_name": config.business_name,
-        "engine_url": engine_url,
     }
-    if settings.deepgram_configured:
-        out["voice_provider"] = "deepgram"
-        out["deepgram_bootstrap_path"] = "/api/deepgram/voice-agent/bootstrap"
-    if config.retell_agent_id:
-        out["web_call_path"] = "/api/retell/web-call"
-    return out
 
 
 @router.get("/conversations")
@@ -101,9 +120,23 @@ async def list_chat_conversations(
     cursor: str | None = Query(None),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Text conversation history will return here once wired to Retell chat."""
-    _ = page_size
-    _ = cursor
-    _ = db
-    _ = current_client
-    return {"conversations": [], "has_more": False}
+    """List text chat conversations for the authenticated client."""
+    result = await db.execute(
+        select(AgentConfig).where(
+            AgentConfig.client_id == current_client["client_id"]
+        )
+    )
+    config = result.scalar_one_or_none()
+    if not config or not config.elevenlabs_agent_id:
+        return {"conversations": [], "has_more": False}
+
+    try:
+        data = await elevenlabs_service.list_conversations(
+            agent_id=config.elevenlabs_agent_id,
+            page_size=page_size,
+            cursor=cursor,
+        )
+        return data
+    except Exception as exc:
+        logger.error(f"Failed to list conversations: {exc}")
+        return {"conversations": [], "has_more": False, "error": str(exc)}

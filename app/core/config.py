@@ -4,13 +4,11 @@ All configuration comes from environment variables (12-factor).
 Use .env for local dev; DigitalOcean App Platform env vars for production.
 """
 from functools import lru_cache
-from urllib.parse import urlsplit
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 DEFAULT_ENGINE_BASE_URL = "https://omniweb-engine-rs6fr.ondigitalocean.app"
-DEFAULT_DEVELOPMENT_DATABASE_URL = "postgresql+asyncpg://omniweb:password@localhost:5432/omniweb_engine"
 
 
 class Settings(BaseSettings):
@@ -36,8 +34,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     INTERNAL_API_KEY: str = "change-me-in-production"  # platform → engine auth
     ADMIN_SIGNUP_CODE: str = "omniweb-admin-2024"  # required code to create admin accounts
-    # Shared secret for agent tool webhooks (Retell custom tools → Omniweb)
-    TOOL_WEBHOOK_SECRET: str = "change-me"
+    ELEVENLABS_TOOL_SECRET: str = "change-me"  # shared secret for ElevenLabs tool webhooks
     LANDING_PAGE_CLIENT_ID: str = ""  # client UUID for landing-page leads
     # Allowed CORS origins for the dashboard frontend
     CORS_ORIGINS: list[str] = [
@@ -50,27 +47,44 @@ class Settings(BaseSettings):
     ]
 
     # ── Database ─────────────────────────────────────────────
-    DATABASE_URL: str = ""
+    DATABASE_URL: str = "postgresql+asyncpg://omniweb:password@localhost:5432/omniweb_engine"
 
     # ── Redis ────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # ── Retell AI (voice + web calls + telephony orchestration) ─────────
-    RETELL_API_KEY: str = ""
-    # Retell agent used for anonymous sessions (marketing site, demos)
-    RETELL_LANDING_AGENT_ID: str = ""
-
-    # ── Deepgram (voice/web agent orchestration) ─────────────────────────
-    DEEPGRAM_API_KEY: str = ""
-    DEEPGRAM_PROJECT_ID: str = ""
-    DEEPGRAM_AGENT_MODEL: str = "gpt-4o-mini"
-    DEEPGRAM_STT_MODEL: str = "nova-3"
-    DEEPGRAM_TTS_VOICE: str = "aura-asteria-en"
+    # ── ElevenLabs (Voice + Text + KB engine) ────────────────
+    ELEVENLABS_API_KEY: str = ""
+    ELEVENLABS_DEFAULT_VOICE_ID: str = "EXAVITQu4vr4xnSDxMaL"  # Rachel
+    ELEVENLABS_DEFAULT_LANGUAGE: str = "en"
+    ELEVENLABS_VOICE_ID_AR: str | None = None
+    ELEVENLABS_VOICE_ID_DE: str | None = None
+    ELEVENLABS_VOICE_ID_EN: str | None = None
+    ELEVENLABS_VOICE_ID_ES: str | None = None
+    ELEVENLABS_VOICE_ID_FR: str | None = None
+    ELEVENLABS_VOICE_ID_HI: str | None = None
+    ELEVENLABS_VOICE_ID_IT: str | None = None
+    ELEVENLABS_VOICE_ID_JA: str | None = None
+    ELEVENLABS_VOICE_ID_KO: str | None = None
+    ELEVENLABS_VOICE_ID_NL: str | None = None
+    ELEVENLABS_VOICE_ID_PL: str | None = None
+    ELEVENLABS_VOICE_ID_PT: str | None = None
+    ELEVENLABS_VOICE_ID_RU: str | None = None
+    ELEVENLABS_VOICE_ID_TR: str | None = None
+    ELEVENLABS_VOICE_ID_UK: str | None = None
+    ELEVENLABS_VOICE_ID_ZH: str | None = None
+    ELEVENLABS_WEBHOOK_SECRET: str = ""  # For verifying webhook signatures
 
     # ── Twilio (Phone Numbers + SMS) ─────────────────────────
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_FROM_NUMBER: str = ""  # default outbound SMS number
+
+    # ── Deepgram (Shopify / widget voice agent infrastructure) ──
+    DEEPGRAM_API_KEY: str = ""
+    DEEPGRAM_PROJECT_ID: str = ""
+    DEEPGRAM_AGENT_MODEL: str = "gpt-4o-mini"
+    DEEPGRAM_STT_MODEL: str = "nova-3"
+    DEEPGRAM_TTS_VOICE: str = "aura-asteria-en"
 
     # ── Cal.com (Appointment Booking) ────────────────────────
     CALCOM_API_KEY: str = ""
@@ -125,10 +139,6 @@ class Settings(BaseSettings):
         "read_customers,read_themes,write_script_tags"
     )
 
-    # ── Gadget bridge (Shopify data intelligence) ───────────────────────
-    GADGET_API_BASE_URL: str = ""
-    GADGET_ENGINE_SHARED_SECRET: str = ""
-
     # ── Telephony limits ─────────────────────────────────────
     MAX_CALL_DURATION_SECONDS: int = 1800  # 30 min hard stop
 
@@ -141,41 +151,8 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT == "production" or self.APP_ENV == "production"
 
     @property
-    def resolved_database_url(self) -> str:
-        raw_url = (self.DATABASE_URL or "").strip()
-        if raw_url:
-            return raw_url
-        if self.is_production:
-            return ""
-        return DEFAULT_DEVELOPMENT_DATABASE_URL
-
-    @property
-    def database_configuration_error(self) -> str | None:
-        resolved_url = self.resolved_database_url
-        if not resolved_url:
-            return "DATABASE_URL is not configured"
-
-        if self.is_production:
-            host = (urlsplit(resolved_url).hostname or "").strip().lower()
-            if host in {"", "localhost", "127.0.0.1", "0.0.0.0"}:
-                return (
-                    "DATABASE_URL points to a local database host in production. "
-                    "Set it to your managed PostgreSQL connection string."
-                )
-
-        return None
-
-    @property
-    def database_configured(self) -> bool:
-        return self.database_configuration_error is None
-
-    @property
-    def retell_configured(self) -> bool:
-        return bool(self.RETELL_API_KEY)
-
-    @property
-    def deepgram_configured(self) -> bool:
-        return bool(self.DEEPGRAM_API_KEY)
+    def elevenlabs_configured(self) -> bool:
+        return bool(self.ELEVENLABS_API_KEY)
 
     @property
     def twilio_configured(self) -> bool:
@@ -188,6 +165,10 @@ class Settings(BaseSettings):
     @property
     def clerk_configured(self) -> bool:
         return bool(self.CLERK_SECRET_KEY)
+
+    @property
+    def deepgram_configured(self) -> bool:
+        return bool(self.DEEPGRAM_API_KEY)
 
     @property
     def calcom_configured(self) -> bool:

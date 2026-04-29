@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from uuid import uuid4
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.models import AgentConfig
+from app.models.models import AgentConfig, Call, Transcript
 from app.services import deepgram_service
 
 logger = get_logger(__name__)
@@ -23,6 +25,21 @@ router = APIRouter(prefix="/deepgram", tags=["deepgram"])
 class VoiceAgentBootstrapRequest(BaseModel):
     client_id: str | None = None
     language: str | None = None
+
+
+class SessionTranscriptLine(BaseModel):
+    role: str
+    content: str
+    timestamp: str | int | float | None = None
+
+
+class VoiceAgentSessionCompleteRequest(BaseModel):
+    client_id: str
+    language: str | None = None
+    mode: str = "voice"
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    transcript: list[SessionTranscriptLine] = []
 
 
 @router.post("/voice-agent/bootstrap")
@@ -77,4 +94,69 @@ async def voice_agent_bootstrap(
         "access_token": access_token,
         "expires_in": token_payload.get("expires_in"),
         "settings": voice_settings,
+    }
+
+
+@router.post("/voice-agent/session-complete")
+async def voice_agent_session_complete(
+    req: VoiceAgentSessionCompleteRequest,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Persist a completed Deepgram widget session and generate a summary."""
+    try:
+        cid = UUID(req.client_id)
+    except ValueError:
+        raise HTTPException(400, detail="Invalid client_id")
+
+    result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == cid))
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(404, detail="No agent configuration for this client")
+
+    turns = deepgram_service.transcript_lines_to_turns(
+        [line.model_dump() for line in req.transcript]
+    )
+    caller_turns = [turn for turn in turns if turn.get("speaker") == "caller"]
+    if not caller_turns:
+        return {"ok": True, "saved": False, "reason": "no_user_messages"}
+
+    started_at = req.started_at or datetime.now(timezone.utc)
+    ended_at = req.ended_at or datetime.now(timezone.utc)
+    duration_seconds = max(0, int((ended_at - started_at).total_seconds()))
+    channel = "text" if req.mode == "text" else "voice"
+
+    call = Call(
+        id=uuid4(),
+        client_id=config.client_id,
+        caller_number="",
+        direction="inbound",
+        channel=channel,
+        status="completed",
+        started_at=started_at,
+        ended_at=ended_at,
+        duration_seconds=duration_seconds,
+        post_call_processed=True,
+    )
+    db.add(call)
+    await db.flush()
+
+    summary = await deepgram_service.summarize_transcript(turns)
+    transcript = Transcript(
+        id=uuid4(),
+        call_id=call.id,
+        client_id=config.client_id,
+        turns=turns,
+        summary=summary,
+        sentiment=None,
+    )
+    db.add(transcript)
+    await db.commit()
+
+    return {
+        "ok": True,
+        "saved": True,
+        "call_id": str(call.id),
+        "summary": summary,
+        "turn_count": len(turns),
+        "channel": channel,
     }

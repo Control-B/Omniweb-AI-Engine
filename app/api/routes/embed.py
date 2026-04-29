@@ -72,26 +72,11 @@ async def generate_embed_code(
     if not client.is_active:
         raise HTTPException(403, "Account is not active")
 
-    # Require website_domain on agent config before generating embed
-    result = await db.execute(
-        select(AgentConfig).where(AgentConfig.client_id == client.id)
-    )
-    agent_config = result.scalar_one_or_none()
-    if not agent_config or not agent_config.website_domain:
-        raise HTTPException(
-            400,
-            "Website domain is required before generating embed code. "
-            "Complete your agent setup first.",
-        )
-
-    # Use agent config domain as the authoritative domain lock
-    domain = body.domain or agent_config.website_domain
-
     # Generate new embed code
     code = _generate_embed_code()
     client.embed_code = code
     client.embed_phone = body.phone
-    client.embed_domain = domain
+    client.embed_domain = body.domain
 
     # Set expiry based on subscription status
     if client.stripe_subscription_id:
@@ -160,17 +145,16 @@ async def validate_embed_code(
     )
     agent_config = result.scalar_one_or_none()
 
-    retell_agent_id = None
+    elevenlabs_agent_id = None
     widget_config = {}
     if agent_config:
-        retell_agent_id = agent_config.retell_agent_id
+        elevenlabs_agent_id = agent_config.elevenlabs_agent_id
         widget_config = agent_config.widget_config or {}
 
     return {
         "valid": True,
         "client_id": str(client.id),
-        "agent_id": str(client.id),
-        "retell_agent_id": retell_agent_id,
+        "agent_id": elevenlabs_agent_id,
         "widget_config": widget_config,
         "plan": client.plan,
     }
@@ -189,32 +173,32 @@ async def get_embed_snippet(
     if not client.embed_code:
         raise HTTPException(404, "No embed code generated yet. Generate one first.")
 
-    # External widget targets the client_id-backed Retell web-call flow.
-    widget_target_id = str(client.id)
-
+    # Get agent config for agent_id
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client.id)
     )
     agent_config = result.scalar_one_or_none()
-    retell_agent_id = agent_config.retell_agent_id if agent_config else None
+    agent_id = agent_config.elevenlabs_agent_id if agent_config else "YOUR_AGENT_ID"
 
     platform_url = getattr(settings, "PLATFORM_URL", "https://omniweb.ai")
     engine_url = getattr(settings, "ENGINE_BASE_URL", settings.APP_BASE_URL)
 
     snippet = f"""<!-- Omniweb AI Widget -->
-<script
-  src="{platform_url}/widget/loader.js"
-  data-embed-code="{client.embed_code}"
-  data-agent-id="{widget_target_id}"
-  data-engine-url="{engine_url}"
-  async
-></script>"""
+<script>
+(function(){{
+  var d=document,s=d.createElement('script');
+  s.src='{platform_url}/widget/loader.js';
+  s.async=true;
+  s.dataset.embedCode='{client.embed_code}';
+  s.dataset.agentId='{agent_id}';
+  s.dataset.engineUrl='{engine_url}';
+  d.head.appendChild(s);
+}})();
+</script>"""
 
     return {
         "embed_code": client.embed_code,
         "snippet": snippet,
-        "widget_target_id": widget_target_id,
-        "retell_agent_id": retell_agent_id,
         "domain": client.embed_domain,
         "expires_at": client.embed_expires_at.isoformat() if client.embed_expires_at else None,
     }

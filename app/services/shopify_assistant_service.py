@@ -268,94 +268,59 @@ class ShopifyAssistantService:
         recommendations = ShopifyAssistantService.recommend_products(shopper_message, context)
         support_response = ShopifyAssistantService.build_support_response(intent, context, store)
 
-        # ── Try to enrich with live Storefront API products ──────────
-        if intent in ShopifyAssistantService.PRODUCT_INTENTS and not recommendations:
-            try:
-                from app.services.shopify_product_service import ShopifyProductService
-                search_term = shopper_message.strip()[:80]
-                live_products = await ShopifyProductService.search_products(store, search_term, limit=6)
-                if live_products:
-                    context["catalog_candidates"] = live_products
-                    session.context = context
-                    recommendations = ShopifyAssistantService.recommend_products(shopper_message, context)
-            except Exception as prod_err:
-                logger.warning(f"Storefront product search failed (non-blocking): {prod_err}")
-
         action = "ask_clarifying_question"
         navigate_to = None
         checkout_url = context.get("checkout_url")
         discount_request = None
+        lines: list[str] = []
 
-        # ── Try LLM-powered reply ────────────────────────────────────
-        llm_message = None
-        try:
-            llm_message = await ShopifyAssistantService._generate_llm_reply(
-                store=store,
-                session=session,
-                shopper_message=shopper_message,
-                intent=intent,
-                behavior_summary=behavior_summary,
-                recommendations=recommendations,
-                support_response=support_response if intent in ShopifyAssistantService.SUPPORT_INTENTS else None,
-            )
-        except Exception as llm_err:
-            logger.warning(f"LLM reply failed, falling back to rule-based: {llm_err}")
+        if behavior_summary:
+            lines.append(behavior_summary)
 
-        # ── Fallback to rule-based if LLM failed ────────────────────
-        if not llm_message:
-            lines: list[str] = []
-            if behavior_summary:
-                lines.append(behavior_summary)
-            if intent in ShopifyAssistantService.SUPPORT_INTENTS:
-                lines.append(support_response)
-            elif intent == "discount_request":
-                if store.allow_discount_requests and store.require_discount_approval:
-                    discount_request = await ShopifyAssistantService.create_discount_request(
-                        db, store=store, session=session, shopper_message=shopper_message,
-                    )
-                    action = "await_discount_approval"
-                    lines.append(
-                        "I can request a store-approved discount for you, but I won't apply anything automatically. "
-                        "I've sent the request to the store owner for approval."
-                    )
-                else:
-                    lines.append(
-                        "I can help you find the best-value option, but this store isn't accepting AI discount requests right now."
-                    )
-            elif intent == "checkout" and checkout_url:
-                action = "navigate_to_checkout"
-                navigate_to = checkout_url
-                lines.append(
-                    "You're ready for checkout. I'll send you there now, and you'll complete payment securely on the store's checkout page."
-                )
-            elif recommendations:
-                action = "navigate_to_product"
-                navigate_to = recommendations[0].get("url") or recommendations[0].get("handle")
-                top_names = ", ".join(product.get("title", "item") for product in recommendations[:3])
-                lines.append(f"Based on what you've shared, I'd start with {top_names}.")
-                reason = recommendations[0].get("reason")
-                if reason:
-                    lines.append(reason)
-            else:
-                lines.append(
-                    "Tell me what you're shopping for, who it's for, or the problem you're trying to solve, and I'll narrow it down fast."
-                )
-            llm_message = " ".join(part.strip() for part in lines if part and part.strip())
-        else:
-            # Determine action from LLM + structured data
-            if intent == "discount_request" and store.allow_discount_requests and store.require_discount_approval:
+        if intent in ShopifyAssistantService.SUPPORT_INTENTS:
+            lines.append(support_response)
+        elif intent == "discount_request":
+            if store.allow_discount_requests and store.require_discount_approval:
                 discount_request = await ShopifyAssistantService.create_discount_request(
-                    db, store=store, session=session, shopper_message=shopper_message,
+                    db,
+                    store=store,
+                    session=session,
+                    shopper_message=shopper_message,
                 )
                 action = "await_discount_approval"
-            elif intent == "checkout" and checkout_url:
-                action = "navigate_to_checkout"
-                navigate_to = checkout_url
-            elif recommendations:
-                action = "navigate_to_product"
-                navigate_to = recommendations[0].get("url") or recommendations[0].get("handle")
+                lines.append(
+                    "I can request a store-approved discount for you, but I won't apply anything automatically. "
+                    "I've sent the request to the store owner for approval."
+                )
+            else:
+                lines.append(
+                    "I can help you find the best-value option, but this store isn't accepting AI discount requests right now."
+                )
+        elif intent == "checkout" and checkout_url:
+            action = "navigate_to_checkout"
+            navigate_to = checkout_url
+            lines.append(
+                "You're ready for checkout. I'll send you there now, and you'll complete payment securely on the store's checkout page."
+            )
+        elif recommendations:
+            action = "navigate_to_product"
+            navigate_to = recommendations[0].get("url") or recommendations[0].get("handle")
+            top_names = ", ".join(product.get("title", "item") for product in recommendations[:3])
+            lines.append(f"Based on what you've shared, I'd start with {top_names}.")
+            reason = recommendations[0].get("reason")
+            if reason:
+                lines.append(reason)
+        else:
+            lines.append(
+                "Tell me what you're shopping for, who it's for, or the problem you're trying to solve, and I'll narrow it down fast."
+            )
 
-        message = llm_message
+        if intent in ShopifyAssistantService.PRODUCT_INTENTS and recommendations:
+            lines.append("I can also guide you straight to the product page and explain the key benefits before you decide.")
+        if intent == "checkout" and checkout_url:
+            lines.append("I won't handle payment details directly — you'll enter those securely yourself.")
+
+        message = " ".join(part.strip() for part in lines if part and part.strip())
         assistant_turn = {
             "role": "assistant",
             "message": message,
@@ -390,67 +355,6 @@ class ShopifyAssistantService:
             "support_resolution": support_response if intent in ShopifyAssistantService.SUPPORT_INTENTS else None,
             "requires_human": False,
         }
-
-    @staticmethod
-    async def _generate_llm_reply(
-        *,
-        store: ShopifyStore,
-        session: ShopifyAssistantSession,
-        shopper_message: str,
-        intent: str,
-        behavior_summary: str | None,
-        recommendations: list[dict[str, Any]],
-        support_response: str | None,
-    ) -> str | None:
-        """Use OpenAI to generate a natural commerce assistant reply."""
-        from app.core.config import get_settings
-        settings = get_settings()
-        if not settings.openai_configured:
-            return None
-
-        import openai
-        client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-
-        # Build system prompt
-        shop_name = store.shop_name or store.shop_domain.split(".")[0].replace("-", " ").title()
-        system = (
-            f"You are a friendly, knowledgeable shopping assistant for {shop_name}. "
-            "Your job is to help shoppers find the right products, answer questions about shipping/returns/sizing, "
-            "and guide them toward checkout. Be concise (2-3 sentences max), warm, and helpful. "
-            "Never fabricate product details — only reference products from the recommendations list below. "
-            "Never handle payment info directly — always guide to the secure checkout page. "
-            "If you don't know something, say so honestly and offer to help in another way.\n\n"
-        )
-
-        if recommendations:
-            product_lines = []
-            for i, p in enumerate(recommendations[:5], 1):
-                price_str = f"${p.get('price', '?')}" if p.get('price') else ""
-                product_lines.append(f"{i}. {p.get('title', 'Unknown')} {price_str} — {p.get('reason', '')}")
-            system += "Available product recommendations:\n" + "\n".join(product_lines) + "\n\n"
-
-        if support_response:
-            system += f"Relevant store policy: {support_response}\n\n"
-
-        if behavior_summary:
-            system += f"Shopper context: {behavior_summary}\n"
-
-        system += f"Detected intent: {intent}\n"
-
-        # Build conversation history
-        msgs: list[dict[str, str]] = [{"role": "system", "content": system}]
-        for turn in (session.transcript or [])[-10:]:
-            role = "assistant" if turn.get("role") == "assistant" else "user"
-            msgs.append({"role": role, "content": turn.get("message", "")})
-        msgs.append({"role": "user", "content": shopper_message})
-
-        response = await client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=msgs,
-            max_tokens=200,
-            temperature=0.7,
-        )
-        return (response.choices[0].message.content or "").strip() or None
 
     @staticmethod
     def build_support_response(intent: str, context: dict[str, Any], store: ShopifyStore) -> str:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -18,11 +19,7 @@ DEEPGRAM_GRANT_URL = "https://api.deepgram.com/v1/auth/grant"
 DEEPGRAM_AGENT_WS_URL = "wss://agent.deepgram.com/v1/agent/converse"
 
 
-async def grant_temporary_token(*, ttl_seconds: int = 600) -> dict[str, Any]:
-    """Mint a short-lived JWT for browser Voice Agent / streaming APIs.
-
-    Requires a Deepgram API key with at least Member role (see Deepgram token docs).
-    """
+async def grant_temporary_token(ttl_seconds: int = 600) -> dict[str, Any]:
     if not settings.deepgram_configured:
         raise RuntimeError("DEEPGRAM_API_KEY is not configured")
 
@@ -47,32 +44,28 @@ async def grant_temporary_token(*, ttl_seconds: int = 600) -> dict[str, Any]:
 
 
 def _tts_voice_for_config(config: AgentConfig) -> str:
-    vid = (config.voice_id or "").strip()
-    if "aura" in vid.lower():
-        return vid
+    voice_id = (config.voice_id or "").strip()
+    if "aura" in voice_id.lower():
+        return voice_id
     return settings.DEEPGRAM_TTS_VOICE
 
 
-def _agent_language_tag(config: AgentConfig, requested: str | None) -> str:
-    """BCP-47-ish tag for Voice Agent ``agent.language`` (``multi`` when appropriate)."""
-    supported = [str(x).lower().strip() for x in (config.supported_languages or ["en"])]
+def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> str:
+    supported = [str(item).lower().strip() for item in (config.supported_languages or ["en"])]
     if requested:
-        r = requested.lower().strip()
-        if r == "multi":
+        normalized = requested.lower().strip()
+        if normalized == "multi":
             return "multi"
-        if r in supported or any(s.startswith(r) for s in supported):
-            return r[:8] if len(r) > 2 else r
+        if normalized in supported or any(lang.startswith(normalized) for lang in supported):
+            return normalized[:8] if len(normalized) > 2 else normalized
     if len(supported) > 1:
         return "multi"
-    return (supported[0] if supported else "en")[:8]
+    if supported:
+        return supported[0][:8]
+    return "en"[:8]
 
 
-def build_voice_agent_settings(
-    config: AgentConfig,
-    *,
-    language: str | None = None,
-) -> dict[str, Any]:
-    """Build a Voice Agent ``Settings`` object (see Deepgram message-flow docs)."""
+def build_voice_agent_settings(config: AgentConfig, language: str | None = None) -> dict[str, Any]:
     composed = compose_system_prompt(
         agent_name=config.agent_name or "Alex",
         business_name=config.business_name or "",
@@ -89,8 +82,8 @@ def build_voice_agent_settings(
         custom_escalation_triggers=config.custom_escalation_triggers or [],
         custom_context=config.custom_context,
     )
-    lang_tag = _agent_language_tag(config, language)
-    tts = _tts_voice_for_config(config)
+    language_tag = _agent_language_tag(config, language)
+    tts_voice = _tts_voice_for_config(config)
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
 
     return {
@@ -100,13 +93,111 @@ def build_voice_agent_settings(
             "output": {"encoding": "linear16", "sample_rate": 24000, "container": "none"},
         },
         "agent": {
-            "language": lang_tag,
+            "language": language_tag,
             "listen": {"model": settings.DEEPGRAM_STT_MODEL},
             "think": {
                 "provider": {"type": "open_ai"},
                 "model": think_model,
                 "prompt": composed,
             },
-            "speak": {"model": tts},
+            "speak": {"model": tts_voice},
         },
     }
+
+
+def transcript_lines_to_turns(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    turns: list[dict[str, Any]] = []
+    for index, line in enumerate(lines):
+        role = str(line.get("role") or "user").strip().lower()
+        content = str(line.get("content") or "").strip()
+        if not content:
+            continue
+        speaker = "agent" if role == "assistant" else "caller"
+        turns.append(
+            {
+                "speaker": speaker,
+                "text": content,
+                "timestamp": line.get("timestamp") or index,
+            }
+        )
+    return turns
+
+
+def summarize_transcript_fallback(turns: list[dict[str, Any]]) -> str | None:
+    if not turns:
+        return None
+
+    caller_lines = [
+        str(turn.get("text") or "").strip()
+        for turn in turns
+        if turn.get("speaker") == "caller"
+    ]
+    agent_lines = [
+        str(turn.get("text") or "").strip()
+        for turn in turns
+        if turn.get("speaker") == "agent"
+    ]
+    caller_lines = [line for line in caller_lines if line]
+    agent_lines = [line for line in agent_lines if line]
+
+    if not caller_lines and not agent_lines:
+        return None
+
+    summary_parts: list[str] = []
+    if caller_lines:
+        summary_parts.append(f"Visitor asked about: {caller_lines[0][:180]}")
+    if len(caller_lines) > 1:
+        summary_parts.append(
+            f"They exchanged {len(caller_lines)} visitor messages during the session"
+        )
+    if agent_lines:
+        summary_parts.append(f"The assistant responded with guidance on {agent_lines[0][:140]}")
+
+    return ". ".join(summary_parts).strip()[:500] or None
+
+
+async def summarize_transcript(turns: list[dict[str, Any]]) -> str | None:
+    if not turns:
+        return None
+
+    transcript_text = "\n".join(
+        f"{str(turn.get('speaker') or 'unknown').upper()}: {str(turn.get('text') or '').strip()}"
+        for turn in turns
+        if str(turn.get("text") or "").strip()
+    ).strip()
+    if not transcript_text:
+        return None
+
+    if not settings.openai_configured:
+        return summarize_transcript_fallback(turns)
+
+    try:
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        response = await client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You summarize website AI assistant conversations. Return JSON only "
+                        "with keys: summary, sentiment. Keep summary to 1-2 sentences and "
+                        "capture the user's goal and outcome."
+                    ),
+                },
+                {"role": "user", "content": f"Transcript:\n{transcript_text}"},
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            max_tokens=180,
+        )
+        raw = response.choices[0].message.content or "{}"
+        payload = json.loads(raw)
+        summary = str(payload.get("summary") or "").strip()
+        if summary:
+            return summary[:500]
+        return summarize_transcript_fallback(turns)
+    except Exception as exc:
+        logger.warning("Deepgram widget summary generation failed", error=str(exc))
+        return summarize_transcript_fallback(turns)

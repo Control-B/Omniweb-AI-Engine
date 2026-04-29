@@ -106,7 +106,7 @@ export function WidgetTester({
               .
             </li>
             <li>
-              Set <code className="rounded bg-black/40 px-1.5 py-0.5">LIVEKIT_URL</code>, <code className="rounded bg-black/40 px-1.5 py-0.5">LIVEKIT_API_KEY</code>, and <code className="rounded bg-black/40 px-1.5 py-0.5">LIVEKIT_API_SECRET</code> in the engine <code className="rounded bg-black/40 px-1.5 py-0.5">.env</code>.
+              Set the required voice-agent provider keys in the engine <code className="rounded bg-black/40 px-1.5 py-0.5">.env</code>.
             </li>
             <li>
               Point the dashboard at the engine with <code className="rounded bg-black/40 px-1.5 py-0.5">NEXT_PUBLIC_ENGINE_URL</code>.

@@ -18,7 +18,7 @@ export default function LandingPage() {
         </h1>
         <p className="text-slate-400 text-base leading-relaxed mb-10">
           This page loads your embeddable assistant in an iframe. You need the Agent Engine running
-          with LiveKit configured, and a real{" "}
+          with realtime voice configured, and a real{" "}
           <code className="text-cyan-300/90 text-sm">client_id</code> (UUID) that exists in your
           database.
         </p>

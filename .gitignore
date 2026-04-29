@@ -29,6 +29,10 @@ env/
 .DS_Store
 Thumbs.db
 
+# Public marketing site — clone separately (own repo: Control-B/v0-omniweb-landing-page)
+# See frontend/README.md
+frontend/v0-omniweb-landing-page/
+
 # Node / Dashboard
 dashboard/node_modules/
 dashboard/.pnpm-store/

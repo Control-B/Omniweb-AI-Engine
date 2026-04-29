@@ -157,6 +157,22 @@ def _tts_voice_for_config(config: AgentConfig) -> str:
     return settings.DEEPGRAM_TTS_VOICE
 
 
+def _deepgram_tts_for_language(language_tag: str, config: AgentConfig) -> str:
+    """Return a Deepgram Aura voice model for the active language."""
+    voice_id = (config.voice_id or "").strip()
+    if voice_id and "aura" in voice_id.lower():
+        return voice_id
+    return settings.DEEPGRAM_TTS_VOICE
+
+
+def _elevenlabs_voice_for_config(config: AgentConfig) -> str:
+    """Return ElevenLabs voice id, falling back to default when config uses Aura."""
+    voice_id = (config.voice_id or "").strip()
+    if voice_id and "aura" not in voice_id.lower():
+        return voice_id
+    return settings.ELEVENLABS_DEFAULT_VOICE_ID
+
+
 def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> str:
     supported = [str(item).lower().strip() for item in (config.supported_languages or ["en"])]
     if requested:
@@ -172,7 +188,11 @@ def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> st
     return "en"[:8]
 
 
-def build_voice_agent_settings(config: AgentConfig, language: str | None = None) -> dict[str, Any]:
+def build_voice_agent_settings(
+    config: AgentConfig,
+    language: str | None = None,
+    voice_override: str | None = None,
+) -> dict[str, Any]:
     composed = compose_system_prompt(
         agent_name=config.agent_name or "Alex",
         business_name=config.business_name or "",
@@ -190,7 +210,6 @@ def build_voice_agent_settings(config: AgentConfig, language: str | None = None)
         custom_context=config.custom_context,
     )
     language_tag = _agent_language_tag(config, language)
-    tts_voice = _tts_voice_for_config(config)
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
     # Languages explicitly supported by Deepgram nova-3 STT with a named code.
     # Languages NOT listed here (Swahili, Krio, Sundanese) fall back to "multi" so
@@ -200,10 +219,10 @@ def build_voice_agent_settings(config: AgentConfig, language: str | None = None)
         "ru", "uk", "pl", "ar", "tr", "hi", "bn",
         "zh", "ja", "ko", "id", "vi", "tl",
     }
-    if lang_tag == "multi":
+    if language_tag == "multi":
         listen_language = "multi"
-    elif lang_tag in _NOVA3_SUPPORTED:
-        listen_language = lang_tag
+    elif language_tag in _NOVA3_SUPPORTED:
+        listen_language = language_tag
     else:
         # Unsupported STT code (sw, kri, su…) — use multi for best-effort recognition
         listen_language = "multi"
@@ -213,7 +232,7 @@ def build_voice_agent_settings(config: AgentConfig, language: str | None = None)
     requested_aura = (voice_override or "").strip()
     use_aura_direct = bool(requested_aura and "aura" in requested_aura.lower())
 
-    deepgram_model = requested_aura if use_aura_direct else _deepgram_tts_for_language(lang_tag, config)
+    deepgram_model = requested_aura if use_aura_direct else _deepgram_tts_for_language(language_tag, config)
     deepgram_speak: dict[str, Any] = {
         "provider": {
             "type": "deepgram",
@@ -252,13 +271,17 @@ def build_voice_agent_settings(config: AgentConfig, language: str | None = None)
         },
         "agent": {
             "language": language_tag,
-            "listen": {"model": settings.DEEPGRAM_STT_MODEL},
+            "listen": {
+                "provider": {"type": "deepgram"},
+                "model": settings.DEEPGRAM_STT_MODEL,
+                "language": listen_language,
+            },
             "think": {
                 "provider": {"type": "open_ai"},
                 "model": think_model,
                 "prompt": composed,
             },
-            "speak": {"model": tts_voice},
+            "speak": speak,
         },
     }
 

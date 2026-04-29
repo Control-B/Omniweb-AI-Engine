@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 DEFAULT_ENGINE_BASE_URL = "https://omniweb-engine-rs6fr.ondigitalocean.app"
+DEFAULT_PLATFORM_URL = "https://omniweb.ai"
 
 
 class Settings(BaseSettings):

@@ -1,6 +1,6 @@
 "use client";
 
-import { ClerkRegisterPanel } from "@/components/auth/clerk-register-panel";
+import { SignUp } from "@clerk/nextjs";
 import Link from "next/link";
 
 export default function SignUpPage() {
@@ -13,7 +13,9 @@ export default function SignUpPage() {
             Create your account to configure your AI agent and install the widget on your site.
           </p>
         </div>
-        <ClerkRegisterPanel />
+        <div className="flex justify-center">
+          <SignUp routing="path" path="/sign-up" signInUrl="/login" />
+        </div>
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link href="/login" className="text-primary hover:underline">

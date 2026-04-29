@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 
 export function AdminAccount() {
   const { user } = useAuth();
+  const displayName = user?.email?.split("@")[0] || "Admin user";
 
   return (
     <div className="p-6 space-y-6 max-w-3xl">
@@ -28,7 +29,7 @@ export function AdminAccount() {
         <CardContent className="space-y-3 text-sm">
           <div className="grid gap-1">
             <span className="text-xs text-muted-foreground">Name</span>
-            <span className="text-foreground">{user?.first_name || user?.name || "Not set"}</span>
+            <span className="text-foreground">{displayName}</span>
           </div>
           <div className="grid gap-1">
             <span className="text-xs text-muted-foreground">Email</span>

@@ -145,8 +145,6 @@ export class DeepgramVoiceAgentSession {
           noiseSuppression: true,
           autoGainControl: false,
           sampleRate: 16000,
-          // Supported by Safari/Chrome on some devices; ignored elsewhere.
-          voiceIsolation: true,
         },
       });
         this.micStream = stream;

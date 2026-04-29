@@ -12,9 +12,20 @@ import { AdminAgents } from "@/components/admin/agents";
 import { AdminConversations } from "@/components/admin/conversations";
 import { AdminTeam } from "@/components/admin/team";
 import { AdminTestAgent } from "@/components/admin/test-agent";
+import { AgentConfigPage } from "@/components/pages/agent-config";
 import { Loader2 } from "lucide-react";
 
-export type AdminPageId = "overview" | "agents" | "sessions" | "clients" | "templates" | "team" | "test-agent" | "client-detail";
+export type AdminPageId =
+  | "overview"
+  | "agent-config"
+  | "ai-telephony"
+  | "agents"
+  | "sessions"
+  | "clients"
+  | "templates"
+  | "team"
+  | "test-agent"
+  | "client-detail";
 
 const PAGE_PERMISSIONS: Partial<Record<Exclude<AdminPageId, "client-detail">, UserPermission>> = {
   overview: "overview.read",

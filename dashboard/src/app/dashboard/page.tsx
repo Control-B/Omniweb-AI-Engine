@@ -1,18 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { isInternalRole, useAuth } from "@/lib/auth-context";
-import { ClientSidebar } from "@/components/client-sidebar";
 import { DashboardPage } from "@/components/pages/dashboard";
-import { CallsPage } from "@/components/pages/calls";
-import { LeadsPage } from "@/components/pages/leads";
-import { AgentConfigPage } from "@/components/pages/agent-config";
-import { NumbersPage } from "@/components/pages/numbers";
-import { SettingsPage } from "@/components/pages/settings";
-import { AutomationsPage } from "@/components/pages/automations";
-import { SitesPage } from "@/components/pages/sites";
-import { Loader2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Bot, Code, LineChart, Loader2, MessageSquareText, Settings } from "lucide-react";
 
 export type ClientPageId =
   | "dashboard"
@@ -29,6 +23,16 @@ export default function ClientDashboard() {
   const router = useRouter();
   const [activePage, setActivePage] = useState<ClientPageId>("dashboard");
   const [authChecked, setAuthChecked] = useState(false);
+  const steps: { key: "agent" | "test" | "embed"; label: string }[] = [
+    { key: "agent", label: "Configure your AI agent" },
+    { key: "test", label: "Test the widget privately" },
+    { key: "embed", label: "Install the widget on your site" },
+  ];
+  const progress: Record<(typeof steps)[number]["key"], boolean> = {
+    agent: true,
+    test: false,
+    embed: false,
+  };
 
   useEffect(() => {
     if (loading) return;

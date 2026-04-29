@@ -4,6 +4,18 @@ function normalizeApiBase(url: string): string {
   return url.replace(/\/$/, "");
 }
 
+function uniqueBases(values: string[]): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of values) {
+    const normalized = normalizeApiBase(value.trim());
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    output.push(normalized);
+  }
+  return output;
+}
+
 function resolveApiBase(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (configured) return normalizeApiBase(configured);
@@ -111,32 +123,42 @@ async function apiFetch<T = any>(
   const bases = getApiBases();
   let lastError: Error | null = null;
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const message = body.detail || `API error ${res.status}`;
+  for (const base of bases) {
+    try {
+      const res = await fetch(`${normalizeApiBase(base)}${API_PREFIX}${path}`, {
+        ...options,
+        headers,
+      });
 
-        // Retry on routing/infra-ish errors with next base.
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const message = body.detail || `API error ${res.status}`;
+
         if (res.status === 404 || res.status === 502 || res.status === 503 || res.status === 504) {
           lastError = new Error(message);
           continue;
         }
 
-        // For 401 on non-auth endpoints, clear token and redirect to login.
         if (res.status === 401 && !path.startsWith("/auth/")) {
           clearToken();
           if (typeof window !== "undefined") window.location.href = "/login";
         }
+
         throw new Error(message);
+      }
+
+      if (res.status === 204) {
+        return undefined as T;
       }
       return res.json();
     } catch (err) {
       lastError = err instanceof Error ? err : new Error("Load failed");
-      // Try next base only for transport-level failures.
       if (!(lastError instanceof TypeError)) {
         throw lastError;
       }
     }
   }
+
   throw lastError || new Error("Load failed");
 }
 

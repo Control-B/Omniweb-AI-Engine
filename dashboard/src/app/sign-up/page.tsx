@@ -3,6 +3,8 @@
 import { SignUp } from "@clerk/nextjs";
 import Link from "next/link";
 
+const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim());
+
 export default function SignUpPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
@@ -13,9 +15,15 @@ export default function SignUpPage() {
             Create your account to configure your AI agent and install the widget on your site.
           </p>
         </div>
-        <div className="flex justify-center">
-          <SignUp routing="path" path="/sign-up" signInUrl="/login" />
-        </div>
+        {clerkEnabled ? (
+          <div className="flex justify-center">
+            <SignUp routing="path" path="/sign-up" signInUrl="/login" />
+          </div>
+        ) : (
+          <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+            Public sign-up is not configured on this deployment yet. Please contact Omniweb or use the login page if your account has already been provisioned.
+          </div>
+        )}
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link href="/login" className="text-primary hover:underline">

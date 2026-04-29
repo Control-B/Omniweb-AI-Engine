@@ -55,7 +55,6 @@ class SignupRequest(BaseModel):
     password: str
     business_name: Optional[str] = None
     business_type: Optional[str] = None
-    website_domain: Optional[str] = None
     template_id: Optional[str] = None  # UUID of template to apply
 
 
@@ -70,8 +69,6 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     client_id: str
     email: str
-    name: str | None = None
-    first_name: str | None = None
     plan: str
     role: str = "client"
     permissions: list[str] = []
@@ -152,16 +149,6 @@ class AdminUserResponse(BaseModel):
     created_at: str | None = None
     invited_at: str | None = None
     invite_accepted_at: str | None = None
-    invite_url: str | None = None
-    invite_code: str | None = None
-    reset_url: str | None = None
-    reset_code: str | None = None
-
-
-class AdminBootstrapStatusResponse(BaseModel):
-    bootstrap_open: bool
-    has_owner: bool
-    internal_user_count: int
 
 
 class AdminUserUpdateRequest(BaseModel):
@@ -181,14 +168,7 @@ def _invite_url(token: str) -> str:
     return f"{settings.PLATFORM_URL}/reset-password?token={token}&mode=invite"
 
 
-def _serialize_admin_user(
-    user: Client,
-    *,
-    invite_url: str | None = None,
-    invite_code: str | None = None,
-    reset_url: str | None = None,
-    reset_code: str | None = None,
-) -> dict:
+def _serialize_admin_user(user: Client) -> dict:
     return {
         "id": str(user.id),
         "name": user.name,
@@ -199,10 +179,6 @@ def _serialize_admin_user(
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "invited_at": user.invited_at.isoformat() if user.invited_at else None,
         "invite_accepted_at": user.invite_accepted_at.isoformat() if user.invite_accepted_at else None,
-        "invite_url": invite_url,
-        "invite_code": invite_code,
-        "reset_url": reset_url,
-        "reset_code": reset_code,
     }
 
 
@@ -266,24 +242,6 @@ async def signup(
     if result.scalar_one_or_none():
         raise HTTPException(409, "Email already registered")
 
-    # Normalize and validate domain
-    domain = None
-    if body.website_domain:
-        domain = body.website_domain.strip().lower()
-        # Strip protocol and trailing slashes
-        for prefix in ("https://", "http://", "www."):
-            if domain.startswith(prefix):
-                domain = domain[len(prefix):]
-        domain = domain.rstrip("/")
-        if not domain or "." not in domain:
-            raise HTTPException(400, "Please enter a valid domain (e.g. mybusiness.com)")
-        # Check domain uniqueness
-        existing_domain = await db.execute(
-            select(AgentConfig).where(AgentConfig.website_domain == domain)
-        )
-        if existing_domain.scalar_one_or_none():
-            raise HTTPException(409, "An agent already exists for this domain")
-
     # Create client
     from datetime import timedelta
     client = Client(
@@ -331,7 +289,6 @@ async def signup(
         widget_config=template.widget_config if template else {},
         business_name=body.business_name or body.name,
         business_type=body.business_type or (template.industry if template else None),
-        website_domain=domain,
     )
     db.add(agent_config)
     await db.commit()
@@ -537,7 +494,6 @@ async def invite_admin_user(
     await db.flush()
     token = await _issue_invite(user=user, db=db)
     await db.refresh(user)
-    invite_url = _invite_url(token)
 
     import asyncio
     from app.services.email_service import send_team_invite_email
@@ -547,12 +503,12 @@ async def invite_admin_user(
             to=user.email,
             name=user.name,
             invited_by=admin["email"],
-            accept_url=invite_url,
+            accept_url=_invite_url(token),
         )
     )
 
     logger.info(f"Internal invite sent by {admin['email']} to {user.email} ({user.role})")
-    return _serialize_admin_user(user, invite_url=invite_url, invite_code=token)
+    return _serialize_admin_user(user)
 
 
 @router.post("/admin/users", response_model=AdminUserResponse, status_code=201)
@@ -658,31 +614,28 @@ async def send_admin_reset(
 
     if not user.hashed_password or not user.invite_accepted_at:
         token = await _issue_invite(user=user, db=db)
-        invite_url = _invite_url(token)
         asyncio.create_task(
             send_team_invite_email(
                 to=user.email,
                 name=user.name,
                 invited_by=admin["email"],
-                accept_url=invite_url,
+                accept_url=_invite_url(token),
             )
         )
         logger.info(f"Internal invite re-sent by {admin['email']} to {user.email}")
-        await db.refresh(user)
-        return _serialize_admin_user(user, invite_url=invite_url, invite_code=token)
     else:
         token = await _issue_password_reset(user=user, db=db)
-        reset_url = _reset_url(token)
         asyncio.create_task(
             send_password_reset_email(
                 to=user.email,
                 name=user.name,
-                reset_url=reset_url,
+                reset_url=_reset_url(token),
             )
         )
         logger.info(f"Internal reset sent by {admin['email']} to {user.email}")
-        await db.refresh(user)
-        return _serialize_admin_user(user, reset_url=reset_url, reset_code=token)
+
+    await db.refresh(user)
+    return _serialize_admin_user(user)
 
 
 @router.post("/demo-token", response_model=TokenResponse)
@@ -924,20 +877,7 @@ class AdminSignupRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
-    admin_code: str | None = None
-
-
-@router.get("/admin-bootstrap-status", response_model=AdminBootstrapStatusResponse)
-async def admin_bootstrap_status(
-    db: AsyncSession = Depends(get_session),
-) -> dict:
-    internal_user_count = await _count_internal_users(db)
-    has_owner = await _has_owner(db)
-    return {
-        "bootstrap_open": not has_owner,
-        "has_owner": has_owner,
-        "internal_user_count": internal_user_count,
-    }
+    admin_code: str
 
 
 @router.post("/admin-signup", response_model=TokenResponse, status_code=201)
@@ -946,8 +886,11 @@ async def admin_signup(
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Bootstrap the very first owner account. Disabled after bootstrap."""
-    if await _has_owner(db):
+    if await _count_internal_users(db) > 0:
         raise HTTPException(403, "Internal account bootstrap is closed. Use an owner-issued invite.")
+
+    if body.admin_code != settings.ADMIN_SIGNUP_CODE:
+        raise HTTPException(403, "Invalid admin authorization code")
 
     if len(body.password) < 6:
         raise HTTPException(400, "Password must be at least 6 characters")
@@ -975,7 +918,6 @@ async def admin_signup(
         email=client.email,
         plan=client.plan,
         role=client.role,
-        permissions=get_effective_permissions(client.role, client.permissions),
     )
 
     logger.info(f"Owner bootstrap completed: {client.email} ({client.id})")
@@ -986,8 +928,7 @@ async def admin_signup(
         "client_id": str(client.id),
         "email": client.email,
         "plan": client.plan,
-        "role": client.role,
-        "permissions": get_effective_permissions(client.role, client.permissions),
+        "role": "admin",
     }
 
 
@@ -1012,11 +953,6 @@ async def clerk_session(
         email=client["email"],
         plan=client["plan"],
         role=client["role"],
-        permissions=client.get("permissions"),
-        extra={
-            "name": client.get("name"),
-            "first_name": client.get("first_name"),
-        },
     )
 
     return {
@@ -1024,41 +960,6 @@ async def clerk_session(
         "token_type": "bearer",
         "client_id": client["client_id"],
         "email": client["email"],
-        "name": client.get("name"),
-        "first_name": client.get("first_name"),
         "plan": client["plan"],
         "role": client.get("role", "client"),
-        "permissions": client.get("permissions", []),
     }
-
-
-# ── Account deletion ────────────────────────────────────────────────────────
-
-@router.delete("/account")
-async def delete_account(
-    current_client: dict = Depends(get_current_client),
-    db: AsyncSession = Depends(get_session),
-) -> dict:
-    """Permanently delete the authenticated client's account and all associated data.
-
-    Cascades to agent_config, calls, leads, phone numbers, etc.
-    Internal staff (owner/admin/support) cannot self-delete via this endpoint.
-    """
-    client = await db.get(Client, current_client["client_id"])
-    if not client:
-        raise HTTPException(404, "Account not found")
-
-    if is_internal_staff_role(client.role):
-        raise HTTPException(400, "Internal staff accounts cannot be deleted via this endpoint")
-
-    email = client.email
-    client_id = str(client.id)
-
-    # Use raw SQL DELETE so the DB-level ON DELETE CASCADE handles all child rows.
-    # ORM db.delete() doesn't trigger DB cascades and fails on NOT NULL FKs.
-    from sqlalchemy import text
-    await db.execute(text("DELETE FROM clients WHERE id = :cid"), {"cid": client.id})
-    await db.commit()
-
-    logger.info(f"Account deleted: {email} ({client_id})")
-    return {"ok": True, "message": "Account and all associated data have been permanently deleted"}

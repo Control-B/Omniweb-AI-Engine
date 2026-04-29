@@ -14,7 +14,7 @@ import {
   Bot,
   MessageSquare,
   UserCog,
-  Settings,
+  Radio,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,8 +26,8 @@ const NAV_ITEMS: { id: AdminPageId; label: string; icon: React.ElementType; perm
   { id: "sessions", label: "Sessions", icon: MessageSquare, permission: "conversations.read" },
   { id: "clients", label: "Clients", icon: Users, permission: "clients.read" },
   { id: "templates", label: "Templates", icon: FileText, permission: "templates.read" },
-  { id: "team", label: "Super Admin", icon: UserCog, permission: "team.read" },
-  { id: "account", label: "Account", icon: Settings },
+  { id: "team", label: "Team", icon: UserCog, permission: "team.read" },
+  { id: "test-agent", label: "Test Agent", icon: Radio, permission: "overview.read" },
 ];
 
 interface AdminSidebarProps {
@@ -67,7 +67,7 @@ export function AdminSidebar({ activePage, onNavigate }: AdminSidebarProps) {
             <Shield className="w-4 h-4 text-primary shrink-0" />
             <div className="min-w-0">
               <div className="text-xs font-medium text-foreground truncate">
-                  {user?.first_name || user?.name || user?.email}
+                {user?.email}
               </div>
               <div className="text-[10px] text-primary font-medium">
                 {user?.role === "owner" ? "Owner" : "Internal Staff"}

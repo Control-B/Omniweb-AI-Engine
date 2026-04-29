@@ -11,21 +11,10 @@ import { AdminClientDetail } from "@/components/admin/client-detail";
 import { AdminAgents } from "@/components/admin/agents";
 import { AdminConversations } from "@/components/admin/conversations";
 import { AdminTeam } from "@/components/admin/team";
-import { AdminAccount } from "@/components/admin/account";
-import { AgentConfigPage } from "@/components/pages/agent-config";
+import { AdminTestAgent } from "@/components/admin/test-agent";
 import { Loader2 } from "lucide-react";
 
-export type AdminPageId =
-  | "overview"
-  | "agent-config"
-  | "ai-telephony"
-  | "agents"
-  | "sessions"
-  | "clients"
-  | "templates"
-  | "team"
-  | "account"
-  | "client-detail";
+export type AdminPageId = "overview" | "agents" | "sessions" | "clients" | "templates" | "team" | "test-agent" | "client-detail";
 
 const PAGE_PERMISSIONS: Partial<Record<Exclude<AdminPageId, "client-detail">, UserPermission>> = {
   overview: "overview.read",
@@ -36,6 +25,7 @@ const PAGE_PERMISSIONS: Partial<Record<Exclude<AdminPageId, "client-detail">, Us
   clients: "clients.read",
   templates: "templates.read",
   team: "team.read",
+  "test-agent": "overview.read",
 };
 
 export default function AdminDashboard() {
@@ -103,7 +93,7 @@ export default function AdminDashboard() {
         {activePage === "clients" && <AdminClients onViewClient={handleViewClient} />}
         {activePage === "templates" && <AdminTemplates />}
         {activePage === "team" && <AdminTeam />}
-        {activePage === "account" && <AdminAccount />}
+          {activePage === "test-agent" && <AdminTestAgent />}
         {activePage === "client-detail" && selectedClientId && (
           <AdminClientDetail clientId={selectedClientId} onBack={handleBackToClients} />
         )}

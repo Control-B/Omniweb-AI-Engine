@@ -10,19 +10,15 @@ import { acceptInvite, resetPasswordWithToken } from "@/lib/api";
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const queryToken = searchParams.get("token") || "";
-  const initialMode = searchParams.get("mode") === "invite" ? "invite" : "reset";
+  const token = searchParams.get("token") || "";
+  const mode = searchParams.get("mode") === "invite" ? "invite" : "reset";
 
   const [name, setName] = useState("");
-  const [accessCode, setAccessCode] = useState(queryToken);
-  const [mode, setMode] = useState<"invite" | "reset">(initialMode);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
-  const hasPrefilledToken = Boolean(queryToken);
 
   const title = useMemo(
     () => (mode === "invite" ? "Accept your admin invite" : "Reset your password"),
@@ -34,9 +30,8 @@ function ResetPasswordForm() {
     setError("");
     setSuccess("");
 
-    const token = accessCode.trim();
     if (!token) {
-      setError(hasPrefilledToken ? "This link is invalid or incomplete." : "Enter the recovery code shared by your owner or super admin.");
+      setError("This link is invalid or incomplete.");
       return;
     }
     if (password.length < 6) {
@@ -80,36 +75,6 @@ function ResetPasswordForm() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!hasPrefilledToken && (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="mode">Recovery mode</Label>
-                <select
-                  id="mode"
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value === "invite" ? "invite" : "reset")}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="reset">Reset existing account</option>
-                  <option value="invite">Accept new invite</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="access-code">Recovery Code</Label>
-                <Input
-                  id="access-code"
-                  value={accessCode}
-                  onChange={(e) => setAccessCode(e.target.value)}
-                  placeholder="Paste the code from your owner or super admin"
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  If email delivery failed, the owner can generate a manual invite or reset code from the super admin console.
-                </p>
-              </div>
-            </>
-          )}
-
           {mode === "invite" && (
             <div className="space-y-1.5">
               <Label htmlFor="name">Your Name</Label>
@@ -161,12 +126,6 @@ function ResetPasswordForm() {
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
             {mode === "invite" ? "Accept Invite" : "Reset Password"}
           </Button>
-
-          <div className="text-center">
-            <a href="/login" className="text-xs text-primary hover:underline">
-              Back to sign in
-            </a>
-          </div>
         </form>
       </div>
     </div>

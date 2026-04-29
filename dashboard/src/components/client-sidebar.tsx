@@ -97,7 +97,10 @@ export function ClientSidebar({ pathname }: ClientSidebarProps) {
             </div>
             <div className="min-w-0">
               <div className="text-xs font-medium text-foreground truncate">
-                {user?.first_name || user?.name || user?.email}
+                {user?.email}
+              </div>
+              <div className="text-[10px] text-muted-foreground capitalize">
+                {user?.plan} Plan
               </div>
               <div className="text-[10px] text-muted-foreground capitalize">{user?.plan} Plan</div>
             </div>

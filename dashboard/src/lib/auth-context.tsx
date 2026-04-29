@@ -70,8 +70,6 @@ export function isInternalRole(role: string | null | undefined): role is Exclude
 export interface User {
   client_id: string;
   email: string;
-  name?: string;
-  first_name?: string;
   plan: string;
   role: UserRole;
   permissions: UserPermission[];
@@ -104,39 +102,23 @@ export function hasPermission(
 }
 
 function readUser(): User | null {
-  try {
-    const token = getToken();
-    if (!token) return null;
-    const payload = parseJwt(token);
-    if (!payload || (payload.exp && Number(payload.exp) * 1000 < Date.now())) {
-      clearToken();
-      return null;
-    }
-    const sub = payload.sub;
-    if (typeof sub !== "string" || !sub) {
-      clearToken();
-      return null;
-    }
-    return {
-      client_id: sub,
-      email: typeof payload.email === "string" ? payload.email : "",
-        name: typeof payload.name === "string" ? payload.name : undefined,
-        first_name: typeof payload.first_name === "string" ? payload.first_name : undefined,
-      plan: typeof payload.plan === "string" ? payload.plan : "",
-      role: (payload.role || "client") as UserRole,
+  const token = getToken();
+  if (!token) return null;
+  const payload = parseJwt(token);
+  if (!payload || (payload.exp && payload.exp * 1000 < Date.now())) {
+    clearToken();
+    return null;
+  }
+  return {
+    client_id: payload.sub,
+    email: payload.email,
+    plan: payload.plan,
+    role: payload.role || "client",
       permissions:
         payload.permissions ||
         DEFAULT_ROLE_PERMISSIONS[(payload.role || "client") as UserRole] ||
         [],
-    };
-  } catch {
-    try {
-      clearToken();
-    } catch {
-      /* ignore */
-    }
-    return null;
-  }
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -146,13 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(() => {
-    try {
-      setUser(readUser());
-    } catch {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
+    setUser(readUser());
+    setLoading(false);
   }, []);
 
   useEffect(() => {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -125,11 +126,7 @@ def _coerce_str_list(raw: Any) -> list[str]:
     return []
 
 
-async def grant_temporary_token(*, ttl_seconds: int = 600) -> dict[str, Any]:
-    """Mint a short-lived JWT for browser Voice Agent / streaming APIs.
-
-    Requires a Deepgram API key with at least Member role (see Deepgram token docs).
-    """
+async def grant_temporary_token(ttl_seconds: int = 600) -> dict[str, Any]:
     if not settings.deepgram_configured:
         raise RuntimeError("DEEPGRAM_API_KEY is not configured")
 
@@ -154,93 +151,28 @@ async def grant_temporary_token(*, ttl_seconds: int = 600) -> dict[str, Any]:
 
 
 def _tts_voice_for_config(config: AgentConfig) -> str:
-    vid = (config.voice_id or "").strip()
-    if not vid:
-        return settings.DEEPGRAM_TTS_VOICE
-    if vid.lower() == "aura-asteria-en":
-        return "aura-2-asteria-en"
-    if "aura" in vid.lower():
-        return vid
+    voice_id = (config.voice_id or "").strip()
+    if "aura" in voice_id.lower():
+        return voice_id
     return settings.DEEPGRAM_TTS_VOICE
 
 
-def _deepgram_tts_for_language(lang_tag: str, config: AgentConfig) -> str:
-    if lang_tag.lower().startswith("es"):
-        return "aura-2-aquila-es"
-    return _tts_voice_for_config(config)
-
-
-def _elevenlabs_voice_for_config(config: AgentConfig) -> str:
-    vid = (config.voice_id or "").strip()
-    if vid and "aura" not in vid.lower():
-        return vid
-    return settings.ELEVENLABS_DEFAULT_VOICE_ID
-
-
-def _agent_language_tag(config: AgentConfig, requested: str | None) -> str:
-    """BCP-47-ish tag for Voice Agent ``agent.language`` (``multi`` when appropriate)."""
-    supported = _coerce_supported_languages(config.supported_languages)
+def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> str:
+    supported = [str(item).lower().strip() for item in (config.supported_languages or ["en"])]
     if requested:
-        r = requested.lower().strip()
-        if r in SUPPORTED_VOICE_LANGUAGE_CODES:
-            return r[:8] if len(r) > 2 else r
-        if any(s.startswith(r) for s in supported):
-            return r[:8] if len(r) > 2 else r
+        normalized = requested.lower().strip()
+        if normalized == "multi":
+            return "multi"
+        if normalized in supported or any(lang.startswith(normalized) for lang in supported):
+            return normalized[:8] if len(normalized) > 2 else normalized
     if len(supported) > 1:
         return "multi"
-    return (supported[0] if supported else "en")[:8]
+    if supported:
+        return supported[0][:8]
+    return "en"[:8]
 
 
-def _language_name(lang_tag: str) -> str:
-    return LANGUAGE_NAMES.get(lang_tag.lower().split("-")[0], lang_tag)
-
-
-DEFAULT_OPENING_GREETING = "Thank you for visiting today, I am your AI assistant... how can I assist you?"
-
-
-def _is_stale_generic_greeting(text: str) -> bool:
-    normalized = " ".join((text or "").lower().replace("’", "'").split())
-    stale_markers = [
-        "problem you're trying to solve",
-        "problem you are trying to solve",
-        "understand your needs",
-        "recommend the right solution",
-        "move forward faster by text or voice",
-        "talk to me",
-    ]
-    return any(marker in normalized for marker in stale_markers)
-
-
-def _opening_greeting(config: AgentConfig) -> str:
-    greeting = (config.agent_greeting or "").strip()
-    if greeting and not _is_stale_generic_greeting(greeting):
-        return greeting
-
-    return DEFAULT_OPENING_GREETING
-
-
-def _localized_opening_greeting(config: AgentConfig, lang_tag: str) -> str:
-    if lang_tag == "multi" or lang_tag.lower().startswith("en"):
-        return _opening_greeting(config)
-
-    language_code = lang_tag.lower().split("-")[0]
-    template = VOICE_GREETING_TEMPLATES.get(language_code)
-    if not template:
-        return _opening_greeting(config)
-
-    return template.format(
-        agent_name=(config.agent_name or "Omniweb AI").strip(),
-        business_name=(config.business_name or "this store").strip(),
-    )
-
-
-def build_voice_agent_settings(
-    config: AgentConfig,
-    *,
-    language: str | None = None,
-    voice_override: str | None = None,
-) -> dict[str, Any]:
-    """Build a Voice Agent ``Settings`` object (see Deepgram message-flow docs)."""
+def build_voice_agent_settings(config: AgentConfig, language: str | None = None) -> dict[str, Any]:
     composed = compose_system_prompt(
         agent_name=config.agent_name or "Alex",
         business_name=config.business_name or "",
@@ -257,28 +189,8 @@ def build_voice_agent_settings(
         custom_escalation_triggers=_coerce_str_list(config.custom_escalation_triggers),
         custom_context=config.custom_context,
     )
-    lang_tag = _agent_language_tag(config, language)
-    opening_greeting = _localized_opening_greeting(config, lang_tag)
-    language_instruction = (
-        f"## Voice Language Requirement\n"
-        f"CRITICAL LANGUAGE REQUIREMENT: The selected voice language is {_language_name(lang_tag)} ({lang_tag}). "
-        f"This is higher priority than any business, sales, greeting, or language-matching instruction below. "
-        f"Speak and respond only in {_language_name(lang_tag)} for this entire voice session. "
-        f"Do not use English unless the selected voice language is English. "
-        f"If the selected language is multi/the visitor's language, infer the visitor's language from speech and respond in that language.\n"
-        f"If the shopper speaks English but selected {_language_name(lang_tag)}, still answer in {_language_name(lang_tag)}.\n\n"
-        f"## Voice Session Opening\n"
-        f"The voice session must begin with this complete welcome message. Do not shorten it, "
-        f"skip the agent name, skip the business name, or replace it with a generic greeting:\n"
-        f"\"{opening_greeting}\"\n\n"
-        f"After the welcome message, wait for the user.\n\n"
-        f"## Voice Focus And Background Noise\n"
-        f"Treat short, unclear, distant, overlapping, or background speech as noise. "
-        f"Only answer when a single nearby shopper clearly addresses the assistant. "
-        f"Do not answer breathing, clicks, typing, TV/music, side conversations, or partial words. "
-        f"If there is no clear request, remain silent and wait. "
-        f"If a nearby shopper clearly addressed you but the words are unclear, ask them to repeat instead of guessing."
-    )
+    language_tag = _agent_language_tag(config, language)
+    tts_voice = _tts_voice_for_config(config)
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
     # Languages explicitly supported by Deepgram nova-3 STT with a named code.
     # Languages NOT listed here (Swahili, Krio, Sundanese) fall back to "multi" so
@@ -339,23 +251,111 @@ def build_voice_agent_settings(
             "output": {"encoding": "linear16", "sample_rate": 24000, "container": "none"},
         },
         "agent": {
-            "greeting": opening_greeting,
-            "listen": {
-                "provider": {
-                    "type": "deepgram",
-                    "model": settings.DEEPGRAM_STT_MODEL,
-                    "language": listen_language,
-                    "smart_format": False,
-                }
-            },
+            "language": language_tag,
+            "listen": {"model": settings.DEEPGRAM_STT_MODEL},
             "think": {
-                "provider": {
-                    "type": "open_ai",
-                    "model": think_model,
-                    "temperature": 0.7,
-                },
-                "prompt": f"{language_instruction}\n\n{composed}",
+                "provider": {"type": "open_ai"},
+                "model": think_model,
+                "prompt": composed,
             },
-            "speak": speak,
+            "speak": {"model": tts_voice},
         },
     }
+
+
+def transcript_lines_to_turns(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    turns: list[dict[str, Any]] = []
+    for index, line in enumerate(lines):
+        role = str(line.get("role") or "user").strip().lower()
+        content = str(line.get("content") or "").strip()
+        if not content:
+            continue
+        speaker = "agent" if role == "assistant" else "caller"
+        turns.append(
+            {
+                "speaker": speaker,
+                "text": content,
+                "timestamp": line.get("timestamp") or index,
+            }
+        )
+    return turns
+
+
+def summarize_transcript_fallback(turns: list[dict[str, Any]]) -> str | None:
+    if not turns:
+        return None
+
+    caller_lines = [
+        str(turn.get("text") or "").strip()
+        for turn in turns
+        if turn.get("speaker") == "caller"
+    ]
+    agent_lines = [
+        str(turn.get("text") or "").strip()
+        for turn in turns
+        if turn.get("speaker") == "agent"
+    ]
+    caller_lines = [line for line in caller_lines if line]
+    agent_lines = [line for line in agent_lines if line]
+
+    if not caller_lines and not agent_lines:
+        return None
+
+    summary_parts: list[str] = []
+    if caller_lines:
+        summary_parts.append(f"Visitor asked about: {caller_lines[0][:180]}")
+    if len(caller_lines) > 1:
+        summary_parts.append(
+            f"They exchanged {len(caller_lines)} visitor messages during the session"
+        )
+    if agent_lines:
+        summary_parts.append(f"The assistant responded with guidance on {agent_lines[0][:140]}")
+
+    return ". ".join(summary_parts).strip()[:500] or None
+
+
+async def summarize_transcript(turns: list[dict[str, Any]]) -> str | None:
+    if not turns:
+        return None
+
+    transcript_text = "\n".join(
+        f"{str(turn.get('speaker') or 'unknown').upper()}: {str(turn.get('text') or '').strip()}"
+        for turn in turns
+        if str(turn.get("text") or "").strip()
+    ).strip()
+    if not transcript_text:
+        return None
+
+    if not settings.openai_configured:
+        return summarize_transcript_fallback(turns)
+
+    try:
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        response = await client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You summarize website AI assistant conversations. Return JSON only "
+                        "with keys: summary, sentiment. Keep summary to 1-2 sentences and "
+                        "capture the user's goal and outcome."
+                    ),
+                },
+                {"role": "user", "content": f"Transcript:\n{transcript_text}"},
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            max_tokens=180,
+        )
+        raw = response.choices[0].message.content or "{}"
+        payload = json.loads(raw)
+        summary = str(payload.get("summary") or "").strip()
+        if summary:
+            return summary[:500]
+        return summarize_transcript_fallback(turns)
+    except Exception as exc:
+        logger.warning("Deepgram widget summary generation failed", error=str(exc))
+        return summarize_transcript_fallback(turns)

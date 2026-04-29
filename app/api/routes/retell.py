@@ -1,8 +1,8 @@
 """Retell API — mint web call tokens for the browser SDK.
 
-Public ``POST /api/retell/web-call`` mirrors the old LiveKit token route:
-optional ``client_id`` selects the tenant's ``retell_agent_id``; otherwise the
-landing/demo agent from ``RETELL_LANDING_AGENT_ID`` is used.
+Public ``POST /api/retell/web-call`` accepts an optional ``client_id`` to select
+the tenant's ``retell_agent_id``; otherwise the landing/demo agent from
+``RETELL_LANDING_AGENT_ID`` is used.
 """
 
 from __future__ import annotations

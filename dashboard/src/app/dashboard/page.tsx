@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { isInternalRole, useAuth } from "@/lib/auth-context";
+import { ClientSidebar } from "@/components/client-sidebar";
 import { DashboardPage } from "@/components/pages/dashboard";
 import { CallsPage } from "@/components/pages/calls";
 import { LeadsPage } from "@/components/pages/leads";
@@ -11,62 +12,42 @@ import { NumbersPage } from "@/components/pages/numbers";
 import { SettingsPage } from "@/components/pages/settings";
 import { AutomationsPage } from "@/components/pages/automations";
 import { SitesPage } from "@/components/pages/sites";
-import { CLIENT_PAGES, type ClientPageId } from "@/lib/client-dashboard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import Link from "next/link";
-import { getMeWorkspace } from "@/lib/api";
-import { Bot, Code, MessageSquareText, Settings, LineChart } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
-export default function DashboardPageRoute() {
-  return (
-    <Suspense
-      fallback={
-        <div className="p-8 flex justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
-      }
-    >
-      <ClientDashboardHome />
-    </Suspense>
-  );
-}
+export type ClientPageId =
+  | "dashboard"
+  | "calls"
+  | "leads"
+  | "agent"
+  | "numbers"
+  | "sites"
+  | "automations"
+  | "settings";
 
-function ClientDashboardHome() {
-  const searchParams = useSearchParams();
-  const pageParam = searchParams.get("page") as ClientPageId | null;
-  const activePage: ClientPageId =
-    pageParam && CLIENT_PAGES.includes(pageParam) ? pageParam : "dashboard";
-
-  if (activePage === "dashboard") {
-    return <DashboardWithCards />;
-  }
-  if (activePage === "calls") return <CallsPage />;
-  if (activePage === "leads") return <LeadsPage />;
-  if (activePage === "agent") return <AgentConfigPage />;
-  if (activePage === "telephony") return <AgentConfigPage initialTab="telephony" />;
-  if (activePage === "numbers") return <NumbersPage />;
-  if (activePage === "sites") return <SitesPage />;
-  if (activePage === "automations") return <AutomationsPage />;
-  if (activePage === "settings") return <SettingsPage />;
-  return <DashboardWithCards />;
-}
-
-function DashboardWithCards() {
-  const [progress, setProgress] = useState<Record<string, boolean> | null>(null);
+export default function ClientDashboard() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const [activePage, setActivePage] = useState<ClientPageId>("dashboard");
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    getMeWorkspace()
-      .then((w) => setProgress(w.setup_progress || {}))
-      .catch(() => setProgress({}));
-  }, []);
+    if (loading) return;
+    if (!user) {
+      router.replace("/login");
+    } else if (isInternalRole(user.role)) {
+      router.replace("/admin");
+    } else {
+      setAuthChecked(true);
+    }
+  }, [user, loading, router]);
 
-  const steps = [
-    { key: "business_profile_completed", label: "Business profile completed" },
-    { key: "ai_agent_configured", label: "AI agent configured" },
-    { key: "widget_tested", label: "Widget tested" },
-    { key: "embed_installed", label: "Embed code installed" },
-    { key: "subscription_activated", label: "Subscription activated" },
-  ] as const;
+  if (loading || !authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">

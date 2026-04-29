@@ -116,9 +116,7 @@ class AgentConfig(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, unique=True)
 
-    # Retell agent linkage (voice + telephony orchestration)
-    retell_agent_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
-    # Legacy ElevenLabs columns (kept for DB compatibility; unused)
+    # ElevenLabs agent linkage
     elevenlabs_agent_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     elevenlabs_kb_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
@@ -143,7 +141,6 @@ class AgentConfig(Base):
     # Business context
     business_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     business_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    website_domain: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
     timezone: Mapped[str] = mapped_column(String(50), default="America/New_York", nullable=False)
     booking_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
@@ -176,7 +173,7 @@ class AgentConfig(Base):
         JSONB,
         default=dict,
         nullable=False,
-        doc="Per-language voice/preset hints (Retell/ElevenLabs-era legacy shape)",
+        doc="ElevenLabs language_presets config (keyed by language code)",
     )
 
     # Widget configuration
@@ -216,7 +213,6 @@ class AgentConfig(Base):
     __table_args__ = (
         Index("ix_agent_configs_client_id", "client_id"),
         Index("ix_agent_configs_elevenlabs_agent_id", "elevenlabs_agent_id"),
-        Index("ix_agent_configs_retell_agent_id", "retell_agent_id"),
         Index("ix_agent_configs_industry", "industry"),
     )
 
@@ -259,12 +255,6 @@ class ShopifyStore(Base):
     support_policy: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     nav_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     checkout_config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
-
-    # Shopify Billing
-    shopify_subscription_gid: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    shopify_plan: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    shopify_subscription_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    shopify_billing_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -410,8 +400,7 @@ class Call(Base):
     channel: Mapped[str] = mapped_column(String(20), nullable=False, default="voice")  # voice | text | whatsapp
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="queued")
 
-    # Retell / legacy voice session ids
-    retell_call_id: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True)
+    # ElevenLabs
     elevenlabs_conversation_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
 
     # Twilio (for SMS follow-ups or outbound)
@@ -445,7 +434,6 @@ class Call(Base):
         Index("ix_calls_started_at", "started_at"),
         Index("ix_calls_channel", "channel"),
         Index("ix_calls_elevenlabs_conversation_id", "elevenlabs_conversation_id"),
-        Index("ix_calls_retell_call_id", "retell_call_id"),
     )
 
 

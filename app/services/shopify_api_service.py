@@ -84,17 +84,14 @@ class ShopifyAPIService:
         query: str,
         variables: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        from app.services.shopify_crypto_service import ShopifyCryptoService
-
-        raw_token = ShopifyCryptoService.decrypt(store.admin_access_token)
-        if not raw_token:
+        if not store.admin_access_token:
             raise ShopifyAPIError("Missing Shopify admin access token")
 
         api_version = store.storefront_api_version or settings.SHOPIFY_API_VERSION
         url = f"https://{store.shop_domain}/admin/api/{api_version}/graphql.json"
         headers = {
             "Content-Type": "application/json",
-            "X-Shopify-Access-Token": raw_token,
+            "X-Shopify-Access-Token": store.admin_access_token,
         }
 
         async with httpx.AsyncClient(timeout=20.0) as client:

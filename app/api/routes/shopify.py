@@ -18,11 +18,7 @@ from app.core.config import get_settings
 from app.core.auth import get_current_client, is_internal_staff_role
 from app.models.models import AgentConfig, Client, Lead, ShopifyAssistantSession, ShopifyDiscountApproval, ShopifyStore
 from app.services.shopify_api_service import ShopifyAPIError, ShopifyAPIService
-from app.services.shopify_billing_service import ShopifyBillingError, ShopifyBillingService
-from app.services.shopify_crypto_service import ShopifyCryptoService
 from app.services.shopify_oauth_service import ShopifyOAuthError, ShopifyOAuthService
-from app.services.shopify_product_service import ShopifyProductService
-from app.services.shopify_webhook_service import ShopifyWebhookService
 from app.services.prompt_engine import compose_greeting
 from app.services.shopify_assistant_service import ShopifyAssistantService, utcnow
 from app.services.shopify_storefront_bridge_service import (
@@ -901,7 +897,7 @@ async def complete_shopify_install(
         ShopifyOAuthService.verify_state(store, state)
         token_payload = await ShopifyOAuthService.exchange_code_for_token(shop=shop_domain, code=code)
 
-        store.admin_access_token = ShopifyCryptoService.encrypt(token_payload["access_token"])
+        store.admin_access_token = token_payload["access_token"]
         store.granted_scopes = [scope.strip() for scope in (token_payload.get("scope") or "").split(",") if scope.strip()]
         store.uninstalled_at = None
         store.last_install_error = None
@@ -915,7 +911,7 @@ async def complete_shopify_install(
         store.shop_id = identity.get("id")
         store.shop_name = identity.get("name")
         store.shop_email = identity.get("email")
-        store.storefront_access_token = ShopifyCryptoService.encrypt(storefront.get("access_token") or store.storefront_access_token)
+        store.storefront_access_token = storefront.get("access_token") or store.storefront_access_token
         store.storefront_api_version = store.storefront_api_version or "2026-07"
         store.app_status = "installed"
         store.installed_at = utcnow()
@@ -923,13 +919,6 @@ async def complete_shopify_install(
         ShopifyOAuthService.clear_install_state(store)
         await db.flush()
         await db.refresh(store)
-
-        # Register mandatory webhooks (best-effort, don't block install)
-        try:
-            await ShopifyWebhookService.register_mandatory_webhooks(store)
-        except Exception as wh_exc:
-            import logging
-            logging.getLogger(__name__).warning(f"Webhook registration failed (non-blocking): {wh_exc}")
     except (ShopifyOAuthError, ShopifyAPIError) as exc:
         store.app_status = "install_failed"
         store.last_install_error = str(exc)
@@ -1291,93 +1280,3 @@ def _serialize_discount_request(approval: ShopifyDiscountApproval) -> dict[str, 
         "expires_at": approval.expires_at.isoformat() if approval.expires_at else None,
         "created_at": approval.created_at.isoformat() if approval.created_at else None,
     }
-
-
-# ── Billing ──────────────────────────────────────────────────────────────────
-
-
-class SubscribeRequest(BaseModel):
-    plan: str = Field(..., description="Plan key: 'starter' or 'pro'")
-
-
-@router.post("/billing/subscribe")
-async def billing_subscribe(
-    body: SubscribeRequest,
-    client=Depends(get_current_client),
-    db: AsyncSession = Depends(get_session),
-):
-    """Create a Shopify app subscription and return the confirmation URL."""
-    store = await _get_store(client.id, db)
-    if not store or not store.admin_access_token:
-        raise HTTPException(404, "Shopify store not connected")
-
-    try:
-        result = await ShopifyBillingService.create_subscription(store, body.plan)
-    except ShopifyBillingError as exc:
-        raise HTTPException(400, str(exc))
-
-    # Persist pending subscription info
-    store.shopify_subscription_gid = result.get("subscription_gid")
-    store.shopify_plan = body.plan
-    store.shopify_subscription_status = "pending"
-    store.shopify_billing_updated_at = utcnow()
-    await db.commit()
-
-    return {"confirmation_url": result["confirmation_url"], "subscription_gid": result.get("subscription_gid")}
-
-
-@router.get("/billing/status")
-async def billing_status(
-    client=Depends(get_current_client),
-    db: AsyncSession = Depends(get_session),
-):
-    """Return current Shopify subscription status."""
-    store = await _get_store(client.id, db)
-    if not store or not store.admin_access_token:
-        raise HTTPException(404, "Shopify store not connected")
-
-    try:
-        sub = await ShopifyBillingService.get_active_subscription(store)
-    except ShopifyBillingError:
-        sub = None
-
-    # Sync DB with live status
-    if sub:
-        store.shopify_subscription_gid = sub.get("id")
-        store.shopify_plan = sub.get("plan")
-        store.shopify_subscription_status = sub.get("status")
-        store.shopify_billing_updated_at = utcnow()
-        await db.commit()
-
-    return {
-        "plan": store.shopify_plan,
-        "status": store.shopify_subscription_status,
-        "subscription_gid": store.shopify_subscription_gid,
-    }
-
-
-@router.post("/billing/cancel")
-async def billing_cancel(
-    client=Depends(get_current_client),
-    db: AsyncSession = Depends(get_session),
-):
-    """Cancel the active Shopify app subscription."""
-    store = await _get_store(client.id, db)
-    if not store or not store.shopify_subscription_gid:
-        raise HTTPException(404, "No active subscription")
-
-    try:
-        await ShopifyBillingService.cancel_subscription(store, store.shopify_subscription_gid)
-    except ShopifyBillingError as exc:
-        raise HTTPException(400, str(exc))
-
-    store.shopify_subscription_status = "cancelled"
-    store.shopify_billing_updated_at = utcnow()
-    await db.commit()
-
-    return {"status": "cancelled"}
-
-
-async def _get_store(client_id: uuid.UUID, db: AsyncSession) -> ShopifyStore | None:
-    result = await db.execute(select(ShopifyStore).where(ShopifyStore.client_id == client_id))
-    return result.scalar_one_or_none()

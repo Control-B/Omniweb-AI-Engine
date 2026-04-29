@@ -100,8 +100,8 @@ export default function LandingPage() {
         </div>
         <div className="flex items-center gap-3">
           <Link href="/login" className="text-sm text-slate-400 hover:text-white transition-colors">Sign in</Link>
-          <Link href="/register" className="px-4 py-2 rounded-full bg-white text-slate-900 text-sm font-semibold hover:bg-slate-100 transition-colors">
-            Get started
+          <Link href="/sign-up" className="px-4 py-2 rounded-full bg-white text-slate-900 text-sm font-semibold hover:bg-slate-100 transition-colors">
+            Start Your 7-Day AI Revenue Agent Trial
           </Link>
         </div>
       </nav>
@@ -123,10 +123,10 @@ export default function LandingPage() {
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
-            href="/register"
+            href="/sign-up"
             className="flex items-center gap-2 px-8 py-3.5 rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold text-sm hover:from-indigo-500 hover:to-violet-500 shadow-xl shadow-indigo-500/30 transition-all hover:scale-105"
           >
-            Start free trial <ChevronRight className="w-4 h-4" />
+            Start Your 7-Day AI Revenue Agent Trial <ChevronRight className="w-4 h-4" />
           </Link>
           <Link
             href="/demo"
@@ -221,10 +221,10 @@ export default function LandingPage() {
               </ul>
 
               <Link
-                href="/register"
+                href="/sign-up"
                 className={`block w-full py-3 text-center rounded-xl font-bold text-sm transition-all ${plan.btnClass}`}
               >
-                Get started
+                Start Your 7-Day Trial
               </Link>
             </div>
           ))}

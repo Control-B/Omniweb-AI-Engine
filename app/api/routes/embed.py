@@ -22,6 +22,7 @@ from app.core.auth import get_current_client
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import Client, AgentConfig
+from app.services.saas_workspace_service import client_subscription_allows_widget
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/embed", tags=["embed"])
@@ -138,6 +139,9 @@ async def validate_embed_code(
 
     if not client.is_active:
         raise HTTPException(403, "Account is not active")
+
+    if not client_subscription_allows_widget(client):
+        raise HTTPException(403, "Subscription or trial inactive — upgrade to continue using the widget")
 
     # Check expiry
     if client.embed_expires_at and client.embed_expires_at < _now():

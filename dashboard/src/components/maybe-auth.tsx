@@ -7,7 +7,7 @@ function isPublicPath(path: string): boolean {
   // If middleware did not set x-omniweb-path, avoid forcing AuthProvider (prevents odd SSR/500 edge cases).
   if (!path) return true;
   if (path === "/landing" || path === "/login" || path === "/demo" || path === "/health") return true;
-  if (path === "/register" || path === "/logout" || path === "/sso-callback") return true;
+  if (path === "/register" || path === "/sign-up" || path === "/logout" || path === "/sso-callback") return true;
   if (path === "/widget" || path.startsWith("/widget/")) return true;
   if (path.startsWith("/reset-password")) return true;
   if (path.startsWith("/site/")) return true;

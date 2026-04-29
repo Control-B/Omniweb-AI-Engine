@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -40,6 +40,7 @@ from app.api.routes import (
     leads,
     numbers,
     retell,
+    saas,
     shopify,
     shopify_webhooks,
     site_templates,
@@ -293,6 +294,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         ):
             limit = _RATE_LIMIT_MAX_AUTH
             key = f"auth:{client_ip}"
+        elif path.startswith("/api/public/widget/"):
+            limit = 45
+            key = f"widget_pub:{client_ip}"
         elif path.startswith("/api/"):
             limit = _RATE_LIMIT_MAX_GENERAL
             key = f"api:{client_ip}"
@@ -348,6 +352,8 @@ app.include_router(shopify.router, prefix=API_PREFIX)
 app.include_router(shopify_webhooks.router, prefix=API_PREFIX)
 app.include_router(site_templates.router, prefix=API_PREFIX)
 app.include_router(embed.router, prefix=API_PREFIX)
+app.include_router(saas.router, prefix=API_PREFIX)
+app.include_router(saas.public_router, prefix=API_PREFIX)
 app.include_router(subscribe.router, prefix=API_PREFIX)
 app.include_router(webhooks.router, prefix=API_PREFIX)
 
@@ -429,5 +435,20 @@ import os as _os
 from fastapi.staticfiles import StaticFiles as _StaticFiles
 
 _static_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "static")
+_widget_js_path = _os.path.join(_static_dir, "widget.js")  # repo /static/widget.js
+
+
+@app.get("/widget.js")
+async def serve_widget_js():
+    """Public SaaS widget loader (paste-on-site script target)."""
+    if not _os.path.isfile(_widget_js_path):
+        raise HTTPException(status_code=404, detail="widget.js not found")
+    return FileResponse(
+        _widget_js_path,
+        media_type="application/javascript",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
 if _os.path.isdir(_static_dir):
     app.mount("/static", _StaticFiles(directory=_static_dir), name="static")

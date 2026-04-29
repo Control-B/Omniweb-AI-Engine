@@ -1,0 +1,26 @@
+"use client";
+
+import { ClerkRegisterPanel } from "@/components/auth/clerk-register-panel";
+import Link from "next/link";
+
+export default function SignUpPage() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center">
+          <h1 className="text-xl font-bold text-foreground">Start Your 7-Day AI Revenue Agent Trial</h1>
+          <p className="text-sm text-muted-foreground mt-2">
+            Create your account to configure your AI agent and install the widget on your site.
+          </p>
+        </div>
+        <ClerkRegisterPanel />
+        <p className="text-center text-sm text-muted-foreground">
+          Already have an account?{" "}
+          <Link href="/login" className="text-primary hover:underline">
+            Sign in
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}

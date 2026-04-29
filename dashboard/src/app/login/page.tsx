@@ -221,7 +221,7 @@ export default function LoginPage() {
           <a href="/reset-password" className="text-muted-foreground hover:text-foreground transition-colors">
             Use Invite / Recovery Code
           </a>
-            <a href="/register" className="text-muted-foreground hover:text-foreground transition-colors">
+            <a href="/sign-up" className="text-muted-foreground hover:text-foreground transition-colors">
               Create account
             </a>
           <a href="/demo" className="text-muted-foreground hover:text-foreground transition-colors">

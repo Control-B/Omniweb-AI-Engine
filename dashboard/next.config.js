@@ -53,11 +53,16 @@ const nextConfig = {
       source: "/static/:path*",
       destination: `${engineUrl}/static/:path*`,
     };
+    const widgetProxy = {
+      source: "/widget.js",
+      destination: `${engineUrl}/widget.js`,
+    };
 
-    if (process.env.NODE_ENV === "production") return [staticProxy];
+    if (process.env.NODE_ENV === "production") return [staticProxy, widgetProxy];
 
     return [
       staticProxy,
+      widgetProxy,
       {
         source: "/api/:path*",
         destination: `${engineUrl}/api/:path*`,

@@ -25,7 +25,7 @@ export function ClerkRegisterPanel() {
       <div className="flex justify-center overflow-hidden">
         <SignUp
           routing="path"
-          path="/register"
+          path="/sign-up"
           signInUrl="/login"
           forceRedirectUrl="/sso-callback"
         />

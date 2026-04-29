@@ -19,7 +19,7 @@ export function ClerkLoginPanel() {
         <SignIn
           routing="path"
           path="/login"
-          signUpUrl="/register"
+          signUpUrl="/sign-up"
           forceRedirectUrl="/sso-callback"
         />
       </div>

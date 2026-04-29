@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth as useClerkAuth } from "@clerk/nextjs";
-import { exchangeClerkSession } from "@/lib/api";
+import { exchangeClerkSession, getMeWorkspace } from "@/lib/api";
 import { isInternalRole } from "@/lib/auth-context";
 
 const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim());
@@ -30,7 +30,16 @@ export function ClerkSessionCallback() {
         const clerkToken = await getToken();
         if (!clerkToken) throw new Error("Missing Clerk session token");
         const data = await exchangeClerkSession(clerkToken);
-        router.replace(isInternalRole(data.role) ? "/admin" : "/dashboard");
+        if (isInternalRole(data.role)) {
+          router.replace("/admin");
+          return;
+        }
+        try {
+          const ws = await getMeWorkspace();
+          router.replace(ws.needs_onboarding ? "/onboarding" : "/dashboard");
+        } catch {
+          router.replace("/dashboard");
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not start your session");
       }

@@ -838,3 +838,85 @@ export async function uploadKbFile(file: File, name?: string) {
 export async function deleteKbDocument(docId: string) {
   return apiFetch(`/knowledge-base/${docId}`, { method: "DELETE" });
 }
+
+// ── SaaS workspace / widget ─────────────────────────────────────────────────
+
+export interface WorkspaceResponse {
+  workspace: {
+    client_id: string;
+    business_name: string | null;
+    industry: string | null;
+    website_url: string | null;
+    website_domain: string | null;
+    primary_goal: string | null;
+    onboarding_completed_at: string | null;
+  };
+  widget: {
+    public_widget_key: string | null;
+    status: string;
+    agent_name: string | null;
+    welcome_message: string | null;
+    theme_color: string;
+    position: string;
+  };
+  widget_config: {
+    business_instructions: string;
+    tone: string;
+    lead_questions: string[];
+    call_to_action: string;
+    knowledge_source_url: string;
+  };
+  trial: {
+    subscription_status: string | null;
+    trial_started_at: string | null;
+    trial_ends_at: string | null;
+    remaining: { days: number; hours: number; minutes: number; isExpired: boolean };
+  };
+  setup_progress: Record<string, boolean>;
+  needs_onboarding: boolean;
+}
+
+export async function getMeWorkspace(): Promise<WorkspaceResponse> {
+  return apiFetch<WorkspaceResponse>("/me/workspace");
+}
+
+export async function postOnboarding(body: {
+  business_name: string;
+  industry: string;
+  website: string;
+  primary_goal: string;
+}): Promise<WorkspaceResponse> {
+  return apiFetch<WorkspaceResponse>("/onboarding", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function patchWidgetConfig(body: Record<string, unknown>): Promise<WorkspaceResponse> {
+  return apiFetch<WorkspaceResponse>("/widget/config", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getWidgetEmbedCode(): Promise<{
+  public_widget_key: string;
+  embed_snippet: string;
+  script_url: string;
+}> {
+  return apiFetch("/widget/embed-code");
+}
+
+export async function postWidgetTest(): Promise<{ ok: boolean; preview_url: string; workspace?: WorkspaceResponse }> {
+  return apiFetch("/widget/test", { method: "POST" });
+}
+
+export async function patchSetupProgress(body: {
+  embed_installed?: boolean;
+  subscription_activated?: boolean;
+}): Promise<WorkspaceResponse> {
+  return apiFetch<WorkspaceResponse>("/me/workspace/setup-progress", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}

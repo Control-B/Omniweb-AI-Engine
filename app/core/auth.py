@@ -370,9 +370,9 @@ async def _resolve_clerk_token(token: str) -> dict:
                 logger.info(f"Linked Clerk user {clerk_user_id} to existing client {client.id}")
 
         if not client:
-            # 3. Auto-provision new client with 14-day trial
+            # 3. Auto-provision Clerk-only tenant. Trial starts on SaaS onboarding (7 days).
             import uuid as _uuid
-            trial_end = datetime.now(timezone.utc) + timedelta(days=14)
+
             client = Client(
                 id=_uuid.uuid4(),
                 name=full_name,
@@ -382,12 +382,11 @@ async def _resolve_clerk_token(token: str) -> dict:
                 role="client",
                 plan="starter",
                 is_active=True,
-                trial_ends_at=trial_end,
             )
             db.add(client)
             await db.commit()
             await db.refresh(client)
-            logger.info(f"Auto-provisioned client {client.id} from Clerk user {clerk_user_id} (trial until {trial_end.date()})")
+            logger.info(f"Auto-provisioned client {client.id} from Clerk user {clerk_user_id}")
 
             # Fire welcome email (non-blocking)
             try:

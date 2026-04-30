@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import _resolve_clerk_token
 from app.core.config import get_settings
 from app.models.models import AgentConfig, Client, Engagement, FollowUpTask
+from app.services.agent_config_service import ensure_agent_config_defaults, serialize_agent_config as serialize_universal_agent_config
+from app.services.agent_modes import DEFAULT_AGENT_MODE
 from app.services.prompt_engine import compose_system_prompt
 from app.services.saas_workspace_service import normalize_website_input
 
@@ -139,19 +141,13 @@ async def get_or_create_agent_config(db: AsyncSession, tenant: Client) -> AgentC
         business_type=(tenant.industry or "general")[:100],
         website_domain=website_domain[:255],
         industry=industry_slug,
+        agent_mode=DEFAULT_AGENT_MODE,
         tone=DEFAULT_AGENT_TONE,
         goals=list(DEFAULT_AGENT_GOALS),
         active=True,
         custom_context=f"Website: {website_url}",
     )
-    agent.system_prompt = compose_system_prompt(
-        agent_name=agent.agent_name,
-        business_name=agent.business_name,
-        industry_slug=agent.industry,
-        agent_mode=agent.agent_mode,
-        business_type=agent.business_type,
-        custom_context=agent.custom_context,
-    )
+    ensure_agent_config_defaults(agent, tenant)
     db.add(agent)
     await db.flush()
     return agent
@@ -314,17 +310,11 @@ def serialize_tenant_profile(context: TenantContext, billing_status: dict[str, A
 
 
 def serialize_agent_config(agent: AgentConfig) -> dict[str, Any]:
-    return {
-        "id": str(agent.id),
-        "tenantId": str(agent.client_id),
-        "agentName": agent.agent_name,
-        "welcomeMessage": agent.agent_greeting,
-        "tone": getattr(agent, "tone", DEFAULT_AGENT_TONE) or DEFAULT_AGENT_TONE,
-        "goals": list(getattr(agent, "goals", []) or DEFAULT_AGENT_GOALS),
-        "active": bool(getattr(agent, "active", True)),
-        "createdAt": serialize_datetime(agent.created_at),
-        "updatedAt": serialize_datetime(agent.updated_at),
-    }
+    ensure_agent_config_defaults(agent)
+    payload = serialize_universal_agent_config(agent)
+    payload["createdAt"] = serialize_datetime(agent.created_at)
+    payload["updatedAt"] = serialize_datetime(agent.updated_at)
+    return payload
 
 
 def parse_transcript_message_count(transcript: str | None) -> int:
@@ -351,6 +341,9 @@ def serialize_engagement_summary(engagement: Engagement) -> dict[str, Any]:
         "followUpNeeded": engagement.follow_up_needed,
         "summaryShort": engagement.summary_short,
         "leadScore": engagement.lead_score,
+        "agentMode": engagement.agent_mode,
+        "conversionStage": engagement.conversion_stage,
+        "metadata": dict(engagement.metadata or {}),
         "createdAt": serialize_datetime(engagement.created_at),
         "updatedAt": serialize_datetime(engagement.updated_at),
     }

@@ -25,6 +25,7 @@ from app.core.logging import configure_logging, get_logger
 # Import all route modules
 from app.api.routes import (
     admin,
+    agent,
     agent_config,
     analytics,
     auth,
@@ -334,6 +335,7 @@ app.include_router(webhooks_tools.router, prefix=API_PREFIX)
 app.include_router(calls.router, prefix=API_PREFIX)
 app.include_router(leads.router, prefix=API_PREFIX)
 app.include_router(numbers.router, prefix=API_PREFIX)
+app.include_router(agent.router, prefix=API_PREFIX)
 app.include_router(agent_config.router, prefix=API_PREFIX)
 app.include_router(analytics.router, prefix=API_PREFIX)
 app.include_router(dashboard_sync.router, prefix=API_PREFIX)

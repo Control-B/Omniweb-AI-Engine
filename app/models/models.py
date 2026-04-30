@@ -194,7 +194,16 @@ class AgentConfig(Base):
     # ── Multi-tenant AI platform fields ─────────────────────────────────────
     # Industry & agent mode (drives prompt composition, guardrails, tool set)
     industry: Mapped[str] = mapped_column(String(100), default="general", nullable=False)
-    agent_mode: Mapped[str] = mapped_column(String(50), default="lead_qualifier", nullable=False)
+    agent_mode: Mapped[str] = mapped_column(String(50), default="general_lead_gen", nullable=False)
+    enabled_channels: Mapped[list] = mapped_column(JSONB, default=lambda: ["website_chat"], nullable=False)
+    lead_capture_fields: Mapped[list] = mapped_column(
+        JSONB,
+        default=lambda: ["name", "email", "phone", "company", "goal"],
+        nullable=False,
+    )
+    qualification_rules: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    enabled_features: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    custom_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Custom guardrails & escalation triggers (appended to industry defaults)
     custom_guardrails: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
@@ -552,6 +561,9 @@ class Engagement(Base):
     objections: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     recommended_next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agent_mode: Mapped[str] = mapped_column(String(50), nullable=False, default="general_lead_gen")
+    conversion_stage: Mapped[str] = mapped_column(String(50), nullable=False, default="awareness")
+    metadata: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     resolved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

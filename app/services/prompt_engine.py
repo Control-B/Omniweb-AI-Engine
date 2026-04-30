@@ -364,6 +364,10 @@ def _format_business_hours(hours: dict[str, Any]) -> str:
 def _agent_role_for_mode(agent_mode: str) -> str:
     """Map agent mode to a human-readable role title."""
     mode_roles = {
+        "ecommerce": "ecommerce revenue specialist",
+        "roadside": "roadside dispatch specialist",
+        "service_business": "service booking specialist",
+        "general_lead_gen": "lead generation specialist",
         "lead_qualifier": "sales and lead conversion specialist",
         "ecommerce_assistant": "sales and product specialist",
         "customer_service": "customer success specialist",
@@ -527,6 +531,10 @@ def compose_greeting(
 
     # Fall back to value-first greetings — lead with impact, not questions
     generic_greetings = {
+        "ecommerce": f"I can help you find the best-fit option fast and make the decision easier. I’m {agent_name} from {business_name or 'our store'}, and I’m here to guide you toward the right choice.",
+        "roadside": f"You’ve reached {business_name or 'our roadside team'}. I’m {agent_name}, and I’ll help get the right details so we can move this forward quickly and safely.",
+        "service_business": f"I’m {agent_name} with {business_name or 'our team'}, and I can help you figure out the right service and get the next step lined up quickly.",
+        "general_lead_gen": f"I’m {agent_name} with {business_name or 'our team'}, and I’m here to make this easy by answering questions, clarifying fit, and guiding you to the best next step.",
         "lead_qualifier": f"Most businesses lose leads simply because they can't respond fast enough. At {business_name or 'our company'}, we make sure every visitor gets engaged instantly and guided toward the next step. I'd love to show you how.",
         "ecommerce_assistant": f"Customers who get help in real time are 3x more likely to buy. I'm {agent_name} from {business_name or 'our store'} — I can help you find exactly what you're looking for, answer questions, and make sure you get the best deal.",
         "customer_service": f"Hey there! I'm {agent_name} from {business_name or 'our team'}. I'm here to get things sorted quickly — what's going on?",

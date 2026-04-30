@@ -20,6 +20,26 @@ from typing import Any
 # ── Agent Modes ──────────────────────────────────────────────────────────────
 
 AGENT_MODES = {
+    "ecommerce": {
+        "label": "Ecommerce Revenue Agent",
+        "description": "Guide shoppers, handle objections, recommend products, and convert buying intent.",
+        "primary_goal": "assist_and_convert",
+    },
+    "roadside": {
+        "label": "Roadside Dispatch Agent",
+        "description": "Collect safety-critical dispatch details and route urgent requests quickly.",
+        "primary_goal": "triage_and_dispatch",
+    },
+    "service_business": {
+        "label": "Service Business Booking Agent",
+        "description": "Qualify local-service leads and move them toward appointments, estimates, or callbacks.",
+        "primary_goal": "qualify_and_book",
+    },
+    "general_lead_gen": {
+        "label": "General Lead Generation Agent",
+        "description": "Educate visitors, qualify demand, and capture next-step conversions for follow-up.",
+        "primary_goal": "qualify_and_capture",
+    },
     "lead_qualifier": {
         "label": "Lead Qualifier",
         "description": "Qualify inbound leads — collect contact, understand need, score urgency, book or hand off.",

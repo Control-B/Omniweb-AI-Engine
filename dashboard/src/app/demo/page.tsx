@@ -17,7 +17,7 @@ export default function DemoPage() {
         const currentToken = getToken();
         const currentRole = currentToken ? parseJwt(currentToken)?.role : null;
           if (isInternalRole(typeof currentRole === "string" ? currentRole : null)) {
-            window.location.href = "/admin/dashboard";
+            window.location.href = "/landing";
           return;
         }
 
@@ -26,15 +26,7 @@ export default function DemoPage() {
         setCanReturnToAdmin(hasStashedAdminToken());
         await demoLogin();
         if (!cancelled) {
-          const target = new URLSearchParams(window.location.search).get("target");
-          const page =
-            target === "telephony"
-              ? "?page=telephony"
-              : target === "agent"
-                ? "?page=agent"
-                : "";
-          // Full page navigation so auth context picks up the token
-          window.location.href = `/dashboard${page}`;
+          window.location.href = "/landing";
         }
       } catch (err: any) {
         if (!cancelled) {
@@ -67,11 +59,11 @@ export default function DemoPage() {
               <button
                 onClick={() => {
                   restoreAdminToken();
-                    window.location.href = "/admin/dashboard";
+                    window.location.href = "/landing";
                 }}
                 className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
               >
-                Back to Admin
+                Restore session
               </button>
             )}
             <a

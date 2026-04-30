@@ -32,7 +32,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (loading) return;
     if (!user) router.replace(AUTH_HANDOFF_PATH);
-    else if (isInternalRole(user.role)) router.replace("/admin/dashboard");
+    else if (isInternalRole(user.role)) router.replace("/landing");
   }, [user, loading, router]);
 
   async function onSubmit(e: React.FormEvent) {
@@ -55,7 +55,7 @@ export default function OnboardingPage() {
       } catch {
         /* ignore */
       }
-      router.replace("/dashboard");
+      router.replace("/landing");
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : "Could not save onboarding");
     } finally {
@@ -142,7 +142,7 @@ export default function OnboardingPage() {
               )}
               <Button type="submit" className="w-full" disabled={saving}>
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                {saving ? "Saving…" : "Continue to dashboard"}
+                {saving ? "Saving…" : "Continue"}
               </Button>
             </form>
           </CardContent>

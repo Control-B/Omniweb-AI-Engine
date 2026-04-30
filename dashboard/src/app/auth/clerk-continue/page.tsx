@@ -31,7 +31,7 @@ export default function ClerkHandoffPage() {
     }
     if (loading) return;
     if (user) {
-      router.replace("/dashboard");
+      router.replace("/landing");
       return;
     }
     if (!clerk.isLoaded) return;
@@ -45,7 +45,7 @@ export default function ClerkHandoffPage() {
       try {
         await signIntoEngineWithClerk(clerk.getToken);
         refresh();
-        router.replace("/dashboard");
+        router.replace("/landing");
       } catch (e) {
         const msg =
           e instanceof Error ? e.message : "Missing or invalid session.";
@@ -83,7 +83,7 @@ export default function ClerkHandoffPage() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-3 px-6">
       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      <p className="text-sm text-muted-foreground">Opening your Omniweb dashboard…</p>
+      <p className="text-sm text-muted-foreground">Opening Omniweb…</p>
     </div>
   );
 }

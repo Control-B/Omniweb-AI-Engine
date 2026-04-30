@@ -28,7 +28,7 @@ function resolveApiBase(): string {
 }
 
 function resolveApiBases(): string[] {
-  // Prefer same-origin /api in browsers so admin pages avoid cross-origin preflight issues.
+  // Prefer same-origin /api in browsers so authenticated pages avoid cross-origin preflight issues.
   const configured =
     process.env.NEXT_PUBLIC_API_URL?.trim() ||
     process.env.NEXT_PUBLIC_ENGINE_URL?.trim() ||
@@ -75,9 +75,20 @@ function getTokenStorageKey(portal: AuthPortal): string {
 
 function getActivePortal(): AuthPortal {
   if (typeof window === "undefined") return "client";
-  return window.location.pathname.startsWith("/admin") || window.location.pathname.startsWith("/login")
-    ? "admin"
-    : "client";
+  moveLegacyTokenIntoPortalStorage();
+  const pathname = window.location.pathname;
+  if (pathname.startsWith("/login")) return "admin";
+
+  const adminTok = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (adminTok) {
+    const payload = parseJwt(adminTok);
+    const role = payload?.role;
+    if (role === "owner" || role === "admin" || role === "support") {
+      const exp = payload?.exp;
+      if (!exp || exp * 1000 > Date.now()) return "admin";
+    }
+  }
+  return "client";
 }
 
 function getPortalLoginPath(portal: AuthPortal): string {

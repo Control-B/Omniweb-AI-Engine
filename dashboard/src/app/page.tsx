@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { isInternalRole, useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
 import { AUTH_HANDOFF_PATH, SIGN_IN_PATH } from "@/lib/auth-landing";
 
@@ -21,10 +21,8 @@ export default function Home() {
     if (loading) return;
     if (!user) {
       router.replace(AUTH_HANDOFF_PATH);
-    } else if (isInternalRole(user.role)) {
-      router.replace("/admin/dashboard");
     } else {
-      router.replace("/dashboard");
+      router.replace("/landing");
     }
   }, [user, loading, router]);
 
@@ -38,8 +36,8 @@ export default function Home() {
             Open sign-in
           </Link>{" "}
             or go straight to{" "}
-            <Link href="/dashboard" className="text-primary underline underline-offset-2">
-              your dashboard
+            <Link href="/landing" className="text-primary underline underline-offset-2">
+              the demo
             </Link>
             .
         </p>

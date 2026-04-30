@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import Link from "next/link";
 import { clearAdminSession, login, requestPasswordReset } from "@/lib/api";
-import { isInternalRole } from "@/lib/auth-context";
 import { SIGN_IN_PATH } from "@/lib/auth-landing";
 
 export default function LoginPage() {
@@ -29,7 +28,7 @@ export default function LoginPage() {
 
     try {
       const data = await login(email, password, portal);
-      window.location.href = isInternalRole(data.role) ? "/admin/dashboard" : "/dashboard";
+      window.location.href = "/landing";
       return;
     } catch (err: any) {
       setError(err.message || "Something went wrong");

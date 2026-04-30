@@ -31,7 +31,7 @@ export default function AuthEmbeddedPage() {
     }
     setToken(token);
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    router.replace("/dashboard");
+    router.replace("/landing");
   }, [router]);
 
   if (error) {
@@ -48,7 +48,7 @@ export default function AuthEmbeddedPage() {
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center gap-3">
       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      <p className="text-sm text-muted-foreground">Opening your dashboard…</p>
+      <p className="text-sm text-muted-foreground">Completing sign-in…</p>
     </div>
   );
 }

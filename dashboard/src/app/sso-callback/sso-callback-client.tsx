@@ -23,7 +23,7 @@ function SsoCallbackExchange() {
     (async () => {
       try {
         await signIntoEngineWithClerk(getToken);
-        router.replace("/dashboard");
+        router.replace("/landing");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not complete sign-in");
       }

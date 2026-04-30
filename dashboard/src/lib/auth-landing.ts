@@ -1,4 +1,4 @@
-/** First stop when the app needs an Omniweb JWT: Clerk session ↔ engine JWT, then dashboard. */
+/** First stop when the app needs an Omniweb JWT: Clerk session ↔ engine JWT, then app shell. */
 export const AUTH_HANDOFF_PATH = "/auth/clerk-continue";
 
 /** Subscriber sign-in / sign-up with Clerk (same app as omniweb.ai gateway). */

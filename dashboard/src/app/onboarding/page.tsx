@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { postOnboarding } from "@/lib/api";
 import { useAuth, isInternalRole } from "@/lib/auth-context";
+import { AUTH_HANDOFF_PATH } from "@/lib/auth-landing";
 
 const GOALS: { value: string; label: string }[] = [
   { value: "capture_leads", label: "Capture leads" },
@@ -30,7 +31,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) router.replace("/login");
+    if (!user) router.replace(AUTH_HANDOFF_PATH);
     else if (isInternalRole(user.role)) router.replace("/admin");
   }, [user, loading, router]);
 

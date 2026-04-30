@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { isInternalRole, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
+import { AUTH_HANDOFF_PATH, SIGN_IN_PATH } from "@/lib/auth-landing";
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -19,7 +20,7 @@ export default function Home() {
   useEffect(() => {
     if (loading) return;
     if (!user) {
-      router.replace("/login");
+      router.replace(AUTH_HANDOFF_PATH);
     } else if (isInternalRole(user.role)) {
       router.replace("/admin");
     } else {
@@ -33,8 +34,8 @@ export default function Home() {
       {showEscape && loading && (
         <p className="text-center text-sm text-muted-foreground max-w-sm">
           Still here?{" "}
-          <Link href="/login" className="text-primary underline underline-offset-2">
-            Open login
+          <Link href={SIGN_IN_PATH} className="text-primary underline underline-offset-2">
+            Open sign-in
           </Link>{" "}
           or{" "}
           <Link href="/landing" className="text-primary underline underline-offset-2">

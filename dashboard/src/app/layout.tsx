@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
+import { ClerkProvider } from "@clerk/nextjs";
 import { AuthProvider } from "@/lib/auth-context";
 
-const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() ?? "";
+const clerkPublishableKey =
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() ?? "";
 
 export const metadata: Metadata = {
   title: "Omniweb AI — Dashboard",
@@ -22,15 +23,17 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const app = <AuthProvider>{children}</AuthProvider>;
+  const content = <AuthProvider>{children}</AuthProvider>;
 
   return (
     <html lang="en" className="dark">
       <body>
         {clerkPublishableKey ? (
-          <ClerkProvider publishableKey={clerkPublishableKey}>{app}</ClerkProvider>
+          <ClerkProvider publishableKey={clerkPublishableKey}>
+            {content}
+          </ClerkProvider>
         ) : (
-          app
+          content
         )}
       </body>
     </html>

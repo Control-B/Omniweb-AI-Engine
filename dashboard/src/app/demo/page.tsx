@@ -75,10 +75,10 @@ export default function DemoPage() {
               </button>
             )}
             <a
-              href="/login"
+              href="/sign-in"
               className="px-4 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-sidebar-accent transition-colors"
             >
-              Go to Login
+              Go to Sign in
             </a>
           </div>
         </div>

@@ -1,3 +1,5 @@
+import { AUTH_HANDOFF_PATH, SIGN_IN_PATH } from "@/lib/auth-landing";
+
 const DEFAULT_PRODUCTION_API_BASE = "https://omniweb-engine-rs6fr.ondigitalocean.app";
 
 function normalizeApiBase(url: string): string {
@@ -50,6 +52,11 @@ function getApiBases(): string[] {
 
 function getPrimaryApiBase(): string {
   return getApiBases()[0] || DEFAULT_PRODUCTION_API_BASE;
+}
+
+/** Same-origin or configured API base for client-side Clerk → engine token exchange. */
+export function getEngineApiBaseForClient(): string {
+  return getPrimaryApiBase();
 }
 
 // All backend routes live under /api
@@ -141,7 +148,7 @@ async function apiFetch<T = any>(
 
         if (res.status === 401 && !path.startsWith("/auth/")) {
           clearToken();
-          if (typeof window !== "undefined") window.location.href = "/login";
+          if (typeof window !== "undefined") window.location.href = AUTH_HANDOFF_PATH;
         }
 
         throw new Error(message);
@@ -213,7 +220,7 @@ export async function demoLogin(): Promise<AuthResponse> {
 
 export function logout() {
   clearToken();
-  if (typeof window !== "undefined") window.location.href = "/login";
+  if (typeof window !== "undefined") window.location.href = SIGN_IN_PATH;
 }
 
 // ── Profile ──────────────────────────────────────────────────────────────────

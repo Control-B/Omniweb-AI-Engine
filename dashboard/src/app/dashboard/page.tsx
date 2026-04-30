@@ -6,22 +6,19 @@ import { useRouter } from "next/navigation";
 import { isInternalRole, useAuth } from "@/lib/auth-context";
 import { DashboardPage } from "@/components/pages/dashboard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bot, Code, LineChart, Loader2, MessageSquareText, Settings } from "lucide-react";
-
-export type ClientPageId =
-  | "dashboard"
-  | "calls"
-  | "leads"
-  | "agent"
-  | "numbers"
-  | "sites"
-  | "automations"
-  | "settings";
+import {
+  Bot,
+  Code,
+  LineChart,
+  Loader2,
+  MessageSquareText,
+  Settings,
+} from "lucide-react";
+import { AUTH_HANDOFF_PATH } from "@/lib/auth-landing";
 
 export default function ClientDashboard() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [activePage, setActivePage] = useState<ClientPageId>("dashboard");
   const [authChecked, setAuthChecked] = useState(false);
   const steps: { key: "agent" | "test" | "embed"; label: string }[] = [
     { key: "agent", label: "Configure your AI agent" },
@@ -37,7 +34,7 @@ export default function ClientDashboard() {
   useEffect(() => {
     if (loading) return;
     if (!user) {
-      router.replace("/login");
+      router.replace(AUTH_HANDOFF_PATH);
     } else if (isInternalRole(user.role)) {
       router.replace("/admin");
     } else {
@@ -79,7 +76,13 @@ export default function ClientDashboard() {
                 >
                   {i + 1}.
                 </span>
-                <span className={progress && progress[s.key] ? "text-foreground" : "text-muted-foreground"}>
+                <span
+                  className={
+                    progress && progress[s.key]
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }
+                >
                   {s.label}
                 </span>
                 {progress && progress[s.key] ? (
@@ -139,7 +142,9 @@ export default function ClientDashboard() {
               <LineChart className="w-8 h-8 text-primary shrink-0" />
               <div>
                 <p className="font-semibold text-foreground">View Conversations</p>
-                <p className="text-xs text-muted-foreground mt-1">Leads and call history</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Leads and call history
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -150,7 +155,9 @@ export default function ClientDashboard() {
               <Settings className="w-8 h-8 text-primary shrink-0" />
               <div>
                 <p className="font-semibold text-foreground">Business Settings</p>
-                <p className="text-xs text-muted-foreground mt-1">Profile and notifications</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Profile and notifications
+                </p>
               </div>
             </CardContent>
           </Card>

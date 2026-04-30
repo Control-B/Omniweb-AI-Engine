@@ -7,6 +7,7 @@ import { isInternalRole, useAuth } from "@/lib/auth-context";
 import { ClientSidebar } from "@/components/client-sidebar";
 import { TrialBanner } from "@/components/dashboard/trial-banner";
 import { getMeWorkspace, type WorkspaceResponse } from "@/lib/api";
+import { AUTH_HANDOFF_PATH } from "@/lib/auth-landing";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -34,7 +35,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (loading) return;
     if (!user) {
-      router.replace("/login");
+      router.replace(AUTH_HANDOFF_PATH);
       return;
     }
     if (isInternalRole(user.role)) {

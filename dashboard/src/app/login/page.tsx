@@ -4,8 +4,10 @@ import { useState } from "react";
 import { Zap, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import Link from "next/link";
 import { login, requestPasswordReset } from "@/lib/api";
 import { isInternalRole } from "@/lib/auth-context";
+import { SIGN_IN_PATH } from "@/lib/auth-landing";
 
 export default function LoginPage() {
   const [portal, setPortal] = useState<"client" | "admin">("admin");
@@ -156,6 +158,14 @@ export default function LoginPage() {
             {portal === "admin" ? "Sign In to Admin" : "Sign In"}
           </Button>
         </form>
+
+        <p className="text-center text-xs text-muted-foreground px-2 leading-relaxed">
+          Omniweb subscriber?{" "}
+          <Link href={SIGN_IN_PATH} className="text-primary underline">
+            Clerk sign-in
+          </Link>{" "}
+          (same account as omniweb.ai).
+        </p>
 
         <p className="text-center text-sm text-muted-foreground">
           {portal === "admin"

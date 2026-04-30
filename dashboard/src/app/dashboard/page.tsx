@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { isInternalRole, useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/auth-context";
 import { DashboardPage } from "@/components/pages/dashboard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -35,8 +35,6 @@ export default function ClientDashboard() {
     if (loading) return;
     if (!user) {
       router.replace(AUTH_HANDOFF_PATH);
-      } else if (isInternalRole(user.role)) {
-        router.replace("/admin/dashboard");
     } else {
       setAuthChecked(true);
     }

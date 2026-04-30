@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { isInternalRole, useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/auth-context";
 import { ClientSidebar } from "@/components/client-sidebar";
 import { TrialBanner } from "@/components/dashboard/trial-banner";
 import { getMeWorkspace, type WorkspaceResponse } from "@/lib/api";
@@ -36,10 +36,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (loading) return;
     if (!user) {
       router.replace(AUTH_HANDOFF_PATH);
-      return;
-    }
-      if (isInternalRole(user.role)) {
-        router.replace("/admin/dashboard");
       return;
     }
     setAuthChecked(true);

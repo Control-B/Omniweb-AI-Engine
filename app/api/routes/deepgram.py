@@ -43,10 +43,9 @@ class VoiceAgentSessionCompleteRequest(BaseModel):
     transcript: list[SessionTranscriptLine] = []
 
 
-@router.post("/voice-agent/bootstrap")
-async def voice_agent_bootstrap(
+async def run_voice_agent_bootstrap(
     req: VoiceAgentBootstrapRequest,
-    db: AsyncSession,
+    db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Shared implementation for ``POST .../voice-agent/bootstrap`` (see routers below)."""
     if not settings.deepgram_configured:
@@ -121,6 +120,14 @@ async def voice_agent_bootstrap(
         "expires_in": token_payload.get("expires_in"),
         "settings": voice_settings,
     }
+
+
+@router.post("/voice-agent/bootstrap")
+async def voice_agent_bootstrap(
+    req: VoiceAgentBootstrapRequest,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    return await run_voice_agent_bootstrap(req, db)
 
 
 @router.post("/voice-agent/session-complete")

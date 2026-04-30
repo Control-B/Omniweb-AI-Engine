@@ -31,18 +31,20 @@ from app.api.routes import (
     automations,
     calls,
     chat,
+    deepgram,
     embed,
     gadget,
     industry,
     knowledge_base,
     leads,
     numbers,
+    retell,
+    saas,
     shopify,
     site_templates,
     subscribe,
     templates,
     webhooks,
-    webhooks_elevenlabs,
     webhooks_stripe,
     webhooks_tools,
 )
@@ -315,8 +317,9 @@ API_PREFIX = "/api"
 # Auth
 app.include_router(auth.router, prefix=API_PREFIX)
 
-# Webhooks (no auth — URLs configured in ElevenLabs/Stripe dashboards)
-app.include_router(webhooks_elevenlabs.router, prefix=API_PREFIX)
+# Public service endpoints / webhooks (no auth)
+app.include_router(deepgram.router, prefix=API_PREFIX)
+app.include_router(retell.router, prefix=API_PREFIX)
 app.include_router(webhooks_stripe.router, prefix=API_PREFIX)
 app.include_router(webhooks_tools.router, prefix=API_PREFIX)
 

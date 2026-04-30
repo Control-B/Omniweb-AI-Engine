@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from app.api.deps import get_session
+from app.api.routes.deepgram import VoiceAgentBootstrapRequest, run_voice_agent_bootstrap
 from app.core.auth import get_current_client
 from app.core.logging import get_logger
 from app.models.models import AgentConfig

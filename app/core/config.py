@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_FROM_NUMBER: str = ""  # default outbound SMS number
 
+    # ── Retell AI (voice + web calls + telephony orchestration) ─────────
+    RETELL_API_KEY: str = ""
+    RETELL_LANDING_AGENT_ID: str = ""
+
     # ── Deepgram (Shopify / widget voice agent infrastructure) ──
     DEEPGRAM_API_KEY: str = ""
     DEEPGRAM_PROJECT_ID: str = ""
@@ -163,6 +167,10 @@ class Settings(BaseSettings):
     @property
     def twilio_configured(self) -> bool:
         return bool(self.TWILIO_ACCOUNT_SID and self.TWILIO_AUTH_TOKEN)
+
+    @property
+    def retell_configured(self) -> bool:
+        return bool(self.RETELL_API_KEY)
 
     @property
     def openai_configured(self) -> bool:

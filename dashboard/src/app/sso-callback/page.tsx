@@ -1,48 +1,37 @@
-"use client";
+import Link from "next/link";
+import { SsoCallbackClient } from "./sso-callback-client";
+import { INTERNAL_LOGIN_PATH } from "@/lib/auth-landing";
+import { resolvedClerkPublishableKey } from "@/lib/clerk-publishable";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AuthenticateWithRedirectCallback, useAuth, useUser } from "@clerk/nextjs";
-import { Loader2 } from "lucide-react";
-import { signIntoEngineWithClerk } from "@/lib/clerk-engine-exchange";
+/**
+ * SSO callback requires `<ClerkProvider>` in root layout (`resolvedClerkPublishableKey()`).
+ * Same resolution as next.config env mapping (supports `CLERK_PUBLISHABLE_KEY`-only Docker builds).
+ */
+export default function SsoCallbackPage() {
+  const clerkPk = resolvedClerkPublishableKey();
 
-function SsoCallbackExchange() {
-  const { isLoaded, isSignedIn, user } = useUser();
-  const { getToken } = useAuth();
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const ran = useRef(false);
-
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn || !user || ran.current) return;
-    ran.current = true;
-    (async () => {
-      try {
-        await signIntoEngineWithClerk(getToken);
-        router.replace("/dashboard");
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not complete sign-in");
-      }
-    })();
-  }, [isLoaded, isSignedIn, user, getToken, router]);
-
-  if (error) {
+  if (!clerkPk) {
     return (
-      <p className="text-sm text-red-400 text-center max-w-sm px-4">
-        {error}
-      </p>
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background p-6 text-center">
+        <p className="text-sm text-muted-foreground max-w-md">
+          Single sign-on is not configured on this deployment (missing Clerk publishable key at
+          build time). Use{" "}
+          <Link href={INTERNAL_LOGIN_PATH} className="text-primary underline underline-offset-2">
+            sign in
+          </Link>
+          , or redeploy the dashboard with{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+            CLERK_PUBLISHABLE_KEY
+          </code>{" "}
+          or{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+          </code>{" "}
+          at build time.
+        </p>
+      </div>
     );
   }
 
-  return <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />;
-}
-
-export default function SsoCallbackPage() {
-  return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background p-6">
-      <AuthenticateWithRedirectCallback />
-      <SsoCallbackExchange />
-      <p className="text-sm text-muted-foreground">Completing sign in…</p>
-    </div>
-  );
+  return <SsoCallbackClient />;
 }

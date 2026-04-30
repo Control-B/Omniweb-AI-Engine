@@ -2,6 +2,7 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { NextFetchEvent } from "next/server";
+import { resolvedClerkPublishableKey } from "@/lib/clerk-publishable";
 
 function injectPathHeader(request: NextRequest): NextResponse {
   const requestHeaders = new Headers(request.headers);
@@ -21,7 +22,7 @@ function injectPathHeader(request: NextRequest): NextResponse {
  * When Clerk is off, `<SignIn routing="path" />` may not work — use email/password or
  * add `CLERK_PUBLISHABLE_KEY` (BUILD_TIME) on the dashboard service and redeploy.
  */
-const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() ?? "";
+const clerkPublishableKey = resolvedClerkPublishableKey();
 
 const withClerk = clerkPublishableKey
   ? clerkMiddleware((_, request: NextRequest) => injectPathHeader(request))

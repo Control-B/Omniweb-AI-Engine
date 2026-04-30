@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { AuthProvider } from "@/lib/auth-context";
+import { resolvedClerkPublishableKey } from "@/lib/clerk-publishable";
 
-const clerkPublishableKey =
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() ?? "";
+const clerkPublishableKey = resolvedClerkPublishableKey();
 
 export const metadata: Metadata = {
   title: "Omniweb AI — Dashboard",

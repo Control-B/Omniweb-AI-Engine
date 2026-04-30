@@ -16,8 +16,8 @@ export default function DemoPage() {
       try {
         const currentToken = getToken();
         const currentRole = currentToken ? parseJwt(currentToken)?.role : null;
-        if (isInternalRole(typeof currentRole === "string" ? currentRole : null)) {
-          window.location.href = "/admin";
+          if (isInternalRole(typeof currentRole === "string" ? currentRole : null)) {
+            window.location.href = "/admin/dashboard";
           return;
         }
 
@@ -67,7 +67,7 @@ export default function DemoPage() {
               <button
                 onClick={() => {
                   restoreAdminToken();
-                  window.location.href = "/admin";
+                    window.location.href = "/admin/dashboard";
                 }}
                 className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
               >

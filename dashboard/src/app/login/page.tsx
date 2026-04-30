@@ -25,7 +25,7 @@ export default function LoginPage() {
 
     try {
       const data = await login(email, password, portal);
-      window.location.href = isInternalRole(data.role) ? "/admin" : "/dashboard";
+      window.location.href = isInternalRole(data.role) ? "/admin/dashboard" : "/dashboard";
       return;
     } catch (err: any) {
       setError(err.message || "Something went wrong");

@@ -32,7 +32,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (loading) return;
     if (!user) router.replace(AUTH_HANDOFF_PATH);
-    else if (isInternalRole(user.role)) router.replace("/admin");
+    else if (isInternalRole(user.role)) router.replace("/admin/dashboard");
   }, [user, loading, router]);
 
   async function onSubmit(e: React.FormEvent) {

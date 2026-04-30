@@ -38,8 +38,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace(AUTH_HANDOFF_PATH);
       return;
     }
-    if (isInternalRole(user.role)) {
-      router.replace("/admin");
+      if (isInternalRole(user.role)) {
+        router.replace("/admin/dashboard");
       return;
     }
     setAuthChecked(true);

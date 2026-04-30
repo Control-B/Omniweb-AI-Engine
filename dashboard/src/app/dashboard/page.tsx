@@ -35,8 +35,8 @@ export default function ClientDashboard() {
     if (loading) return;
     if (!user) {
       router.replace(AUTH_HANDOFF_PATH);
-    } else if (isInternalRole(user.role)) {
-      router.replace("/admin");
+      } else if (isInternalRole(user.role)) {
+        router.replace("/admin/dashboard");
     } else {
       setAuthChecked(true);
     }

@@ -1,0 +1,11 @@
+export type AdminPageId =
+  | "overview"
+  | "agent-config"
+  | "ai-telephony"
+  | "agents"
+  | "sessions"
+  | "clients"
+  | "templates"
+  | "team"
+  | "test-agent"
+  | "client-detail"

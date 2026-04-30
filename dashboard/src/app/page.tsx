@@ -22,7 +22,7 @@ export default function Home() {
     if (!user) {
       router.replace(AUTH_HANDOFF_PATH);
     } else if (isInternalRole(user.role)) {
-      router.replace("/admin");
+      router.replace("/admin/dashboard");
     } else {
       router.replace("/dashboard");
     }

@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { hasPermission, useAuth, type UserPermission } from "@/lib/auth-context";
-import type { AdminPageId } from "@/app/admin/page";
+import type { AdminPageId } from "@/lib/admin-dashboard";
 import {
   BarChart3,
   Users,

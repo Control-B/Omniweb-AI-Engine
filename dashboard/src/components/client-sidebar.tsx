@@ -194,7 +194,7 @@ export function ClientSidebar({ pathname }: ClientSidebarProps) {
             type="button"
             onClick={() => {
               restoreAdminToken();
-              window.location.href = "/admin";
+                window.location.href = "/admin/dashboard";
             }}
             className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-primary hover:text-primary hover:bg-primary/10 transition-colors font-medium"
           >

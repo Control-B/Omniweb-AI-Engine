@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/auth-context";
+import { isInternalRole, useAuth } from "@/lib/auth-context";
 import { hasStashedAdminToken, restoreAdminToken } from "@/lib/api";
 import type { ClientPageId } from "@/lib/client-dashboard";
 import { CLIENT_PAGES } from "@/lib/client-dashboard";
@@ -20,6 +20,7 @@ import {
   Workflow,
   LogOut,
   ArrowLeft,
+  ArrowRightLeft,
   Code,
   MessageSquareText,
   CreditCard,
@@ -60,6 +61,7 @@ export function ClientSidebar({ pathname }: ClientSidebarProps) {
   const activeTab: ClientPageId =
     qp && CLIENT_PAGES.includes(qp as ClientPageId) ? (qp as ClientPageId) : "dashboard";
   const onWidgetRoute = pathname.startsWith("/dashboard/widget");
+  const canOpenAdminDashboard = isInternalRole(user?.role) || showBackToAdmin;
 
   useEffect(() => {
     setShowBackToAdmin(hasStashedAdminToken());
@@ -189,17 +191,23 @@ export function ClientSidebar({ pathname }: ClientSidebarProps) {
       </nav>
 
       <div className="px-2 py-3 border-t border-border space-y-0.5">
-        {showBackToAdmin && (
+        {canOpenAdminDashboard && (
           <button
             type="button"
             onClick={() => {
-              restoreAdminToken();
-                window.location.href = "/admin/dashboard";
+              if (showBackToAdmin) {
+                restoreAdminToken();
+              }
+              window.location.href = "/admin/dashboard";
             }}
             className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-primary hover:text-primary hover:bg-primary/10 transition-colors font-medium"
           >
-            <ArrowLeft className="w-[18px] h-[18px]" />
-            {!collapsed && <span>Back to Admin</span>}
+            {showBackToAdmin ? (
+              <ArrowLeft className="w-[18px] h-[18px]" />
+            ) : (
+              <ArrowRightLeft className="w-[18px] h-[18px]" />
+            )}
+            {!collapsed && <span>{showBackToAdmin ? "Back to Admin" : "Open Admin Dashboard"}</span>}
           </button>
         )}
         <button

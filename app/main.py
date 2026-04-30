@@ -46,6 +46,7 @@ from app.api.routes import (
     site_templates,
     subscribe,
     templates,
+    widget,
     webhooks,
     webhooks_stripe,
     webhooks_tools,
@@ -208,6 +209,34 @@ app.add_middleware(
 )
 
 
+class WidgetCorsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        origin = request.headers.get("origin")
+        path = request.url.path
+        if path.startswith("/api/widget/") and origin and request.method == "OPTIONS":
+            return Response(
+                status_code=204,
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
+                    "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "Content-Type, Authorization"),
+                    "Access-Control-Max-Age": "600",
+                    "Vary": "Origin",
+                },
+            )
+
+        response = await call_next(request)
+        if path.startswith("/api/widget/") and origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Methods"] = "GET,POST,PATCH,OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            response.headers["Vary"] = "Origin"
+        return response
+
+
+app.add_middleware(WidgetCorsMiddleware)
+
+
 # ── Security Headers Middleware ───────────────────────────────────────────────
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -285,7 +314,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         ):
             limit = _RATE_LIMIT_MAX_AUTH
             key = f"auth:{client_ip}"
-        elif path.startswith("/api/public/widget/"):
+        elif path.startswith("/api/public/widget/") or path.startswith("/api/widget/"):
             limit = 45
             key = f"widget_pub:{client_ip}"
         elif path.startswith("/api/"):
@@ -350,7 +379,9 @@ app.include_router(embed.router, prefix=API_PREFIX)
 app.include_router(saas.router, prefix=API_PREFIX)
 app.include_router(saas.public_router, prefix=API_PREFIX)
 app.include_router(subscribe.router, prefix=API_PREFIX)
+app.include_router(widget.router, prefix=API_PREFIX)
 app.include_router(webhooks.router, prefix=API_PREFIX)
+app.include_router(widget.asset_router)
 
 # Admin API
 app.include_router(admin.router, prefix=API_PREFIX)

@@ -37,6 +37,7 @@ frontend/v0-omniweb-landing-page/
 dashboard/node_modules/
 dashboard/.pnpm-store/
 dashboard/.next/
+dashboard/tsconfig.tsbuildinfo
 dashboard/out/
 frontend/**/node_modules/
 frontend/**/.pnpm-store/

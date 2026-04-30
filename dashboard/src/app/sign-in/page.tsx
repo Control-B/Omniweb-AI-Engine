@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SignIn } from "@clerk/nextjs";
+import { clearSubscriberSession } from "@/lib/api";
 import { INTERNAL_LOGIN_PATH } from "@/lib/auth-landing";
 
 const hasClerk =
@@ -15,6 +16,7 @@ export default function SubscriberSignInPage() {
   const router = useRouter();
 
   useEffect(() => {
+    clearSubscriberSession();
     if (!hasClerk) {
       router.replace(INTERNAL_LOGIN_PATH);
     }

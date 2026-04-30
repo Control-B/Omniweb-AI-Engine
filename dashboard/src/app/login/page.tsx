@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Zap, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import Link from "next/link";
-import { login, requestPasswordReset } from "@/lib/api";
+import { clearAdminSession, login, requestPasswordReset } from "@/lib/api";
 import { isInternalRole } from "@/lib/auth-context";
 import { SIGN_IN_PATH } from "@/lib/auth-landing";
 
@@ -16,6 +16,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    clearAdminSession();
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

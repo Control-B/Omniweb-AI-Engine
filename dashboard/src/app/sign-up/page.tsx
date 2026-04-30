@@ -1,12 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
 import { SignUp } from "@clerk/nextjs";
 import Link from "next/link";
 import { INTERNAL_LOGIN_PATH, SIGN_IN_PATH } from "@/lib/auth-landing";
+import { clearSubscriberSession } from "@/lib/api";
 
 const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim());
 
 export default function SignUpPage() {
+  useEffect(() => {
+    clearSubscriberSession();
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-6">

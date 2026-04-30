@@ -37,6 +37,6 @@ export async function signIntoEngineWithClerk(
   getClerkToken: () => Promise<string | null>
 ): Promise<string> {
   const access = await exchangeClerkSessionForEngineToken(getClerkToken);
-  setToken(access);
+    setToken(access, "client");
   return access;
 }

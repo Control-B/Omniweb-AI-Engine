@@ -62,47 +62,137 @@ export function getEngineApiBaseForClient(): string {
 // All backend routes live under /api
 const API_PREFIX = "/api";
 
+export type AuthPortal = "client" | "admin";
+
+const LEGACY_TOKEN_KEY = "omniweb_token";
+const CLIENT_TOKEN_KEY = "omniweb_client_token";
+const ADMIN_TOKEN_KEY = "omniweb_admin_token";
+const ADMIN_TOKEN_STASH_KEY = "omniweb_admin_token_stash";
+
+function getTokenStorageKey(portal: AuthPortal): string {
+  return portal === "admin" ? ADMIN_TOKEN_KEY : CLIENT_TOKEN_KEY;
+}
+
+function getActivePortal(): AuthPortal {
+  if (typeof window === "undefined") return "client";
+  return window.location.pathname.startsWith("/admin") || window.location.pathname.startsWith("/login")
+    ? "admin"
+    : "client";
+}
+
+function getPortalLoginPath(portal: AuthPortal): string {
+  return portal === "admin" ? "/login" : SIGN_IN_PATH;
+}
+
+function moveLegacyTokenIntoPortalStorage(): void {
+  if (typeof window === "undefined") return;
+  const legacy = localStorage.getItem(LEGACY_TOKEN_KEY);
+  if (!legacy) return;
+
+  const payload = parseJwt(legacy);
+  const portal: AuthPortal = payload?.role === "owner" || payload?.role === "admin" || payload?.role === "support"
+    ? "admin"
+    : "client";
+
+  localStorage.setItem(getTokenStorageKey(portal), legacy);
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
+}
+
+function getStoredToken(portal: AuthPortal): string | null {
+  if (typeof window === "undefined") return null;
+  moveLegacyTokenIntoPortalStorage();
+  return localStorage.getItem(getTokenStorageKey(portal));
+}
+
 // ── Token management ─────────────────────────────────────────────────────────
 
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("omniweb_token");
+export function getToken(portal?: AuthPortal): string | null {
+  const resolvedPortal = portal ?? getActivePortal();
+  return getStoredToken(resolvedPortal);
 }
 
-export function setToken(token: string) {
-  localStorage.setItem("omniweb_token", token);
+export function setToken(token: string, portal?: AuthPortal) {
+  if (typeof window === "undefined") return;
+  const resolvedPortal = portal ?? getActivePortal();
+  localStorage.setItem(getTokenStorageKey(resolvedPortal), token);
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
 }
 
-export function clearToken() {
-  localStorage.removeItem("omniweb_token");
+export function clearToken(portal?: AuthPortal) {
+  if (typeof window === "undefined") return;
+  const resolvedPortal = portal ?? getActivePortal();
+  localStorage.removeItem(getTokenStorageKey(resolvedPortal));
+}
+
+export function clearAllTokens() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
+  localStorage.removeItem(CLIENT_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_TOKEN_STASH_KEY);
 }
 
 // ── Admin token stash (for demo round-tripping) ──────────────────────────────
 
-const ADMIN_TOKEN_KEY = "omniweb_admin_token_stash";
-
 /** Save the current token before entering demo mode so we can restore it later. */
 export function stashAdminToken() {
-  const current = getToken();
+  const current = getToken("admin");
   if (current) {
-    localStorage.setItem(ADMIN_TOKEN_KEY, current);
+    localStorage.setItem(ADMIN_TOKEN_STASH_KEY, current);
   }
 }
 
 /** Restore the admin token stashed before demo mode. Returns true if restored. */
 export function restoreAdminToken(): boolean {
-  const stashed = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (typeof window === "undefined") return false;
+  const stashed = localStorage.getItem(ADMIN_TOKEN_STASH_KEY);
   if (stashed) {
-    setToken(stashed);
-    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    setToken(stashed, "admin");
+    localStorage.removeItem(ADMIN_TOKEN_STASH_KEY);
     return true;
   }
-  return false;
+  return !!getToken("admin");
+}
+
+export function clearPortalSession(portal: AuthPortal) {
+  clearToken(portal);
+  if (portal === "admin" && typeof window !== "undefined") {
+    localStorage.removeItem(ADMIN_TOKEN_STASH_KEY);
+  }
+}
+
+export function clearSubscriberSession() {
+  clearPortalSession("client");
+}
+
+export function clearAdminSession() {
+  clearPortalSession("admin");
+}
+
+export function hasAdminSession(): boolean {
+  return !!getToken("admin") || (typeof window !== "undefined" && !!localStorage.getItem(ADMIN_TOKEN_STASH_KEY));
 }
 
 /** Check if there's a stashed admin session (i.e. we're in demo mode). */
 export function hasStashedAdminToken(): boolean {
-  return !!localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (typeof window === "undefined") return false;
+  return !!localStorage.getItem(ADMIN_TOKEN_STASH_KEY) || !!getToken("admin");
+}
+
+export function redirectToPortalLogin(portal?: AuthPortal) {
+  if (typeof window === "undefined") return;
+  const resolvedPortal = portal ?? getActivePortal();
+  window.location.href = getPortalLoginPath(resolvedPortal);
+}
+
+export function logout(portal?: AuthPortal) {
+  const resolvedPortal = portal ?? getActivePortal();
+  clearToken(resolvedPortal);
+  if (resolvedPortal === "admin" && typeof window !== "undefined") {
+    localStorage.removeItem(ADMIN_TOKEN_STASH_KEY);
+  }
+  redirectToPortalLogin(resolvedPortal);
+  return false;
 }
 
 export function parseJwt(token: string): Record<string, any> | null {
@@ -120,7 +210,8 @@ async function apiFetch<T = any>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken();
+  const activePortal = getActivePortal();
+  const token = getToken(activePortal);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
@@ -146,9 +237,11 @@ async function apiFetch<T = any>(
           continue;
         }
 
-        if (res.status === 401 && !path.startsWith("/auth/")) {
-          clearToken();
-          if (typeof window !== "undefined") window.location.href = AUTH_HANDOFF_PATH;
+          if (res.status === 401 && !path.startsWith("/auth/")) {
+            clearToken(activePortal);
+            if (typeof window !== "undefined") {
+              window.location.href = activePortal === "admin" ? "/login" : AUTH_HANDOFF_PATH;
+            }
         }
 
         throw new Error(message);
@@ -190,7 +283,7 @@ export async function login(
     method: "POST",
     body: JSON.stringify({ email, password, portal }),
   });
-  setToken(data.access_token);
+  setToken(data.access_token, portal);
   return data;
 }
 
@@ -206,7 +299,7 @@ export async function signup(body: {
     method: "POST",
     body: JSON.stringify(body),
   });
-  setToken(data.access_token);
+  setToken(data.access_token, "client");
   return data;
 }
 
@@ -214,13 +307,8 @@ export async function demoLogin(): Promise<AuthResponse> {
   const data = await apiFetch<AuthResponse>("/auth/demo-token", {
     method: "POST",
   });
-  setToken(data.access_token);
+  setToken(data.access_token, "client");
   return data;
-}
-
-export function logout() {
-  clearToken();
-  if (typeof window !== "undefined") window.location.href = SIGN_IN_PATH;
 }
 
 // ── Profile ──────────────────────────────────────────────────────────────────

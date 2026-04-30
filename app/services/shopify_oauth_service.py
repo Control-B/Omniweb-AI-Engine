@@ -137,7 +137,7 @@ class ShopifyOAuthService:
 
     @staticmethod
     def build_admin_redirect(*, shop: str, status: str, client_id: str | None = None) -> str:
-        base = f"{settings.PLATFORM_URL.rstrip('/')}/admin"
+        base = f"{settings.PLATFORM_URL.rstrip('/')}/dashboard"
         query = {"shopify": status, "shop": shop}
         if client_id:
             query["client_id"] = client_id

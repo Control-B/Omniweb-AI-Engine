@@ -37,11 +37,11 @@ export default function Home() {
           <Link href={SIGN_IN_PATH} className="text-primary underline underline-offset-2">
             Open sign-in
           </Link>{" "}
-          or{" "}
-          <Link href="/landing" className="text-primary underline underline-offset-2">
-            try the widget demo
-          </Link>
-          .
+            or go straight to{" "}
+            <Link href="/dashboard" className="text-primary underline underline-offset-2">
+              your dashboard
+            </Link>
+            .
         </p>
       )}
     </div>

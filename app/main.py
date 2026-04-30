@@ -240,7 +240,7 @@ class CanonicalHostMiddleware(BaseHTTPMiddleware):
             if path.startswith("/api") or path.startswith("/static") or path == "/health":
                 return await call_next(request)
 
-            return RedirectResponse(f"{settings.PLATFORM_URL.rstrip('/')}/admin", status_code=302)
+            return RedirectResponse(f"{settings.PLATFORM_URL.rstrip('/')}/dashboard", status_code=302)
 
         return await call_next(request)
 
@@ -348,8 +348,8 @@ app.include_router(admin.router, prefix=API_PREFIX)
 
 @app.get("/")
 async def root_redirect():
-    """Redirect bare engine URL to the Omniweb admin dashboard."""
-    return RedirectResponse(f"{settings.PLATFORM_URL.rstrip('/')}/admin", status_code=302)
+    """Redirect bare engine URL to the Omniweb main dashboard."""
+    return RedirectResponse(f"{settings.PLATFORM_URL.rstrip('/')}/dashboard", status_code=302)
 
 
 @app.get("/health")

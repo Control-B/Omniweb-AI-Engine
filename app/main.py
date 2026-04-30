@@ -31,6 +31,7 @@ from app.api.routes import (
     automations,
     calls,
     chat,
+    dashboard_sync,
     deepgram,
     embed,
     gadget,
@@ -48,6 +49,7 @@ from app.api.routes import (
     webhooks_stripe,
     webhooks_tools,
 )
+from app.services.dashboard_sync_service import DashboardApiError, error_response
 
 settings = get_settings()
 configure_logging()
@@ -308,6 +310,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RateLimitMiddleware)
 
+
+@app.exception_handler(DashboardApiError)
+async def handle_dashboard_api_error(_: Request, exc: DashboardApiError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content=error_response(exc.code, exc.message))
+
 # ── Register routers ──────────────────────────────────────────────────────────
 # All API routes live under /api/* so the ingress can cleanly separate
 # backend requests from frontend routes (which share the same domain).
@@ -329,6 +336,7 @@ app.include_router(leads.router, prefix=API_PREFIX)
 app.include_router(numbers.router, prefix=API_PREFIX)
 app.include_router(agent_config.router, prefix=API_PREFIX)
 app.include_router(analytics.router, prefix=API_PREFIX)
+app.include_router(dashboard_sync.router, prefix=API_PREFIX)
 app.include_router(automations.router, prefix=API_PREFIX)
 app.include_router(chat.router, prefix=API_PREFIX)
 app.include_router(industry.router, prefix=API_PREFIX)

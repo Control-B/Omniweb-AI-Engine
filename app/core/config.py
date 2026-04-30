@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"  # legacy alias
     APP_BASE_URL: str = DEFAULT_ENGINE_BASE_URL
     ENGINE_BASE_URL: str = DEFAULT_ENGINE_BASE_URL
+    PUBLIC_WIDGET_BASE_URL: str = ""
     PLATFORM_URL: str = DEFAULT_PLATFORM_URL
     NON_CANONICAL_ENGINE_HOSTS: list[str] = [
         "api.omniweb.ai",

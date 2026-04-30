@@ -58,6 +58,7 @@ class Client(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     supabase_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
     clerk_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    clerk_org_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     crm_webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     webhook_secret: Mapped[str | None] = mapped_column(String(128), nullable=True)
     notification_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -83,6 +84,9 @@ class Client(Base):
     saas_widget_status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
     setup_progress: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    subscription_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    subscription_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -99,11 +103,15 @@ class Client(Base):
     shopify_store: Mapped["ShopifyStore | None"] = relationship(back_populates="client", uselist=False)
     shopify_sessions: Mapped[list["ShopifyAssistantSession"]] = relationship(back_populates="client")
     shopify_discount_requests: Mapped[list["ShopifyDiscountApproval"]] = relationship(back_populates="client")
+    engagements: Mapped[list["Engagement"]] = relationship(back_populates="client")
+    follow_up_tasks: Mapped[list["FollowUpTask"]] = relationship(back_populates="client")
 
     __table_args__ = (
         Index("ix_clients_email", "email"),
         Index("ix_clients_stripe_customer_id", "stripe_customer_id"),
         Index("ix_clients_clerk_user_id", "clerk_user_id"),
+        Index("ix_clients_subscription_status", "subscription_status"),
+        Index("ix_clients_created_at", "created_at"),
     )
 
 
@@ -141,8 +149,12 @@ class AgentConfig(Base):
     # Business context
     business_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     business_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    website_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
     timezone: Mapped[str] = mapped_column(String(50), default="America/New_York", nullable=False)
     booking_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    tone: Mapped[str] = mapped_column(String(30), default="professional", nullable=False)
+    goals: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Business hours: {"mon": {"open": "09:00", "close": "17:00", "closed": false}, ...}
     business_hours: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
@@ -509,6 +521,74 @@ class Lead(Base):
         Index("ix_leads_status", "status"),
         Index("ix_leads_caller_phone", "caller_phone"),
         Index("ix_leads_created_at", "created_at"),
+    )
+
+
+class Engagement(Base):
+    """Tenant-scoped analytics engagement record used by the SaaS dashboard."""
+    __tablename__ = "engagements"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+
+    session_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(50), nullable=False, default="website_chat")
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    language: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    visitor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    visitor_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    visitor_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    lead_status: Mapped[str] = mapped_column(String(40), nullable=False, default="new")
+    intent: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    contact_captured: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    qualified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    follow_up_needed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    summary_short: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_full: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lead_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pain_points: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    buying_signals: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    objections: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    recommended_next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="engagements")
+    follow_up_tasks: Mapped[list["FollowUpTask"]] = relationship(back_populates="engagement")
+
+    __table_args__ = (
+        Index("ix_engagements_client_id", "client_id"),
+        Index("ix_engagements_client_id_created_at", "client_id", "created_at"),
+        Index("ix_engagements_lead_status", "lead_status"),
+        Index("ix_engagements_created_at", "created_at"),
+    )
+
+
+class FollowUpTask(Base):
+    """Pending or completed follow-up actions tied to an engagement."""
+    __tablename__ = "follow_up_tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    engagement_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("engagements.id", ondelete="CASCADE"), nullable=False)
+
+    instruction: Mapped[str] = mapped_column(Text, nullable=False)
+    channel: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="follow_up_tasks")
+    engagement: Mapped["Engagement"] = relationship(back_populates="follow_up_tasks")
+
+    __table_args__ = (
+        Index("ix_follow_up_tasks_client_id", "client_id"),
+        Index("ix_follow_up_tasks_engagement_id", "engagement_id"),
+        Index("ix_follow_up_tasks_created_at", "created_at"),
     )
 
 

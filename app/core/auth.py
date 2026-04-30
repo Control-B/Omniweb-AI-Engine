@@ -334,6 +334,7 @@ async def _resolve_clerk_token(token: str) -> dict:
         raise HTTPException(401, "Invalid Clerk token")
 
     clerk_user_id = payload.get("sub")
+    clerk_org_id = payload.get("org_id") or payload.get("organization_id")
     if not clerk_user_id:
         raise HTTPException(401, "Invalid Clerk token: missing sub")
 
@@ -358,6 +359,16 @@ async def _resolve_clerk_token(token: str) -> dict:
         )
         client = result.scalar_one_or_none()
 
+        if not client and clerk_org_id:
+            result = await db.execute(
+                select(Client).where(Client.clerk_org_id == clerk_org_id, Client.is_active == True)
+            )
+            client = result.scalar_one_or_none()
+            if client:
+                client.clerk_user_id = clerk_user_id
+                await db.commit()
+                logger.info(f"Linked Clerk org {clerk_org_id} to existing client {client.id}")
+
         if not client and email:
             # 2. Try by email (link existing account)
             result = await db.execute(
@@ -366,8 +377,14 @@ async def _resolve_clerk_token(token: str) -> dict:
             client = result.scalar_one_or_none()
             if client:
                 client.clerk_user_id = clerk_user_id
+                if clerk_org_id:
+                    client.clerk_org_id = clerk_org_id
                 await db.commit()
                 logger.info(f"Linked Clerk user {clerk_user_id} to existing client {client.id}")
+
+        if client and clerk_org_id and getattr(client, "clerk_org_id", None) != clerk_org_id:
+            client.clerk_org_id = clerk_org_id
+            await db.commit()
 
         if not client:
             # 3. Auto-provision Clerk-only tenant. Trial starts on SaaS onboarding (7 days).
@@ -379,6 +396,7 @@ async def _resolve_clerk_token(token: str) -> dict:
                 email=email,
                 hashed_password="",  # No password — Clerk-only auth
                 clerk_user_id=clerk_user_id,
+                clerk_org_id=clerk_org_id,
                 role="client",
                 plan="starter",
                 is_active=True,
@@ -411,6 +429,11 @@ async def _resolve_clerk_token(token: str) -> dict:
         return {
             "client_id": str(client.id),
             "email": client.email,
+                        "clerk_user_id": clerk_user_id,
+                        "clerk_org_id": clerk_org_id,
+                        "full_name": full_name,
+                        "first_name": payload.get("first_name"),
+                        "last_name": payload.get("last_name"),
             "plan": client.plan,
             "role": client.role,
               "permissions": get_effective_permissions(client.role, getattr(client, "permissions", None)),

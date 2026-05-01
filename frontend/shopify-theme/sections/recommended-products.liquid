@@ -1,0 +1,25 @@
+<section class="section section--tight">
+  <div class="page-width">
+    <h2 class="heading">{{ section.settings.heading }}</h2>
+    <div class="grid grid--4" style="margin-top: 1.5rem;">
+      {% assign recommendations = product.collections.first.products | where: 'available', true %}
+      {% for item in recommendations limit: 4 %}
+        {% unless item.id == product.id %}
+          {% render 'product-card', product_card_product: item %}
+        {% endunless %}
+      {% else %}
+        {% for i in (1..4) %}{% render 'product-card' %}{% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Recommended products",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Complete the experience" }
+  ],
+  "presets": [{ "name": "Recommended products" }]
+}
+{% endschema %}

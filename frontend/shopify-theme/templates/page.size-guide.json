@@ -1,0 +1,8 @@
+{
+  "sections": {
+    "main": { "type": "page-main" },
+    "cards": { "type": "product-card" },
+    "assistant": { "type": "ai-assistant-callout" }
+  },
+  "order": ["main", "cards", "assistant"]
+}

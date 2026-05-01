@@ -1,0 +1,163 @@
+name: omniweb-engine
+region: nyc
+
+# Apex `omniweb.ai` is the public marketing site (separate from this app). Do not attach it here.
+# Dashboard, admin, and widget test pages: use the App Platform default
+# `https://omniweb-engine-rs6fr.ondigitalocean.app` (or add a CNAME in DO, e.g. `app.omniweb.ai`, and list it as an extra domain).
+domains:
+  - domain: api.omniweb.ai
+    type: ALIAS
+    minimum_tls_version: "1.2"
+
+databases:
+  - engine: PG
+    name: db
+    num_nodes: 1
+    size: db-s-dev-database
+    version: "16"
+
+services:
+  - name: api
+    github:
+      repo: Control-B/Omniweb-AI-Engine
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: Dockerfile
+    http_port: 8000
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 30
+      period_seconds: 15
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        value: ${db.DATABASE_URL}
+      - key: ENVIRONMENT
+        scope: RUN_AND_BUILD_TIME
+        value: production
+      - key: PLATFORM_URL
+        scope: RUN_AND_BUILD_TIME
+        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
+      - key: SECRET_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        value: 06e062e7a8067a0ded6ad592c2fef58e6527c043a77dbdc37f51607cb8ecb004
+      - key: INTERNAL_API_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        value: 413f756ad22ce04044c85d4a9dfee88de0b1d7d8d7f44abb435d62c978415fa1
+      - key: ELEVENLABS_API_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        value: 177219d04f212c1c5e6919248935a63b68318de54d939b86b9502e83e163da43
+      - key: ELEVENLABS_DEFAULT_VOICE_ID
+        scope: RUN_AND_BUILD_TIME
+        value: EXAVITQu4vr4xnSDxMaL
+      - key: ELEVENLABS_WEBHOOK_SECRET
+        scope: RUN_AND_BUILD_TIME
+        value: ""
+      - key: TWILIO_ACCOUNT_SID
+        scope: RUN_AND_BUILD_TIME
+        value: ""
+      - key: TWILIO_AUTH_TOKEN
+        scope: RUN_AND_BUILD_TIME
+        value: ""
+      - key: TWILIO_FROM_NUMBER
+        scope: RUN_AND_BUILD_TIME
+        value: ""
+      - key: OPENAI_API_KEY
+        scope: RUN_AND_BUILD_TIME
+        value: ""
+      - key: OPENAI_MODEL
+        scope: RUN_AND_BUILD_TIME
+        value: gpt-4o
+      - key: STRIPE_SECRET_KEY
+        scope: RUN_AND_BUILD_TIME
+        value: ""
+      - key: STRIPE_WEBHOOK_SECRET
+        scope: RUN_AND_BUILD_TIME
+        value: ""
+      - key: REDIS_URL
+        scope: RUN_AND_BUILD_TIME
+        value: ""
+      - key: CORS_ORIGINS
+        scope: RUN_AND_BUILD_TIME
+        value: '["https://omniweb.ai","https://www.omniweb.ai","https://omniweb-engine-rs6fr.ondigitalocean.app","http://localhost:3000","https://roadcall.ai","https://www.roadcall.ai"]'
+      - key: DEEPGRAM_API_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        value: EV[1:cK+FhXlHWx6S1hIhMtzgK7oU6QcdyVPj:Xyds6epxMQi1Gko80J27qA3/t9VtyZmn+T8cBNrogLe8iRVSVY++zTpKdIvIWMEPMmZtxfwAG2Q=]
+      - key: DEEPGRAM_PROJECT_ID
+        scope: RUN_AND_BUILD_TIME
+        value: "3be092be-81b5-4461-8e2a-1e639e1f43e4"
+      - key: DEEPGRAM_AGENT_MODEL
+        scope: RUN_AND_BUILD_TIME
+        value: gpt-4o-mini
+      - key: DEEPGRAM_STT_MODEL
+        scope: RUN_AND_BUILD_TIME
+        value: nova-3
+      - key: DEEPGRAM_TTS_VOICE
+        scope: RUN_AND_BUILD_TIME
+        value: aura-asteria-en
+      - key: LANDING_PAGE_CLIENT_ID
+        scope: RUN_AND_BUILD_TIME
+        value: ""
+
+  - name: dashboard
+    github:
+      repo: Control-B/Omniweb-AI-Engine
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: dashboard/Dockerfile
+    source_dir: /
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      # Public API (FastAPI) — same DO origin so the browser doesn't hit CORS or DNS issues.
+      # When api.omniweb.ai DNS is confirmed, swap these back to https://api.omniweb.ai.
+      - key: NEXT_PUBLIC_API_URL
+        scope: BUILD_TIME
+        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
+      - key: NEXT_PUBLIC_ENGINE_URL
+        scope: BUILD_TIME
+        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
+      # Next.js pages + /widget + /landing (not the marketing site at omniweb.ai).
+      - key: NEXT_PUBLIC_PLATFORM_URL
+        scope: BUILD_TIME
+        value: "https://omniweb-engine-rs6fr.ondigitalocean.app"
+      # Same UUID as API LANDING_PAGE_CLIENT_ID — widget sends it in bootstrap body (avoids fragile default-tenant query).
+      - key: NEXT_PUBLIC_LANDING_PAGE_CLIENT_ID
+        scope: BUILD_TIME
+        value: ""
+
+# Route /api and / to components on ANY hostname (default *.ondigitalocean.app + custom domains).
+# Do NOT add redirects to api.omniweb.ai here until that hostname resolves in DNS — otherwise
+# the browser would follow a 307 to a dead host and login/widget/bootstrap would all fail.
+ingress:
+  rules:
+    - component:
+        name: api
+        preserve_path_prefix: true
+      match:
+        path:
+          prefix: /api
+    - component:
+        name: api
+        preserve_path_prefix: true
+      match:
+        path:
+          prefix: /health
+    - component:
+        name: api
+        preserve_path_prefix: true
+      match:
+        path:
+          prefix: /static
+    - component:
+        name: dashboard
+      match:
+        path:
+          prefix: /

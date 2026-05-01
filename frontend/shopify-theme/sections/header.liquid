@@ -1,0 +1,57 @@
+<header class="site-header{% if section.settings.transparent_over_hero %} site-header--transparent{% endif %}">
+  <div class="site-header__inner page-width">
+    <a class="site-header__brand" href="{{ routes.root_url }}">{{ shop.name }}</a>
+
+    <button class="icon-button menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="SiteNav">
+      {{ 'accessibility.open_menu' | t }}
+    </button>
+
+    <nav id="SiteNav" class="site-nav" data-site-nav aria-label="Primary navigation">
+      {% if section.settings.menu != blank %}
+        {% for link in section.settings.menu.links %}
+          <a href="{{ link.url }}">{{ link.title }}</a>
+        {% endfor %}
+      {% else %}
+        <a href="{{ routes.all_products_collection_url }}">Shop</a>
+        <a href="/pages/video-showroom">Videos</a>
+        <a href="/pages/ai-assistant">AI Assistant</a>
+        <a href="/pages/about">About</a>
+      {% endif %}
+    </nav>
+
+    <div class="site-actions">
+      <a class="icon-button" href="{{ routes.search_url }}" aria-label="{{ 'accessibility.search' | t }}">Search</a>
+      {% if shop.customer_accounts_enabled %}
+        <a class="icon-button" href="{{ routes.account_url }}" aria-label="Account">Account</a>
+      {% endif %}
+      <button class="icon-button" type="button" data-cart-open aria-label="{{ 'accessibility.cart' | t }}">
+        Cart {{ cart.item_count }}
+      </button>
+    </div>
+  </div>
+</header>
+
+{% schema %}
+{
+  "name": "Header",
+  "settings": [
+    {
+      "type": "link_list",
+      "id": "menu",
+      "label": "Menu"
+    },
+    {
+      "type": "checkbox",
+      "id": "sticky",
+      "label": "Sticky header",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "transparent_over_hero",
+      "label": "Transparent over hero",
+      "default": false
+    }
+  ]
+}
+{% endschema %}

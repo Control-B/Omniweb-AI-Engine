@@ -1,0 +1,27 @@
+{% liquid
+  assign product = product_card_product | default: product
+%}
+
+<article class="product-card">
+  <a class="product-card__media" href="{{ product.url | default: '#' }}" aria-label="{{ product.title | escape }}">
+    {% if product.featured_media %}
+      {% render 'responsive-image', image: product.featured_media.preview_image, sizes: '(min-width: 990px) 25vw, 50vw', alt: product.title %}
+    {% else %}
+      {{ 'product-1' | placeholder_svg_tag: 'placeholder-svg' }}
+    {% endif %}
+  </a>
+  <div class="product-card__meta">
+    <a class="product-card__title" href="{{ product.url | default: '#' }}">{{ product.title | default: 'Presence product' }}</a>
+    {% if product != blank %}
+      {% render 'price', product: product %}
+    {% else %}
+      <span>$128.00</span>
+    {% endif %}
+  </div>
+  {% if product.available %}
+    <form method="post" action="{{ routes.cart_add_url }}">
+      <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}">
+      <button class="button button--secondary" type="submit">{{ 'general.quick_add' | t }}</button>
+    </form>
+  {% endif %}
+</article>

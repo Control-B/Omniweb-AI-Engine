@@ -1,0 +1,23 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "dffcbcb9a55b1dc6b0493f87557fde75"
+name = "omniweb"
+application_url = "https://app.omniweb.ai"
+embedded = true
+
+[webhooks]
+api_version = "2026-07"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,read_orders,read_products,read_themes,unauthenticated_read_product_listings"
+
+[auth]
+redirect_urls = [
+  "https://app.omniweb.ai/auth/callback",
+  "https://app.omniweb.ai/auth/shopify/callback",
+  "https://app.omniweb.ai/api/auth/callback"
+]
+
+[build]
+automatically_update_urls_on_dev = true

@@ -1,0 +1,46 @@
+{% if section.settings.enabled %}
+  <div
+    class="presence-ai presence-ai--{{ section.settings.position }}"
+    data-presence-ai
+    data-open="false"
+    data-agent-id="{{ section.settings.agent_id | escape }}"
+    data-endpoint="{{ section.settings.backend_endpoint | escape }}"
+  >
+    <div class="presence-ai__panel" role="dialog" aria-label="AI shopping assistant">
+      <button type="button" data-presence-ai-close class="icon-button" aria-label="{{ 'accessibility.close' | t }}" style="float: right;">×</button>
+      <p class="eyebrow">{{ section.settings.text_mode_label }}</p>
+      <h2 style="margin: .3rem 0 .5rem;">{{ section.settings.welcome_message }}</h2>
+      <p class="subheading">{{ section.settings.brand_voice }}</p>
+      <div style="display: grid; gap: .6rem; margin-top: 1rem;">
+        <button class="button button--accent" type="button">{{ section.settings.text_mode_label }}</button>
+        <button class="button button--secondary" type="button">{{ section.settings.voice_mode_label }}</button>
+      </div>
+      <p class="subheading" style="font-size: .8rem; margin-top: .85rem;">
+        Integration hook: connect this panel to Omniweb, LiveKit, Retell, ElevenLabs, or your custom backend through <code>window.PresenceAI</code>.
+      </p>
+    </div>
+    <button class="presence-ai__button" type="button" data-presence-ai-toggle aria-expanded="false">
+      ✦ {{ section.settings.launcher_label }}
+    </button>
+  </div>
+{% endif %}
+
+{% schema %}
+{
+  "name": "AI assistant launcher",
+  "settings": [
+    { "type": "checkbox", "id": "enabled", "label": "Enable assistant", "default": true },
+    { "type": "text", "id": "launcher_label", "label": "Launcher label", "default": "Ask AI" },
+    { "type": "text", "id": "text_mode_label", "label": "Text mode label", "default": "Chat with product expert" },
+    { "type": "text", "id": "voice_mode_label", "label": "Voice mode label", "default": "Talk to assistant" },
+    { "type": "select", "id": "position", "label": "Widget position", "default": "bottom-right", "options": [
+      { "value": "bottom-right", "label": "Bottom right" },
+      { "value": "bottom-left", "label": "Bottom left" }
+    ] },
+    { "type": "text", "id": "agent_id", "label": "Agent ID" },
+    { "type": "url", "id": "backend_endpoint", "label": "Backend endpoint" },
+    { "type": "text", "id": "welcome_message", "label": "Welcome message", "default": "Need help choosing?" },
+    { "type": "textarea", "id": "brand_voice", "label": "Brand voice instructions", "default": "Warm, concise, expert, and conversion-focused." }
+  ]
+}
+{% endschema %}

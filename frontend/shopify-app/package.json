@@ -1,0 +1,51 @@
+{
+  "name": "omniweb-shopify-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "shopify app dev",
+    "build": "remix vite:build",
+    "start": "remix-serve ./build/server/index.js",
+    "deploy": "shopify app deploy",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@remix-run/node": "^2.17.4",
+    "@remix-run/react": "^2.17.4",
+    "@remix-run/serve": "^2.17.4",
+    "@shopify/app-bridge-react": "^4.2.4",
+    "@shopify/polaris": "^13.9.5",
+    "@shopify/polaris-icons": "^9.3.1",
+    "@shopify/shopify-api": "^13.0.0",
+    "@shopify/shopify-app-remix": "^4.0.3",
+    "@shopify/shopify-app-session-storage-prisma": "^9.0.0",
+    "isbot": "^5.1.32",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@remix-run/dev": "^2.17.4",
+    "@shopify/cli": "^3.94.1",
+    "@types/node": "^20.19.25",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "prisma": "^6.19.3",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.2"
+  },
+  "packageManager": "pnpm@9.6.0+sha512.38dc6fba8dba35b39340b9700112c2fe1e12f10b17134715a4aa98ccf7bb035e76fd981cf0bb384dfa98f8d6af5481c2bef2f4266a24bfa20c34eb7147ce0b5e",
+  "pnpm": {
+    "overrides": {
+      "@types/react": "18.3.28",
+      "@types/react-dom": "18.3.7",
+      "react": "18.3.1",
+      "react-dom": "18.3.1",
+      "typescript": "5.9.3",
+      "vite": "6.4.2"
+    }
+  }
+}

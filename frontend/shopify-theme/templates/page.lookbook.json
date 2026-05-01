@@ -1,0 +1,8 @@
+{
+  "sections": {
+    "main": { "type": "page-main" },
+    "lookbook": { "type": "lookbook-grid" },
+    "videos": { "type": "shoppable-video-carousel" }
+  },
+  "order": ["main", "lookbook", "videos"]
+}

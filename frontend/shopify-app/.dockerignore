@@ -1,0 +1,15 @@
+node_modules
+.pnpm-store
+build
+.cache
+.shopify
+coverage
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+Dockerfile
+.DS_Store

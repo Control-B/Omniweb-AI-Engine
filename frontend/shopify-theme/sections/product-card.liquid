@@ -1,0 +1,39 @@
+<section class="section section--tight">
+  <div class="page-width">
+    <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+    <h2 class="heading">{{ section.settings.heading }}</h2>
+    <div class="grid grid--4" style="margin-top: 1.5rem;">
+      {% for block in section.blocks %}
+        <article class="product-card card" style="padding: 1rem;" {{ block.shopify_attributes }}>
+          <div class="product-card__media">
+            {% render 'responsive-image', image: block.settings.image, sizes: '25vw', alt: block.settings.title %}
+          </div>
+          <h3>{{ block.settings.title }}</h3>
+          <p class="subheading">{{ block.settings.text }}</p>
+        </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Product education cards",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Learn before buying" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Product cards that teach and convert" }
+  ],
+  "blocks": [
+    {
+      "type": "card",
+      "name": "Card",
+      "settings": [
+        { "type": "image_picker", "id": "image", "label": "Image" },
+        { "type": "text", "id": "title", "label": "Title", "default": "Benefit card" },
+        { "type": "textarea", "id": "text", "label": "Text", "default": "Explain materials, use cases, sizing, or compatibility." }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Product education cards", "blocks": [{ "type": "card" }, { "type": "card" }, { "type": "card" }] }]
+}
+{% endschema %}

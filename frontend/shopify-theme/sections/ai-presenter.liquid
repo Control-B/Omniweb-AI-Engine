@@ -1,0 +1,50 @@
+{% liquid
+  assign mode = section.settings.mode
+%}
+
+<section class="section{% if mode == 'corner' %} ai-presenter--corner{% endif %}">
+  <div class="{% unless mode == 'corner' %}page-width{% endunless %}">
+    <div class="ai-presenter card">
+      <div class="ai-presenter__video">
+        {% if section.settings.video != blank %}
+          {{ section.settings.video | video_tag: autoplay: section.settings.autoplay, loop: true, muted: section.settings.muted, controls: section.settings.controls, image_size: '1200x', loading: 'lazy' }}
+        {% elsif section.settings.poster != blank %}
+          {% render 'responsive-image', image: section.settings.poster, sizes: '(min-width: 990px) 50vw, 100vw', alt: section.settings.presenter_name %}
+        {% else %}
+          {{ 'image' | placeholder_svg_tag: 'placeholder-svg' }}
+        {% endif %}
+      </div>
+      <div style="padding: clamp(1.25rem, 4vw, 3rem);">
+        <p class="eyebrow">{{ section.settings.presenter_subtitle }}</p>
+        <h2 class="heading">{{ section.settings.presenter_name }}</h2>
+        <p class="subheading">{{ section.settings.text }}</p>
+        {% if section.settings.cta_label != blank %}
+          <a class="button button--accent" href="{{ section.settings.cta_link }}">{{ section.settings.cta_label }}</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "AI presenter",
+  "settings": [
+    { "type": "select", "id": "mode", "label": "Mode", "default": "full", "options": [
+      { "value": "full", "label": "Full width" },
+      { "value": "corner", "label": "Corner mini-video" }
+    ] },
+    { "type": "video", "id": "video", "label": "Presenter video" },
+    { "type": "image_picker", "id": "poster", "label": "Poster image" },
+    { "type": "text", "id": "presenter_name", "label": "Presenter name", "default": "Your AI product expert" },
+    { "type": "text", "id": "presenter_subtitle", "label": "Presenter subtitle", "default": "Guided buying, in your brand voice" },
+    { "type": "textarea", "id": "text", "label": "Text", "default": "Use this video zone for a founder, stylist, product expert, or AI presenter that introduces the collection and invites shoppers to ask questions." },
+    { "type": "text", "id": "cta_label", "label": "CTA label", "default": "Start guided shopping" },
+    { "type": "url", "id": "cta_link", "label": "CTA link" },
+    { "type": "checkbox", "id": "autoplay", "label": "Autoplay", "default": true },
+    { "type": "checkbox", "id": "muted", "label": "Muted", "default": true },
+    { "type": "checkbox", "id": "controls", "label": "Show controls", "default": false }
+  ],
+  "presets": [{ "name": "AI presenter" }]
+}
+{% endschema %}

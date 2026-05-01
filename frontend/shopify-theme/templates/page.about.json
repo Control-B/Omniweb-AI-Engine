@@ -1,0 +1,8 @@
+{
+  "sections": {
+    "main": { "type": "page-main" },
+    "story": { "type": "editorial-story" },
+    "trust": { "type": "trust-badges" }
+  },
+  "order": ["main", "story", "trust"]
+}

@@ -1,0 +1,25 @@
+<section class="section">
+  <div class="page-width">
+    <h1 class="heading">Search</h1>
+    <form action="{{ routes.search_url }}" method="get" role="search" style="display: flex; gap: .75rem; margin: 1.5rem 0;">
+      <input type="search" name="q" value="{{ search.terms | escape }}" placeholder="Search products, guides, and videos" style="flex: 1; min-height: 46px;">
+      <button class="button" type="submit">{{ 'accessibility.search' | t }}</button>
+    </form>
+    <div class="grid grid--4">
+      {% for item in search.results %}
+        {% if item.object_type == 'product' %}
+          {% render 'product-card', product_card_product: item %}
+        {% else %}
+          <a class="card" style="padding: 1rem;" href="{{ item.url }}">{{ item.title }}</a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Search main",
+  "settings": []
+}
+{% endschema %}

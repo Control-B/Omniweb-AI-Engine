@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Public marketing site — clone separately (own repo: Control-B/v0-omniweb-landing-page)
+# See frontend/README.md
+frontend/v0-omniweb-landing-page/
+
+# Node / Dashboard
+dashboard/node_modules/
+dashboard/.pnpm-store/
+dashboard/.next/
+dashboard/tsconfig.tsbuildinfo
+dashboard/out/
+frontend/**/node_modules/
+frontend/**/.pnpm-store/
+frontend/**/.next/
+frontend/**/build/
+frontend/**/dist/
+frontend/**/.shopify/
+frontend/**/.turbo/
+
+# Alembic
+alembic/versions/__pycache__/
+
+# Docker
+*.log
+
+# Misc
+*.bak
+*.tmp

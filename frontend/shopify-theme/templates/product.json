@@ -1,0 +1,11 @@
+{
+  "sections": {
+    "main": { "type": "product-main" },
+    "trust": { "type": "trust-badges" },
+    "videos": { "type": "shoppable-video-carousel" },
+    "recommended": { "type": "recommended-products" },
+    "recent": { "type": "recently-viewed" },
+    "sticky": { "type": "sticky-add-to-cart" }
+  },
+  "order": ["main", "trust", "videos", "recommended", "recent", "sticky"]
+}

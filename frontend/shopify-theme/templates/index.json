@@ -1,0 +1,17 @@
+{
+  "sections": {
+    "hero": { "type": "hero-media" },
+    "presenter": { "type": "ai-presenter" },
+    "featured": { "type": "featured-collection" },
+    "videos": { "type": "shoppable-video-carousel" },
+    "category_cards": { "type": "category-cards" },
+    "categories": { "type": "lookbook-grid" },
+    "story": { "type": "editorial-story" },
+    "comparison": { "type": "product-comparison" },
+    "assistant": { "type": "ai-assistant-callout" },
+    "testimonials": { "type": "testimonials" },
+    "faq": { "type": "faq-accordion" },
+    "newsletter": { "type": "newsletter" }
+  },
+  "order": ["hero", "presenter", "featured", "videos", "category_cards", "categories", "story", "comparison", "assistant", "testimonials", "faq", "newsletter"]
+}

@@ -1,0 +1,6 @@
+api_version = "2025-01"
+
+[[extensions]]
+  name   = "Omniweb Widget"
+  handle = "omniweb-widget"
+  type   = "THEME_APP_EXTENSION"

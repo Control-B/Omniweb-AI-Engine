@@ -1,0 +1,24 @@
+<section class="section">
+  <div class="page-width" style="max-width: 920px;">
+    <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+    <h1 class="heading">{{ page.title | default: section.settings.heading }}</h1>
+    <div class="rte subheading" style="max-width: none;">
+      {% if page.content != blank %}
+        {{ page.content }}
+      {% else %}
+        {{ section.settings.text }}
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Page main",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Presence AI" },
+    { "type": "text", "id": "heading", "label": "Fallback heading", "default": "Page" },
+    { "type": "richtext", "id": "text", "label": "Fallback text", "default": "<p>Add page content in Shopify admin.</p>" }
+  ]
+}
+{% endschema %}

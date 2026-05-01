@@ -1,0 +1,19 @@
+{% liquid
+  assign image = image | default: nil
+  assign sizes = sizes | default: '(min-width: 990px) 50vw, 100vw'
+  assign loading = loading | default: 'lazy'
+%}
+
+{% if image != blank %}
+  {{
+    image
+    | image_url: width: 1800
+    | image_tag:
+      widths: '360, 540, 720, 960, 1200, 1500, 1800',
+      sizes: sizes,
+      loading: loading,
+      alt: alt
+  }}
+{% else %}
+  {{ 'lifestyle-1' | placeholder_svg_tag: 'placeholder-svg' }}
+{% endif %}

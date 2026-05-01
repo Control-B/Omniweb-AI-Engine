@@ -1,0 +1,8 @@
+{
+  "sections": {
+    "grid": { "type": "collection-grid" },
+    "assistant": { "type": "ai-assistant-callout" },
+    "videos": { "type": "shoppable-video-carousel" }
+  },
+  "order": ["grid", "assistant", "videos"]
+}

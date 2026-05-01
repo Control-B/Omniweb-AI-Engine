@@ -1,0 +1,8 @@
+{
+  "sections": {
+    "main": { "type": "article-main" },
+    "assistant": { "type": "ai-assistant-callout" },
+    "newsletter": { "type": "newsletter" }
+  },
+  "order": ["main", "assistant", "newsletter"]
+}

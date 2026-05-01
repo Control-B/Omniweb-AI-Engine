@@ -1,0 +1,34 @@
+{% comment %}
+  Omniweb AI Shopping Assistant
+
+  Injects the storefront widget. The script bootstraps against the Omniweb
+  Engine using the shop's permanent myshopify.com domain.
+{% endcomment %}
+
+{% assign omniweb_engine_url = block.settings.api_url | default: 'https://omniweb-engine-rs6fr.ondigitalocean.app' %}
+<script
+  src="{{ omniweb_engine_url }}/static/omniweb-shopify-widget.js"
+  data-engine="{{ omniweb_engine_url }}"
+  data-shop="{{ shop.permanent_domain }}"
+  defer
+></script>
+
+{% schema %}
+{
+  "name": "Omniweb Widget",
+  "target": "body",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Enable the Omniweb AI shopping assistant on your storefront."
+    },
+    {
+      "type": "text",
+      "id": "api_url",
+      "label": "Omniweb Engine URL",
+      "default": "https://omniweb-engine-rs6fr.ondigitalocean.app",
+      "info": "Use your Omniweb Engine API URL, for example https://api.omniweb.ai."
+    }
+  ]
+}
+{% endschema %}

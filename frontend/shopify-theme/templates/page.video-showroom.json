@@ -1,0 +1,8 @@
+{
+  "sections": {
+    "showroom": { "type": "video-showroom" },
+    "videos": { "type": "shoppable-video-carousel" },
+    "assistant": { "type": "ai-assistant-callout" }
+  },
+  "order": ["showroom", "videos", "assistant"]
+}

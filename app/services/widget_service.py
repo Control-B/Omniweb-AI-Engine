@@ -295,11 +295,11 @@ async def get_or_create_widget_engagement(
         engagement.channel = channel
         engagement.source_url = normalized_page or engagement.source_url
         engagement.agent_mode = agent.agent_mode if agent else engagement.agent_mode
-        metadata = dict(engagement.metadata or {})
+        metadata = dict(engagement.metadata_json or {})
         metadata["lastDomain"] = normalize_domain(domain)
         if normalized_page:
             metadata["lastPageUrl"] = normalized_page
-        engagement.metadata = metadata
+        engagement.metadata_json = metadata
         return engagement
 
     engagement = Engagement(
@@ -314,7 +314,7 @@ async def get_or_create_widget_engagement(
         follow_up_needed=False,
         agent_mode=agent.agent_mode if agent else "general_lead_gen",
         conversion_stage="awareness",
-        metadata={
+        metadata_json={
             "lastDomain": normalize_domain(domain),
             "lastPageUrl": normalized_page,
             "widgetEvents": [],
@@ -333,7 +333,7 @@ def append_widget_event(
     page_url: str | None,
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    current = dict(engagement.metadata or {})
+    current = dict(engagement.metadata_json or {})
     events = current.get("widgetEvents") if isinstance(current.get("widgetEvents"), list) else []
     events.append(
         {
@@ -349,7 +349,7 @@ def append_widget_event(
     if page_url:
         current["lastPageUrl"] = normalize_page_url(page_url)
     current["lastEventType"] = event_type
-    engagement.metadata = current
+    engagement.metadata_json = current
     if event_type == "lead_captured":
         engagement.contact_captured = True
         engagement.lead_status = "qualified"

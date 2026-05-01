@@ -115,6 +115,11 @@ class Client(Base):
     shopify_discount_requests: Mapped[list["ShopifyDiscountApproval"]] = relationship(back_populates="client")
     engagements: Mapped[list["Engagement"]] = relationship(back_populates="client")
     follow_up_tasks: Mapped[list["FollowUpTask"]] = relationship(back_populates="client")
+    tenant_channels: Mapped[list["TenantChannel"]] = relationship(back_populates="client")
+    retell_agents: Mapped[list["TenantRetellAgent"]] = relationship(back_populates="client")
+    tenant_call_logs: Mapped[list["TenantCallLog"]] = relationship(back_populates="client")
+    usage_metering: Mapped[list["TenantUsageMetering"]] = relationship(back_populates="client")
+    escalation_rules: Mapped[list["TenantEscalationRule"]] = relationship(back_populates="client")
 
     __table_args__ = (
         Index("ix_clients_email", "email"),
@@ -137,6 +142,7 @@ class AgentConfig(Base):
     # ElevenLabs agent linkage
     elevenlabs_agent_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     elevenlabs_kb_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    retell_agent_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
 
     # Identity
     agent_name: Mapped[str] = mapped_column(String(100), default="Alex", nullable=False)
@@ -433,6 +439,7 @@ class Call(Base):
 
     # ElevenLabs
     elevenlabs_conversation_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    retell_call_id: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True)
 
     # Twilio (for SMS follow-ups or outbound)
     twilio_call_sid: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -465,6 +472,138 @@ class Call(Base):
         Index("ix_calls_started_at", "started_at"),
         Index("ix_calls_channel", "channel"),
         Index("ix_calls_elevenlabs_conversation_id", "elevenlabs_conversation_id"),
+        Index("ix_calls_retell_call_id", "retell_call_id"),
+    )
+
+
+# ── Multi-channel AI Telephony ────────────────────────────────────────────────
+
+class TenantChannel(Base):
+    """Tenant channel registry for chat, web voice, and Retell-powered telephony."""
+    __tablename__ = "tenant_channels"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    channel_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="disabled", nullable=False)
+    config_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="tenant_channels")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "channel_type", name="uq_tenant_channels_tenant_channel"),
+        Index("ix_tenant_channels_tenant_id", "tenant_id"),
+        Index("ix_tenant_channels_channel_type", "channel_type"),
+        Index("ix_tenant_channels_status", "status"),
+    )
+
+
+class TenantRetellAgent(Base):
+    """Retell phone agent linked to a tenant's shared Omniweb brain."""
+    __tablename__ = "tenant_retell_agents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    retell_agent_id: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True, index=True)
+    retell_phone_number: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    human_escalation_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    fallback_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    webhook_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="provisioning", nullable=False)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="retell_agents")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="uq_tenant_retell_agents_tenant_id"),
+        Index("ix_tenant_retell_agents_tenant_id", "tenant_id"),
+        Index("ix_tenant_retell_agents_status", "status"),
+    )
+
+
+class TenantCallLog(Base):
+    """Provider-normalized call log for AI telephony."""
+    __tablename__ = "tenant_call_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), default="retell", nullable=False)
+    provider_call_id: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    retell_agent_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    caller_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    direction: Mapped[str] = mapped_column(String(20), default="inbound", nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    transcript: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    escalation_triggered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="tenant_call_logs")
+
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_call_id", name="uq_tenant_call_logs_provider_call"),
+        Index("ix_tenant_call_logs_tenant_id", "tenant_id"),
+        Index("ix_tenant_call_logs_created_at", "created_at"),
+    )
+
+
+class TenantUsageMetering(Base):
+    """Tenant-level usage rollups for Retell AI telephony billing."""
+    __tablename__ = "tenant_usage_metering"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    channel_type: Mapped[str] = mapped_column(String(40), default="ai_telephony", nullable=False)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    calls_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    minutes_used: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    plan_limit_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    overage_minutes: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    provider_cost_estimate: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    subscriber_billed_usage: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="usage_metering")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "channel_type", "period_start", name="uq_usage_metering_tenant_channel_period"),
+        Index("ix_usage_metering_tenant_id", "tenant_id"),
+        Index("ix_usage_metering_period_start", "period_start"),
+    )
+
+
+class TenantEscalationRule(Base):
+    """Escalation settings shared by channels and enforced by the Omniweb brain."""
+    __tablename__ = "tenant_escalation_rules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    channel_type: Mapped[str] = mapped_column(String(40), default="ai_telephony", nullable=False)
+    human_escalation_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    fallback_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    business_hours: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    trigger_keywords: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="escalation_rules")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "channel_type", name="uq_escalation_rules_tenant_channel"),
+        Index("ix_escalation_rules_tenant_id", "tenant_id"),
     )
 
 
@@ -573,7 +712,7 @@ class Engagement(Base):
     owner_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     agent_mode: Mapped[str] = mapped_column(String(50), nullable=False, default="general_lead_gen")
     conversion_stage: Mapped[str] = mapped_column(String(50), nullable=False, default="awareness")
-    metadata: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)
     resolved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

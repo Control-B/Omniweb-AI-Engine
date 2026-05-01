@@ -46,6 +46,7 @@ from app.api.routes import (
     site_templates,
     subscribe,
     templates,
+    telephony_retell,
     widget,
     webhooks,
     webhooks_stripe,
@@ -373,6 +374,7 @@ app.include_router(automations.router, prefix=API_PREFIX)
 app.include_router(chat.router, prefix=API_PREFIX)
 app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
+app.include_router(telephony_retell.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
 app.include_router(shopify.router, prefix=API_PREFIX)
 app.include_router(site_templates.router, prefix=API_PREFIX)

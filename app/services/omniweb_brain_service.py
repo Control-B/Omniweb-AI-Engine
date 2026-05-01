@@ -200,6 +200,10 @@ class OmniwebBrainService:
 
 def compose_channel_prompt(config: AgentConfig, channel_type: str) -> str:
     """Compose the shared tenant brain prompt with channel-specific behavior."""
+    owner_instructions = config.custom_instructions or config.system_prompt
+    custom_context = config.custom_context
+    if custom_context and owner_instructions and custom_context.strip() == owner_instructions.strip():
+        custom_context = None
     base_prompt = compose_system_prompt(
         agent_name=config.agent_name or "Omniweb AI",
         business_name=config.business_name or "this business",
@@ -211,10 +215,10 @@ def compose_channel_prompt(config: AgentConfig, channel_type: str) -> str:
         timezone=config.timezone or "America/New_York",
         booking_url=config.booking_url,
         after_hours_message=config.after_hours_message or "",
-        custom_prompt=config.system_prompt,
+        custom_prompt=owner_instructions,
         custom_guardrails=_coerce_str_list(config.custom_guardrails),
         custom_escalation_triggers=_coerce_str_list(config.custom_escalation_triggers),
-        custom_context=config.custom_context,
+        custom_context=custom_context,
     )
     channel_block = {
         "chat": "Channel: website chat. Keep replies concise, helpful, and action-oriented.",

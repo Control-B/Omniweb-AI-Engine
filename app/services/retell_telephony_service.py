@@ -162,6 +162,8 @@ class RetellTelephonyService:
             channel.status = "active" if tenant_agent.retell_agent_id else "error"
             tenant_agent.status = channel.status
             tenant_agent.last_synced_at = utcnow()
+            if channel.status == "active":
+                channel.config_json = {k: v for k, v in merged.items() if k != "last_error"}
         except Exception as exc:
             logger.error("Retell telephony provision failed", tenant_id=str(tenant_id), error=str(exc))
             channel.status = "error"
@@ -407,6 +409,11 @@ class RetellTelephonyService:
         config: AgentConfig,
         tenant_agent: TenantRetellAgent,
     ) -> str | None:
+        existing_agent_id = config.retell_agent_id or settings.RETELL_LANDING_AGENT_ID
+        if existing_agent_id:
+            await self._sync_retell_agent(config, tenant_agent)
+            return existing_agent_id
+
         if not settings.RETELL_API_KEY:
             return None
 
@@ -438,8 +445,8 @@ class RetellTelephonyService:
         return {
             "agent_name": config.agent_name or "Omniweb AI Telephony",
             "response_engine": {
-                "type": "custom_llm",
-                "llm_websocket_url": f"{settings.ENGINE_BASE_URL.rstrip('/')}/api/retell/tool-call",
+                "type": "custom-llm",
+                "llm_websocket_url": f"{settings.ENGINE_BASE_URL.rstrip('/').replace('https://', 'wss://').replace('http://', 'ws://')}/api/retell/tool-call",
             },
             "language": retell_service.map_locale_to_retell_language(config.supported_languages or ["en"]),
             "voice_id": config.voice_id or settings.ELEVENLABS_DEFAULT_VOICE_ID,

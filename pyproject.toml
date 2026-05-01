@@ -32,6 +32,7 @@ dependencies = [
 
     # Auth / security
     "PyJWT>=2.8.0",
+    "cryptography>=42.0.0",
 
     # Config
     "pydantic-settings>=2.5.0",

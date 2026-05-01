@@ -411,6 +411,7 @@ class RetellTelephonyService:
     ) -> str | None:
         existing_agent_id = config.retell_agent_id or settings.RETELL_LANDING_AGENT_ID
         if existing_agent_id:
+            tenant_agent.retell_agent_id = existing_agent_id
             await self._sync_retell_agent(config, tenant_agent)
             return existing_agent_id
 
@@ -435,7 +436,7 @@ class RetellTelephonyService:
     async def _sync_retell_agent(self, config: AgentConfig, tenant_agent: TenantRetellAgent) -> None:
         if not tenant_agent.retell_agent_id:
             return
-        payload = self._retell_agent_payload(config, tenant_agent)
+        payload = self._retell_agent_update_payload(config, tenant_agent)
         try:
             await retell_service.patch_agent(tenant_agent.retell_agent_id, payload)
         except Exception as exc:
@@ -448,6 +449,23 @@ class RetellTelephonyService:
                 "type": "custom-llm",
                 "llm_websocket_url": f"{settings.ENGINE_BASE_URL.rstrip('/').replace('https://', 'wss://').replace('http://', 'ws://')}/api/retell/tool-call",
             },
+            "language": retell_service.map_locale_to_retell_language(config.supported_languages or ["en"]),
+            "voice_id": config.voice_id or settings.ELEVENLABS_DEFAULT_VOICE_ID,
+            "begin_message": config.agent_greeting,
+            "general_prompt": compose_channel_prompt(config, CHANNEL_TYPE),
+            "webhook_url": tenant_agent.webhook_url,
+            "metadata": {
+                "tenant_id": str(config.client_id),
+                "channel_type": CHANNEL_TYPE,
+                "human_escalation_phone": tenant_agent.human_escalation_phone or config.handoff_phone,
+                "fallback_email": tenant_agent.fallback_email or config.handoff_email,
+            },
+        }
+
+    def _retell_agent_update_payload(self, config: AgentConfig, tenant_agent: TenantRetellAgent) -> dict[str, Any]:
+        """Patch prompt fields on an existing phone agent without changing its response engine."""
+        return {
+            "agent_name": config.agent_name or "Omniweb AI Telephony",
             "language": retell_service.map_locale_to_retell_language(config.supported_languages or ["en"]),
             "voice_id": config.voice_id or settings.ELEVENLABS_DEFAULT_VOICE_ID,
             "begin_message": config.agent_greeting,

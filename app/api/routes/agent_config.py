@@ -20,6 +20,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, Client
 from app.services import retell_service
+from app.services.omniweb_brain_service import compose_channel_prompt
 from app.services.prompt_engine import compose_system_prompt, compose_greeting
 from app.services.industry_config import (
     get_industry,
@@ -210,6 +211,10 @@ async def upsert_config(
     await db.flush()
 
     # ── Compose system prompt via prompt engine (if enabled) ──
+    owner_instructions = config.custom_instructions or config.system_prompt
+    custom_context = config.custom_context
+    if custom_context and owner_instructions and custom_context.strip() == owner_instructions.strip():
+        custom_context = None
     effective_prompt = config.system_prompt
     if config.use_prompt_engine:
         effective_prompt = compose_system_prompt(
@@ -223,10 +228,10 @@ async def upsert_config(
             timezone=config.timezone or "America/New_York",
             booking_url=config.booking_url,
             after_hours_message=config.after_hours_message or "",
-            custom_prompt=config.system_prompt,  # tenant's raw prompt becomes "custom instructions"
+            custom_prompt=owner_instructions,
             custom_guardrails=config.custom_guardrails or [],
             custom_escalation_triggers=config.custom_escalation_triggers or [],
-            custom_context=config.custom_context,
+            custom_context=custom_context,
         )
 
     # Compose greeting if not explicitly set
@@ -254,6 +259,7 @@ async def upsert_config(
         "timezone",
         "booking_url",
         "after_hours_message",
+        "custom_instructions",
         "custom_guardrails",
         "custom_escalation_triggers",
         "custom_context",
@@ -276,6 +282,8 @@ async def upsert_config(
                         max(int(config.max_call_duration) * 1000, 60_000),
                         3_600_000,
                     ),
+                    "begin_message": effective_greeting,
+                    "general_prompt": compose_channel_prompt(config, "ai_telephony"),
                 },
             )
             logger.info("Synced config to Retell agent", retell_agent_id=config.retell_agent_id)
@@ -386,6 +394,10 @@ async def preview_composed_prompt(
     if not config:
         raise HTTPException(404, f"No agent config for client {client_id}")
 
+    owner_instructions = config.custom_instructions or config.system_prompt
+    custom_context = config.custom_context
+    if custom_context and owner_instructions and custom_context.strip() == owner_instructions.strip():
+        custom_context = None
     composed = compose_system_prompt(
         agent_name=config.agent_name or "Alex",
         business_name=config.business_name or "",
@@ -397,10 +409,10 @@ async def preview_composed_prompt(
         timezone=config.timezone or "America/New_York",
         booking_url=config.booking_url,
         after_hours_message=config.after_hours_message or "",
-        custom_prompt=config.system_prompt,
+        custom_prompt=owner_instructions,
         custom_guardrails=config.custom_guardrails or [],
         custom_escalation_triggers=config.custom_escalation_triggers or [],
-        custom_context=config.custom_context,
+        custom_context=custom_context,
     )
 
     greeting = compose_greeting(
@@ -450,6 +462,10 @@ async def build_providers(
         effective_langs = supported_languages
 
     # Build composed prompt from the same source your runtime uses.
+    owner_instructions = config.custom_instructions or config.system_prompt
+    custom_context = config.custom_context
+    if custom_context and owner_instructions and custom_context.strip() == owner_instructions.strip():
+        custom_context = None
     composed_prompt = compose_system_prompt(
         agent_name=config.agent_name or "Alex",
         business_name=config.business_name or "",
@@ -461,10 +477,10 @@ async def build_providers(
         timezone=config.timezone or "America/New_York",
         booking_url=config.booking_url,
         after_hours_message=config.after_hours_message or "",
-        custom_prompt=config.system_prompt,
+        custom_prompt=owner_instructions,
         custom_guardrails=config.custom_guardrails or [],
         custom_escalation_triggers=config.custom_escalation_triggers or [],
-        custom_context=config.custom_context,
+        custom_context=custom_context,
     )
 
     deepgram_settings: dict[str, Any] | None = None
@@ -522,6 +538,8 @@ async def build_providers(
         patch_payload = {
             "agent_name": display_name[:120],
             "language": language,
+            "begin_message": config.agent_greeting,
+            "general_prompt": compose_channel_prompt(config, "ai_telephony"),
             "max_call_duration_ms": min(
                 max(int(config.max_call_duration or 1800) * 1000, 60_000),
                 3_600_000,

@@ -50,5 +50,20 @@ services:
       timeout: 5s
       retries: 5
 
+  scheduler:
+    build:
+      context: .
+      target: api
+    command: ["python", "-m", "app.scheduler"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://omniweb:password@postgres:5432/omniweb_engine
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:

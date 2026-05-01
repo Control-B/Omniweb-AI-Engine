@@ -59,9 +59,6 @@ configure_logging()
 logger = get_logger(__name__)
 
 
-import asyncio as _asyncio
-
-
 async def probe_database() -> tuple[bool, str | None]:
     """Verify the application can reach Postgres."""
     try:
@@ -71,67 +68,6 @@ async def probe_database() -> tuple[bool, str | None]:
     except Exception as exc:
         logger.error(f"Database probe failed: {exc}")
         return False, str(exc)
-
-
-async def _scheduled_tasks():
-    """Background loop that runs periodic maintenance tasks.
-
-    - Trial expiry emails (3 days + 1 day warnings)
-    - Monthly plan_minutes_used reset (1st of each month)
-    Runs every 6 hours.
-    """
-    from datetime import datetime, timedelta, timezone
-    from sqlalchemy import select, and_, update
-    from app.core.database import AsyncSessionLocal
-    from app.models.models import Client
-    from app.services.email_service import send_trial_expiring_email
-
-    while True:
-        try:
-            await _asyncio.sleep(6 * 3600)  # every 6 hours
-            now = datetime.now(timezone.utc)
-
-            async with AsyncSessionLocal() as db:
-                # ── Trial expiry warnings ──
-                for days_ahead in [3, 1]:
-                    window_start = now + timedelta(days=days_ahead - 0.25)
-                    window_end = now + timedelta(days=days_ahead + 0.25)
-                    result = await db.execute(
-                        select(Client).where(
-                            and_(
-                                Client.trial_ends_at >= window_start,
-                                Client.trial_ends_at < window_end,
-                                Client.stripe_subscription_id.is_(None),
-                                Client.is_active == True,
-                            )
-                        )
-                    )
-                    for client in result.scalars().all():
-                        try:
-                            await send_trial_expiring_email(
-                                to=client.notification_email or client.email,
-                                name=client.name,
-                                days_left=days_ahead,
-                            )
-                            logger.info(f"Trial expiry warning ({days_ahead}d) sent to {client.email}")
-                        except Exception as e:
-                            logger.error(f"Failed to send trial expiry email to {client.email}: {e}")
-
-                # ── Monthly minute reset (runs on the 1st, resets all) ──
-                if now.day == 1 and now.hour < 6:
-                    await db.execute(
-                        update(Client)
-                        .where(Client.plan_minutes_used > 0)
-                        .values(plan_minutes_used=0)
-                    )
-                    await db.commit()
-                    logger.info("Monthly plan_minutes_used reset completed")
-
-        except _asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.error(f"Scheduled tasks error: {e}")
-            await _asyncio.sleep(60)  # retry after 1 min on error
 
 
 @asynccontextmanager
@@ -163,22 +99,8 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Database connectivity check passed")
 
-    # Start background scheduler
-    scheduler_task = None
-    if database_ok:
-        scheduler_task = _asyncio.create_task(_scheduled_tasks())
-        logger.info("Background scheduler started (trial warnings + monthly reset)")
-    else:
-        logger.warning("Background scheduler skipped because the database probe failed")
-
     yield
 
-    if scheduler_task is not None:
-        scheduler_task.cancel()
-        try:
-            await scheduler_task
-        except _asyncio.CancelledError:
-            pass
     logger.info("Omniweb Agent Engine shutting down")
     await engine.dispose()
 

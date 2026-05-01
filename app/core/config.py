@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     # ── Retell AI (voice + web calls + telephony orchestration) ─────────
     RETELL_API_KEY: str = ""
     RETELL_LANDING_AGENT_ID: str = ""
+    RETELL_WEBHOOK_SECRET: str = ""
 
     # ── Deepgram (Shopify / widget voice agent infrastructure) ──
     DEEPGRAM_API_KEY: str = ""

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, PhoneNumber
 from app.services import retell_service
+from app.services.retell_telephony_service import RetellTelephonyService, verify_retell_signature
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -49,6 +50,11 @@ class PhoneCallResponse(BaseModel):
     agent_id: str
     from_number: str
     to_number: str
+
+
+async def _json_body(request: Request) -> dict[str, Any]:
+    payload = await request.json()
+    return payload if isinstance(payload, dict) else {"payload": payload}
 
 
 @router.post("/web-call", response_model=WebCallResponse)
@@ -184,3 +190,80 @@ async def create_phone_call_session(
         from_number=from_number,
         to_number=to_number,
     )
+
+
+@router.post("/webhook")
+async def retell_webhook(
+    request: Request,
+    x_retell_signature: str | None = Header(None),
+    retell_signature: str | None = Header(None),
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    raw_body = await request.body()
+    signature = x_retell_signature or retell_signature
+    if not verify_retell_signature(raw_body, signature):
+        raise HTTPException(401, "Invalid Retell webhook signature")
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "Invalid webhook payload")
+    try:
+        return await RetellTelephonyService(db).handle_webhook(payload)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        logger.error("Retell webhook handling failed", error=str(exc))
+        raise HTTPException(502, "Unable to process Retell webhook") from exc
+
+
+@router.post("/tool-call")
+async def retell_tool_call(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    payload = await _json_body(request)
+    try:
+        return await RetellTelephonyService(db).handle_tool_call(payload)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        logger.error("Retell tool-call failed", error=str(exc))
+        raise HTTPException(502, "Unable to process Retell tool call") from exc
+
+
+@router.post("/call-start")
+async def retell_call_start(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    payload = await _json_body(request)
+    try:
+        return await RetellTelephonyService(db).handle_call_start(payload)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.post("/call-end")
+async def retell_call_end(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    payload = await _json_body(request)
+    try:
+        return await RetellTelephonyService(db).handle_call_end(payload)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.post("/escalate")
+async def retell_escalate(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    payload = await _json_body(request)
+    try:
+        response = await RetellTelephonyService(db).handle_tool_call(
+            {**payload, "message": payload.get("message") or "The caller requested human escalation."}
+        )
+        return {"ok": True, "escalation": response.get("escalation"), "actions": response.get("actions", [])}
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc

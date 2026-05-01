@@ -343,7 +343,7 @@ def serialize_engagement_summary(engagement: Engagement) -> dict[str, Any]:
         "leadScore": engagement.lead_score,
         "agentMode": engagement.agent_mode,
         "conversionStage": engagement.conversion_stage,
-        "metadata": dict(engagement.metadata or {}),
+        "metadata": dict(engagement.metadata_json or {}),
         "createdAt": serialize_datetime(engagement.created_at),
         "updatedAt": serialize_datetime(engagement.updated_at),
     }

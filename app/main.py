@@ -46,6 +46,7 @@ from app.api.routes import (
     site_templates,
     subscribe,
     templates,
+    telephony_retell,
     widget,
     webhooks,
     webhooks_stripe,
@@ -150,6 +151,7 @@ async def lifespan(app: FastAPI):
     logger.info("Omniweb Agent Engine starting up")
     logger.info(f"ElevenLabs configured: {settings.elevenlabs_configured}")
     logger.info(f"Twilio configured: {settings.twilio_configured}")
+    logger.info(f"Retell configured: {settings.retell_configured}")
     logger.info(f"OpenAI configured: {settings.openai_configured}")
 
     database_ok, database_error = await probe_database()
@@ -372,6 +374,7 @@ app.include_router(automations.router, prefix=API_PREFIX)
 app.include_router(chat.router, prefix=API_PREFIX)
 app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
+app.include_router(telephony_retell.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
 app.include_router(shopify.router, prefix=API_PREFIX)
 app.include_router(site_templates.router, prefix=API_PREFIX)
@@ -401,6 +404,8 @@ async def health() -> dict:
         "version": "2.0.0",
         "elevenlabs_configured": settings.elevenlabs_configured,
         "twilio_configured": settings.twilio_configured,
+        "retell_configured": settings.retell_configured,
+        "retell_landing_agent_configured": bool(settings.RETELL_LANDING_AGENT_ID.strip()),
         "openai_configured": settings.openai_configured,
         "database_ok": False,
         "landing_page_client_configured": bool(

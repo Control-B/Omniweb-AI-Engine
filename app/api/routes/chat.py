@@ -15,11 +15,14 @@ from starlette.responses import Response
 from app.api.deps import get_session
 from app.api.routes.deepgram import VoiceAgentBootstrapRequest, run_voice_agent_bootstrap
 from app.core.auth import get_current_client
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig
 from app.services import elevenlabs_service
+from app.services.omniweb_brain_service import BrainRequest, OmniwebBrainService
 
 logger = get_logger(__name__)
+settings = get_settings()
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 # Canonical browser path for Deepgram bootstrap (some CDNs/WAFs block ``/api/deepgram/...`` POST).
@@ -39,6 +42,17 @@ class WelcomeAudioRequest(BaseModel):
     text: str
     language: str | None = None
     voice_id: str | None = None
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRespondRequest(BaseModel):
+    client_id: str | None = None
+    messages: list[ChatMessage]
+    metadata: dict | None = None
 
 
 @router.post("/welcome-audio")
@@ -61,6 +75,50 @@ async def get_welcome_audio(body: WelcomeAudioRequest) -> Response:
         raise HTTPException(502, "Failed to synthesize welcome audio") from exc
 
     return Response(content=audio_bytes, media_type="audio/mpeg")
+
+
+@router.post("/respond")
+async def chat_respond(
+    body: ChatRespondRequest,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Shared-brain text chat endpoint used by website chat clients."""
+    raw_id = (body.client_id or settings.LANDING_PAGE_CLIENT_ID or "").strip()
+    if not raw_id:
+        raise HTTPException(400, "client_id is required")
+
+    try:
+        from uuid import UUID
+        tenant_id = UUID(raw_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid client_id")
+
+    user_message = ""
+    for message in reversed(body.messages):
+        if message.role.lower() == "user" and message.content.strip():
+            user_message = message.content.strip()
+            break
+    if not user_message:
+        raise HTTPException(400, "A user message is required")
+
+    try:
+        response = await OmniwebBrainService(db).run(
+            BrainRequest(
+                tenant_id=tenant_id,
+                channel_type="chat",
+                user_message=user_message,
+                metadata=body.metadata or {},
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+    return {
+        "response": response.response_text,
+        "actions": response.actions,
+        "escalation": response.escalation,
+        "lead_fields": response.lead_fields,
+    }
 
 
 @router.get("/languages")

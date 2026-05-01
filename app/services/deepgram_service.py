@@ -10,7 +10,7 @@ import httpx
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig
-from app.services.prompt_engine import compose_system_prompt
+from app.services.omniweb_brain_service import compose_channel_prompt
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -193,22 +193,7 @@ def build_voice_agent_settings(
     language: str | None = None,
     voice_override: str | None = None,
 ) -> dict[str, Any]:
-    composed = compose_system_prompt(
-        agent_name=config.agent_name or "Alex",
-        business_name=config.business_name or "",
-        industry_slug=config.industry or "general",
-        agent_mode=config.agent_mode,
-        business_type=config.business_type,
-        services=_coerce_services(config.services),
-        business_hours=_coerce_business_hours(config.business_hours),
-        timezone=config.timezone or "America/New_York",
-        booking_url=config.booking_url,
-        after_hours_message=config.after_hours_message or "",
-        custom_prompt=config.system_prompt,
-        custom_guardrails=_coerce_str_list(config.custom_guardrails),
-        custom_escalation_triggers=_coerce_str_list(config.custom_escalation_triggers),
-        custom_context=config.custom_context,
-    )
+    composed = compose_channel_prompt(config, "web_voice")
     language_tag = _agent_language_tag(config, language)
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
     # Languages explicitly supported by Deepgram nova-3 STT with a named code.

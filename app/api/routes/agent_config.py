@@ -78,9 +78,16 @@ class AgentConfigUpdate(BaseModel):
     supported_languages: Optional[list[str]] = None
     language_presets: Optional[dict] = None
     widget_config: Optional[dict] = None
+    goals: Optional[list[str]] = None
+    active: Optional[bool] = None
     # Multi-tenant AI platform fields
     industry: Optional[str] = None
     agent_mode: Optional[str] = None
+    enabled_channels: Optional[list[str]] = None
+    lead_capture_fields: Optional[list[str]] = None
+    enabled_features: Optional[dict] = None
+    qualification_rules: Optional[dict] = None
+    custom_instructions: Optional[str] = None
     custom_guardrails: Optional[list[str]] = None
     custom_escalation_triggers: Optional[list[str]] = None
     custom_context: Optional[str] = None

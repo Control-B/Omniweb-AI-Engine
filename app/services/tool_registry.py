@@ -77,8 +77,8 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
         "name": "book_appointment",
         "description": (
             "Schedule an appointment or consultation. Use this when the caller wants to "
-            "book a specific time. Collect their name, email, preferred date/time, and "
-            "the topic before calling this tool."
+            "book a specific time. First use check_availability, then collect their name, "
+            "email, and confirmed ISO start_time before calling this tool."
         ),
         "api_schema": {
             "url": "{base_url}/api/tools/book-appointment",
@@ -90,11 +90,14 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
                     "name": {"type": "string", "description": "Name of the person booking"},
                     "email": {"type": "string", "description": "Email for calendar invite"},
                     "phone": {"type": "string", "description": "Phone number"},
+                    "start_time": {"type": "string", "description": "Confirmed ISO start time from check_availability"},
+                    "event_type_id": {"type": "string", "description": "Tenant event type ID, if provided by availability"},
+                    "timezone": {"type": "string", "description": "Attendee timezone, e.g. America/New_York"},
                     "preferred_date": {"type": "string", "description": "Preferred date (e.g. 'next Tuesday', '2025-04-15')"},
                     "preferred_time": {"type": "string", "description": "Preferred time (e.g. '2pm', '10:00 AM')"},
                     "topic": {"type": "string", "description": "What they want to discuss"},
                 },
-                "required": ["name", "email"],
+                "required": ["name", "email", "start_time"],
             },
         },
     },
@@ -114,6 +117,8 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
                 "type": "object",
                 "properties": {
                     "date": {"type": "string", "description": "Date to check availability for"},
+                    "event_type_id": {"type": "string", "description": "Tenant event type ID, if known"},
+                    "timezone": {"type": "string", "description": "Timezone for returned slots"},
                 },
                 "required": [],
             },

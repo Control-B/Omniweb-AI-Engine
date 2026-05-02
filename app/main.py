@@ -42,6 +42,7 @@ from app.api.routes import (
     numbers,
     retell,
     saas,
+    scheduling,
     shopify,
     site_templates,
     subscribe,
@@ -297,6 +298,7 @@ app.include_router(chat.router, prefix=API_PREFIX)
 app.include_router(industry.router, prefix=API_PREFIX)
 app.include_router(knowledge_base.router, prefix=API_PREFIX)
 app.include_router(telephony_retell.router, prefix=API_PREFIX)
+app.include_router(scheduling.router, prefix=API_PREFIX)
 app.include_router(templates.router, prefix=API_PREFIX)
 app.include_router(shopify.router, prefix=API_PREFIX)
 app.include_router(site_templates.router, prefix=API_PREFIX)

@@ -120,6 +120,8 @@ class Client(Base):
     tenant_call_logs: Mapped[list["TenantCallLog"]] = relationship(back_populates="client")
     usage_metering: Mapped[list["TenantUsageMetering"]] = relationship(back_populates="client")
     escalation_rules: Mapped[list["TenantEscalationRule"]] = relationship(back_populates="client")
+    scheduling_config: Mapped["TenantSchedulingConfig | None"] = relationship(back_populates="client", uselist=False)
+    scheduling_bookings: Mapped[list["SchedulingBooking"]] = relationship(back_populates="client")
 
     __table_args__ = (
         Index("ix_clients_email", "email"),
@@ -498,6 +500,67 @@ class TenantChannel(Base):
         Index("ix_tenant_channels_tenant_id", "tenant_id"),
         Index("ix_tenant_channels_channel_type", "channel_type"),
         Index("ix_tenant_channels_status", "status"),
+    )
+
+
+class TenantSchedulingConfig(Base):
+    """Tenant-owned mapping into the internal Cal.diy scheduling service."""
+    __tablename__ = "tenant_scheduling_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+
+    calcom_user_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    default_event_type_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    booking_mode: Mapped[str] = mapped_column(String(40), default="ai-assisted", nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="disabled", nullable=False)
+    event_type_ids: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    settings_json: Mapped[dict] = mapped_column("settings", JSONB, default=dict, nullable=False)
+    last_health_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_health_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="scheduling_config")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="uq_tenant_scheduling_configs_tenant_id"),
+        Index("ix_tenant_scheduling_configs_tenant_id", "tenant_id"),
+        Index("ix_tenant_scheduling_configs_status", "status"),
+    )
+
+
+class SchedulingBooking(Base):
+    """Tenant-scoped booking audit rows mirrored from Cal.diy responses."""
+    __tablename__ = "scheduling_bookings"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("leads.id", ondelete="SET NULL"), nullable=True)
+
+    calcom_booking_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    calcom_booking_uid: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    event_type_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    attendee_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    attendee_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    attendee_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(80), default="America/New_York", nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="confirmed", nullable=False)
+    topic: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="scheduling_bookings")
+
+    __table_args__ = (
+        Index("ix_scheduling_bookings_tenant_id", "tenant_id"),
+        Index("ix_scheduling_bookings_created_at", "created_at"),
+        Index("ix_scheduling_bookings_status", "status"),
+        UniqueConstraint("tenant_id", "calcom_booking_uid", name="uq_scheduling_bookings_tenant_uid"),
     )
 
 

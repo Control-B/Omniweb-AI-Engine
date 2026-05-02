@@ -550,6 +550,77 @@ export async function getWidgetEmbed(clientId: string) {
   return apiFetch<WidgetEmbedResponse>(`/agent-config/${clientId}/widget`);
 }
 
+export interface SchedulingEventType {
+  id: string;
+  title: string;
+  slug?: string | null;
+  length?: number | string | null;
+}
+
+export interface SchedulingSlot {
+  start: string;
+  end?: string | null;
+  date?: string | null;
+}
+
+export interface SchedulingBooking {
+  id: string;
+  calcomBookingId?: string | null;
+  calcomBookingUid?: string | null;
+  eventTypeId: string;
+  attendeeName: string;
+  attendeeEmail: string;
+  attendeePhone?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  timezone: string;
+  status: string;
+  topic?: string | null;
+  createdAt?: string | null;
+}
+
+export interface SchedulingStatus {
+  status: "connected" | "disabled" | "error" | string;
+  health: { ok: boolean; status: string; message?: string | null };
+  config: {
+    calcomUserId?: string | null;
+    defaultEventTypeId?: string | null;
+    eventTypeIds: string[];
+    bookingMode: "manual" | "ai-assisted" | "ai auto-book" | string;
+    status: string;
+  };
+  internalUrlConfigured: boolean;
+  eventTypes: SchedulingEventType[];
+  recentBookings: SchedulingBooking[];
+}
+
+export async function getSchedulingStatus() {
+  return apiFetch<SchedulingStatus>("/scheduling/status");
+}
+
+export async function updateSchedulingConfig(body: {
+  calcom_user_id?: string;
+  default_event_type_id?: string;
+  event_type_ids?: string[];
+  booking_mode?: "manual" | "ai-assisted" | "ai auto-book";
+  status?: "connected" | "disabled" | "error";
+}) {
+  return apiFetch<SchedulingStatus>("/scheduling/config", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getSchedulingAvailability(params?: {
+  eventTypeId?: string;
+  timezone?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.eventTypeId) query.set("event_type_id", params.eventTypeId);
+  if (params?.timezone) query.set("timezone", params.timezone);
+  return apiFetch<{ slots: SchedulingSlot[] }>(`/scheduling/availability?${query}`);
+}
+
 export async function startRetellPhoneCall(input: {
   clientId: string;
   toNumber: string;

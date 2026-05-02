@@ -97,10 +97,10 @@ class Settings(BaseSettings):
     DEEPGRAM_STT_MODEL: str = "nova-3"
     DEEPGRAM_TTS_VOICE: str = "aura-asteria-en"
 
-    # ── Cal.com (Appointment Booking) ────────────────────────
-    CALCOM_API_KEY: str = ""
-    CALCOM_API_URL: str = "https://api.cal.com/v2"
-    CALCOM_EVENT_TYPE_ID: str = ""  # default event type for bookings (int as string)
+    # ── Cal.diy / self-hosted Cal.com (internal scheduling engine) ──
+    CALCOM_INTERNAL_URL: str = "http://calcom:3000/api/v2"
+    CALCOM_DEFAULT_EVENT_TYPE_ID: str = ""
+    CALCOM_INTERNAL_SERVICE_HEADER: str = "omniweb"
 
     # ── OpenAI (LLM for post-call processing) ────────────────
     OPENAI_API_KEY: str = ""
@@ -185,10 +185,6 @@ class Settings(BaseSettings):
     @property
     def deepgram_configured(self) -> bool:
         return bool(self.DEEPGRAM_API_KEY)
-
-    @property
-    def calcom_configured(self) -> bool:
-        return bool(self.CALCOM_API_KEY)
 
     @property
     def shopify_configured(self) -> bool:

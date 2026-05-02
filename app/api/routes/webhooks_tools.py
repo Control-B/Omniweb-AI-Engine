@@ -19,6 +19,7 @@ from app.api.deps import get_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, Lead, Client, ToolCallLog
+from app.services.calcom_scheduling_service import CalcomSchedulingService, SchedulingServiceError
 from app.services.guardrail_middleware import check_response, get_safe_fallback
 
 logger = get_logger(__name__)
@@ -267,6 +268,9 @@ class BookAppointmentRequest(BaseModel):
     name: str = Field(..., description="Full name of the person booking")
     email: str = Field(..., description="Email for calendar invite")
     phone: Optional[str] = Field(None, description="Phone number")
+    start_time: Optional[str] = Field(None, description="Confirmed ISO start time from check_availability")
+    event_type_id: Optional[str] = Field(None, description="Tenant event type to book")
+    timezone: Optional[str] = Field(None, description="Attendee timezone")
     preferred_date: Optional[str] = Field(None, description="Preferred date (e.g. 'next Tuesday', '2026-04-15')")
     preferred_time: Optional[str] = Field(None, description="Preferred time (e.g. '2pm', '10:00 AM')")
     topic: Optional[str] = Field(None, description="What they want to discuss")
@@ -280,19 +284,22 @@ async def book_appointment(
 ):
     """Book a consultation appointment.
 
-    Currently creates a booking record and sends confirmation.
-    Can be extended to integrate with Google Calendar, Calendly, etc.
+    Creates a tenant-scoped Cal.diy booking through Omniweb's internal backend
+    scheduling service. The AI tool never talks to Cal.diy directly.
     """
     _verify_secret(x_tool_secret)
     t0 = time.time()
 
     client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
 
-    # Build a booking reference
+    from app.core.database import async_session_factory
+
     booking_ref = f"OMN-{uuid.uuid4().hex[:8].upper()}"
 
     time_str = ""
-    if body.preferred_date and body.preferred_time:
+    if body.start_time:
+        time_str = f" for {body.start_time}"
+    elif body.preferred_date and body.preferred_time:
         time_str = f" for {body.preferred_date} at {body.preferred_time}"
     elif body.preferred_date:
         time_str = f" for {body.preferred_date}"
@@ -300,11 +307,8 @@ async def book_appointment(
         time_str = f" at {body.preferred_time}"
 
     logger.info(
-        f"Appointment booked via tool call: {body.name} ({body.email}){time_str} — ref: {booking_ref} [client={client_id}]"
+        f"Appointment requested via tool call: {body.name} ({body.email}){time_str} — ref: {booking_ref} [client={client_id}]"
     )
-
-    # Also capture as a lead with "booked" status
-    from app.core.database import async_session_factory
 
     lead_id = uuid.uuid4()
     async with async_session_factory() as db:
@@ -316,20 +320,42 @@ async def book_appointment(
             caller_email=body.email,
             intent=body.topic or "Consultation",
             urgency="high",
-            summary=f"Appointment booked{time_str}. Topic: {body.topic or 'General consultation'}. Ref: {booking_ref}",
+            summary=f"Appointment requested{time_str}. Topic: {body.topic or 'General consultation'}. Ref: {booking_ref}",
             services_requested=[],
-            status="booked",
+            status="booking_pending",
             lead_score=0.9,
             follow_up_sent=False,
         )
         db.add(lead)
-        await db.commit()
 
-    response_text = (
-        f"Appointment booked! Reference number: {booking_ref}. "
-        f"{body.name} will receive a confirmation at {body.email}. "
-        f"Our team will reach out{time_str} to discuss {body.topic or 'your needs'}."
-    )
+        service = CalcomSchedulingService(db)
+        try:
+            booking = await service.create_booking(
+                tenant_id=client_id,
+                name=body.name,
+                email=body.email,
+                phone=body.phone,
+                start_time=body.start_time or "",
+                event_type_id=body.event_type_id,
+                timezone_name=body.timezone or "America/New_York",
+                topic=body.topic,
+                metadata={"tool": "book_appointment", "booking_ref": booking_ref},
+                lead_id=lead_id,
+            )
+            lead.status = "booked"
+            lead.summary = (
+                f"Appointment booked{time_str}. Topic: {body.topic or 'General consultation'}. "
+                f"Ref: {booking_ref}"
+            )
+            await db.commit()
+            response_text = (
+                f"Appointment booked! Reference number: {booking_ref}. "
+                f"{booking['message']}"
+            )
+        except SchedulingServiceError as exc:
+            await db.commit()
+            response_text = exc.message
+
     response_text = _enforce_guardrails(
         response_text, tool_name="book_appointment",
         industry_slug=industry_slug, custom_guardrails=custom_guardrails,
@@ -417,6 +443,8 @@ async def send_confirmation(
 
 class CheckAvailabilityRequest(BaseModel):
     date: Optional[str] = Field(None, description="Date to check (e.g. '2026-04-15', 'tomorrow', 'next week')")
+    event_type_id: Optional[str] = Field(None, description="Tenant event type to check")
+    timezone: Optional[str] = Field(None, description="Timezone for returned slots")
 
 
 @router.post("/check-availability")
@@ -427,31 +455,41 @@ async def check_availability(
 ):
     """Return available consultation time slots.
 
-    Currently returns standard business hours slots.
-    Can be extended to query Google Calendar, Calendly, etc.
+    Queries tenant-scoped Cal.diy slots through Omniweb's internal backend
+    scheduling service.
     """
     _verify_secret(x_tool_secret)
     t0 = time.time()
 
     client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
 
-    # Standard available slots (can be replaced with real calendar integration)
+    from app.core.database import async_session_factory
+
     now = datetime.now(timezone.utc)
-    base_date = now + timedelta(days=1)  # Start from tomorrow
+    start = body.date if body.date and body.date[:4].isdigit() else (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    end = start if body.date and body.date[:4].isdigit() else (now + timedelta(days=7)).strftime("%Y-%m-%d")
 
-    slots = []
-    for day_offset in range(5):  # Next 5 business days
-        date = base_date + timedelta(days=day_offset)
-        if date.weekday() >= 5:  # Skip weekends
-            continue
-        date_str = date.strftime("%A, %B %d")
-        slots.append(f"{date_str} at 10:00 AM EST")
-        slots.append(f"{date_str} at 2:00 PM EST")
-        slots.append(f"{date_str} at 4:00 PM EST")
-
-    available = slots[:6]  # Show up to 6 slots
-
-    response_text = f"Here are the available slots: {', '.join(available)}. Which time works best?"
+    async with async_session_factory() as db:
+        service = CalcomSchedulingService(db)
+        try:
+            slots = await service.get_available_slots(
+                client_id,
+                event_type_id=body.event_type_id,
+                date_range={"start": start, "end": end},
+                timezone_name=body.timezone or "America/New_York",
+            )
+        except SchedulingServiceError as exc:
+            slots = []
+            response_text = exc.message
+        else:
+            if not slots:
+                response_text = "I do not see any open appointment slots for that window. Would another day work?"
+            else:
+                available = [slot["start"] for slot in slots[:3] if slot.get("start")]
+                response_text = (
+                    f"Here are the next available slots: {', '.join(available)}. "
+                    "Which one should I book? I will use the exact selected time to confirm it."
+                )
     response_text = _enforce_guardrails(
         response_text, tool_name="check_availability",
         industry_slug=industry_slug, custom_guardrails=custom_guardrails,

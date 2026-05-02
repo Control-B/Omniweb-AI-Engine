@@ -347,8 +347,8 @@ def _tools_block(available_tools: list[str]) -> str:
 
     tool_descriptions = {
         "capture_lead": "**capture_lead** — Save the caller's information and inquiry as a qualified lead.",
-        "book_appointment": "**book_appointment** — Schedule a consultation or service appointment.",
-        "check_availability": "**check_availability** — Check available time slots for appointments.",
+        "book_appointment": "**book_appointment** — Confirm an appointment after the caller picks an exact slot from check_availability.",
+        "check_availability": "**check_availability** — Check live Cal.diy appointment slots and offer 2-3 options.",
         "send_confirmation": "**send_confirmation** — Send an SMS confirmation to the caller.",
         "get_pricing": "**get_pricing** — Look up pricing information for services.",
         "lookup_order": "**lookup_order** — Look up an order status by order number.",

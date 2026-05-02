@@ -148,7 +148,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
   }, [stopSession]);
 
   const bootstrap = useCallback(async (): Promise<BootstrapPayload> => {
-    const body: { client_id?: string; language: string; voice_override?: string } = {
+    const body: { client_id?: string; widget_key?: string; language: string; voice_override?: string } = {
       language: selectedLang?.code || "en",
     };
     if (voiceOverride) body.voice_override = voiceOverride;
@@ -156,7 +156,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
     if (agentId?.trim()) {
       body.client_id = agentId.trim();
     } else if (landingClientId) {
-      body.client_id = landingClientId;
+      body.widget_key = landingClientId;
     }
     const res = await fetch(`${engineBaseUrl()}/api/chat/voice-agent/bootstrap`, {
       method: "POST",

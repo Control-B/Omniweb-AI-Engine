@@ -27,6 +27,8 @@ router = APIRouter(prefix="/deepgram", tags=["deepgram"])
 
 class VoiceAgentBootstrapRequest(BaseModel):
     client_id: str | None = None
+    widget_key: str | None = None
+    public_widget_key: str | None = None
     language: str | None = None
     voice_override: str | None = None  # e.g. "aura-2-orion-en" from test console
 
@@ -54,31 +56,28 @@ async def run_voice_agent_bootstrap(
     if not settings.deepgram_configured:
         raise HTTPException(503, detail="Deepgram is not configured")
 
-    raw_id = (req.client_id or settings.LANDING_PAGE_CLIENT_ID or "").strip()
+    raw_id = (
+        req.client_id
+        or req.widget_key
+        or req.public_widget_key
+        or settings.LANDING_PAGE_CLIENT_ID
+        or ""
+    ).strip()
 
     config: AgentConfig | None = None
-    if raw_id:
-        client = await resolve_client_by_public_identifier(db, raw_id)
-        if not client:
-            raise HTTPException(404, detail="No client found for client_id or widget key")
-        result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == client.id))
-        config = result.scalar_one_or_none()
-        if not config:
-            raise HTTPException(404, detail="No agent configuration for this client")
-    elif settings.WIDGET_REQUIRE_CLIENT_ID:
+    if not raw_id:
         raise HTTPException(
             400,
-            detail="client_id is required (or set LANDING_PAGE_CLIENT_ID for anonymous widget)",
+            detail="client_id or widget_key is required",
         )
-    else:
-        # Deterministic default tenant: smallest client_id (matches former min() behavior).
-        # Avoid scalar_subquery + equality — some stacks surface it as a DB/API 500.
-        result = await db.execute(
-            select(AgentConfig).order_by(AgentConfig.client_id.asc()).limit(1)
-        )
-        config = result.scalars().first()
-        if not config:
-            raise HTTPException(404, detail="No agent configuration in database")
+
+    client = await resolve_client_by_public_identifier(db, raw_id)
+    if not client:
+        raise HTTPException(404, detail="No client found for client_id or widget key")
+    result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == client.id))
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(404, detail="No agent configuration for this client")
 
     # ── Subscription / trial gate ────────────────────────────────────────────
     tenant = await db.get(Client, config.client_id)

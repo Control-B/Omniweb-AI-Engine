@@ -259,7 +259,7 @@
           voice.disabled = true;
           voice.textContent = "Starting voice...";
           request("/api/chat/voice-agent/bootstrap", {
-            client_id: publicWidgetId,
+            widget_key: publicWidgetId,
           })
             .then(function (payload) {
               voiceActive = true;

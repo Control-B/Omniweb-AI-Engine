@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,8 @@ from app.models.models import AgentConfig, Call, Client, Transcript
 from app.services import deepgram_service
 from app.services.saas_workspace_service import (
     client_subscription_allows_widget,
+    normalize_public_domain,
+    resolve_client_by_public_domain,
     resolve_client_by_public_identifier,
 )
 
@@ -51,6 +53,7 @@ class VoiceAgentSessionCompleteRequest(BaseModel):
 async def run_voice_agent_bootstrap(
     req: VoiceAgentBootstrapRequest,
     db: AsyncSession = Depends(get_session),
+    request: Request | None = None,
 ) -> dict:
     """Shared implementation for ``POST .../voice-agent/bootstrap`` (see routers below)."""
     if not settings.deepgram_configured:
@@ -64,16 +67,22 @@ async def run_voice_agent_bootstrap(
         or ""
     ).strip()
 
-    config: AgentConfig | None = None
+    client: Client | None = None
     if not raw_id:
-        raise HTTPException(
-            400,
-            detail="client_id or widget_key is required",
-        )
+        origin = request.headers.get("origin") if request else None
+        referer = request.headers.get("referer") if request else None
+        domain = normalize_public_domain(origin or referer)
+        client = await resolve_client_by_public_domain(db, domain)
+        if not client:
+            raise HTTPException(
+                400,
+                detail="client_id or widget_key is required",
+            )
 
-    client = await resolve_client_by_public_identifier(db, raw_id)
-    if not client:
-        raise HTTPException(404, detail="No client found for client_id or widget key")
+    if raw_id:
+        client = await resolve_client_by_public_identifier(db, raw_id)
+        if not client:
+            raise HTTPException(404, detail="No client found for client_id or widget key")
     result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == client.id))
     config = result.scalar_one_or_none()
     if not config:
@@ -134,9 +143,10 @@ async def run_voice_agent_bootstrap(
 @router.post("/voice-agent/bootstrap")
 async def voice_agent_bootstrap(
     req: VoiceAgentBootstrapRequest,
+    request: Request,
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    return await run_voice_agent_bootstrap(req, db)
+    return await run_voice_agent_bootstrap(req, db, request)
 
 
 @router.post("/voice-agent/session-complete")

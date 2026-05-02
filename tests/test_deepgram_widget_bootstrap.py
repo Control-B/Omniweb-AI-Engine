@@ -41,6 +41,11 @@ class _TenantDb(_Db):
         return self.client if entity_id == self.client.id else None
 
 
+class _Request:
+    def __init__(self, **headers):
+        self.headers = headers
+
+
 @pytest.mark.asyncio
 async def test_voice_bootstrap_requires_explicit_tenant(monkeypatch):
     monkeypatch.setattr(
@@ -93,6 +98,52 @@ async def test_voice_bootstrap_accepts_public_widget_key(monkeypatch):
     response = await run_voice_agent_bootstrap(
         VoiceAgentBootstrapRequest(widget_key="public-key-123", language="en"),
         db,
+    )
+
+    assert response["ok"] is True
+    assert response["client_id"] == str(tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_voice_bootstrap_can_resolve_legacy_origin_domain(monkeypatch):
+    tenant_id = uuid4()
+    client = SimpleNamespace(
+        id=tenant_id,
+        public_widget_key="public-key-123",
+        stripe_subscription_id=None,
+        subscription_status="trialing",
+        trial_ends_at=datetime.now(timezone.utc) + timedelta(days=6),
+        widget_enabled=True,
+        saas_widget_status="active",
+    )
+    agent = SimpleNamespace(client_id=tenant_id, agent_name="Omniweb AI")
+    db = _TenantDb(client, agent)
+    db.results = [agent]
+
+    async def grant_temporary_token(ttl_seconds):
+        return {"access_token": "token", "expires_in": ttl_seconds}
+
+    async def resolve_domain(_db, domain):
+        assert domain == "omniweb.ai"
+        return client
+
+    monkeypatch.setattr(
+        deepgram,
+        "settings",
+        SimpleNamespace(deepgram_configured=True, LANDING_PAGE_CLIENT_ID=""),
+    )
+    monkeypatch.setattr(deepgram, "resolve_client_by_public_domain", resolve_domain)
+    monkeypatch.setattr(deepgram.deepgram_service, "grant_temporary_token", grant_temporary_token)
+    monkeypatch.setattr(
+        deepgram.deepgram_service,
+        "build_voice_agent_settings",
+        lambda *_args, **_kwargs: {"agent": "settings"},
+    )
+
+    response = await run_voice_agent_bootstrap(
+        VoiceAgentBootstrapRequest(language="en"),
+        db,
+        _Request(origin="https://www.omniweb.ai"),
     )
 
     assert response["ok"] is True

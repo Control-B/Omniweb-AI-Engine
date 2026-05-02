@@ -264,3 +264,36 @@ async def resolve_client_by_public_identifier(db: AsyncSession, identifier: str)
     if client:
         return client
     return await resolve_client_by_widget_key(db, raw)
+
+
+def normalize_public_domain(value: str | None) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    candidate = raw if "://" in raw else f"https://{raw.lstrip('/')}"
+    parsed = urlparse(candidate)
+    host = (parsed.hostname or "").strip().lower().rstrip(".")
+    return host[4:] if host.startswith("www.") else host
+
+
+async def resolve_client_by_public_domain(db: AsyncSession, domain: str) -> Client | None:
+    """Resolve legacy anonymous widget calls by the embedding website domain."""
+    normalized = normalize_public_domain(domain)
+    if not normalized:
+        return None
+
+    result = await db.execute(
+        select(Client)
+        .join(AgentConfig, AgentConfig.client_id == Client.id)
+        .where(AgentConfig.website_domain == normalized)
+        .limit(20)
+    )
+    candidates = list(result.scalars().all())
+    for client in candidates:
+        if (
+            getattr(client, "widget_enabled", True) is not False
+            and (client.saas_widget_status or "active") != "disabled"
+            and client_subscription_allows_widget(client)
+        ):
+            return client
+    return candidates[0] if len(candidates) == 1 else None

@@ -6,7 +6,7 @@ Endpoints:
     GET  /chat/config/{client_id}     — get chat config (agent_id for frontend)
     POST /chat/conversations          — list text conversations for a client
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,10 +33,11 @@ _VOICE_BOOTSTRAP_PATH = "/api/chat/voice-agent/bootstrap"
 @router.post("/voice-agent/bootstrap")
 async def voice_agent_bootstrap_public(
     req: VoiceAgentBootstrapRequest,
+    request: Request,
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Mint Deepgram JWT + Voice Agent settings for the embed widget (alias of deepgram route)."""
-    return await run_voice_agent_bootstrap(req, db)
+    return await run_voice_agent_bootstrap(req, db, request)
 
 
 class WelcomeAudioRequest(BaseModel):

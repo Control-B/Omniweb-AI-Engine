@@ -88,20 +88,18 @@ async def generate_embed_code(
         client.embed_expires_at = client.trial_ends_at
     else:
         # No subscription, no trial — shouldn't happen, but default 14 days
-        from datetime import timedelta
-        client.embed_expires_at = _now() + timedelta(days=14)
+            widget_target_id = str(client.id)
+            engine_url = (settings.ENGINE_BASE_URL or settings.APP_BASE_URL or "").rstrip("/")
+            widget_url = f"{platform_url}/widget/{widget_target_id}"
 
-    await db.commit()
-    await db.refresh(client)
-
-    logger.info(f"Embed code generated for {client.email}: {code[:8]}...")
-
-    return {
-        "embed_code": code,
-        "domain": client.embed_domain,
-        "phone": client.embed_phone,
-        "expires_at": client.embed_expires_at.isoformat() if client.embed_expires_at else None,
-    }
+            snippet = f"""<!-- Omniweb AI Widget -->
+    <iframe
+        src="{widget_url}"
+        title="Omniweb AI"
+        allow="microphone; autoplay"
+        style="position:fixed;bottom:0;right:0;width:min(100vw - 1rem, 420px);height:min(100dvh - 1rem, 640px);max-width:420px;max-height:640px;border:0;border-radius:12px;z-index:99999;box-shadow:0 12px 48px rgba(0,0,0,0.35)"
+    ></iframe>
+    <!-- data-embed-code="{client.embed_code}" data-engine="{engine_url}" -->"""
 
 
 @router.post("/validate")
@@ -177,7 +175,6 @@ async def get_embed_snippet(
     if not client.embed_code:
         raise HTTPException(404, "No embed code generated yet. Generate one first.")
 
-    # Get agent config for agent_id
     result = await db.execute(
         select(AgentConfig).where(AgentConfig.client_id == client.id)
     )
@@ -185,20 +182,18 @@ async def get_embed_snippet(
     agent_id = agent_config.elevenlabs_agent_id if agent_config else "YOUR_AGENT_ID"
 
     platform_url = settings.PLATFORM_URL.rstrip("/")
+    widget_target_id = str(client.id)
     widget_url = f"{platform_url}/widget/{widget_target_id}"
+    engine_url = (settings.ENGINE_BASE_URL or settings.APP_BASE_URL or "").rstrip("/")
 
     snippet = f"""<!-- Omniweb AI Widget -->
-<script>
-(function(){{
-  var d=document,s=d.createElement('script');
-  s.src='{platform_url}/widget/loader.js';
-  s.async=true;
-  s.dataset.embedCode='{client.embed_code}';
-  s.dataset.agentId='{agent_id}';
-  s.dataset.engineUrl='{engine_url}';
-  d.head.appendChild(s);
-}})();
-</script>"""
+<iframe
+  src="{widget_url}"
+  title="Omniweb AI"
+  allow="microphone; autoplay"
+  style="position:fixed;bottom:0;right:0;width:min(100vw - 1rem, 420px);height:min(100dvh - 1rem, 640px);max-width:420px;max-height:640px;border:0;border-radius:12px;z-index:99999;box-shadow:0 12px 48px rgba(0,0,0,0.35)"
+></iframe>
+<!-- data-embed-code="{client.embed_code}" data-agent-id="{agent_id}" data-engine="{engine_url}" -->"""
 
     return {
         "embed_code": client.embed_code,

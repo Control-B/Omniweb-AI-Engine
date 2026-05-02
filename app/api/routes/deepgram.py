@@ -14,8 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.models import AgentConfig, Call, Transcript
+from app.models.models import AgentConfig, Call, Client, Transcript
 from app.services import deepgram_service
+from app.services.saas_workspace_service import client_subscription_allows_widget
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -77,6 +78,14 @@ async def run_voice_agent_bootstrap(
         config = result.scalars().first()
         if not config:
             raise HTTPException(404, detail="No agent configuration in database")
+
+    # ── Subscription / trial gate ────────────────────────────────────────────
+    tenant = await db.get(Client, config.client_id)
+    if tenant and not client_subscription_allows_widget(tenant):
+        raise HTTPException(
+            403,
+            detail="Trial expired or subscription inactive. Please subscribe to continue using the widget.",
+        )
 
     try:
         token_payload = await deepgram_service.grant_temporary_token(ttl_seconds=600)

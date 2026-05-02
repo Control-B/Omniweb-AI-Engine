@@ -1,6 +1,7 @@
 "use client";
 
 import { WidgetTester } from "@/components/widget-tester";
+import Link from "next/link";
 
 /**
  * Public landing page to try the voice widget locally or in staging.
@@ -22,6 +23,21 @@ export default function LandingPage() {
           <code className="text-cyan-300/90 text-sm">client_id</code> (UUID) that exists in your
           database.
         </p>
+
+        <div className="mb-6 flex flex-wrap gap-3">
+          <Link
+            href="/agent-config"
+            className="rounded-xl bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 transition-colors"
+          >
+            Open Agent Configuration
+          </Link>
+          <Link
+            href="/scheduling"
+            className="rounded-xl border border-white/15 px-4 py-2 text-sm font-medium text-slate-200 hover:text-white hover:border-white/30 transition-colors"
+          >
+            Open Scheduling
+          </Link>
+        </div>
 
         <WidgetTester
           showChecklist

@@ -55,7 +55,7 @@ export default function OnboardingPage() {
       } catch {
         /* ignore */
       }
-      router.replace("/landing");
+      router.replace("/agent-config");
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : "Could not save onboarding");
     } finally {

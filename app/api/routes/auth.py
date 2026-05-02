@@ -251,7 +251,7 @@ async def signup(
         plan="starter",
         role="client",
         is_active=True,
-        trial_ends_at=_now() + timedelta(days=14),
+        trial_ends_at=_now() + timedelta(days=7),
     )
     db.add(client)
     await db.flush()

@@ -10,17 +10,15 @@ This is the DATA PLANE. It:
   - Sends SMS via Twilio
   - Provides text chat widget configuration
 """
+import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
-
-from app.core.config import get_settings
-from app.core.database import AsyncSessionLocal, engine
-from app.core.logging import configure_logging, get_logger
 
 # Import all route modules
 from app.api.routes import (
@@ -35,7 +33,6 @@ from app.api.routes import (
     dashboard_sync,
     deepgram,
     embed,
-    gadget,
     industry,
     knowledge_base,
     leads,
@@ -46,13 +43,16 @@ from app.api.routes import (
     shopify,
     site_templates,
     subscribe,
-    templates,
     telephony_retell,
-    widget,
+    templates,
     webhooks,
     webhooks_stripe,
     webhooks_tools,
+    widget,
 )
+from app.core.config import get_settings
+from app.core.database import AsyncSessionLocal, engine
+from app.core.logging import configure_logging, get_logger
 from app.services.dashboard_sync_service import DashboardApiError, error_response
 
 settings = get_settings()
@@ -192,9 +192,12 @@ class CanonicalHostMiddleware(BaseHTTPMiddleware):
 
         if request_host in {host.lower() for host in settings.NON_CANONICAL_ENGINE_HOSTS}:
             path = request.url.path
-            query = f"?{request.url.query}" if request.url.query else ""
-
-            if path.startswith("/api") or path.startswith("/static") or path == "/health":
+            if (
+                path.startswith("/api")
+                or path.startswith("/static")
+                or path == "/widget.js"
+                or path == "/health"
+            ):
                 return await call_next(request)
 
             return RedirectResponse(f"{settings.PLATFORM_URL.rstrip('/')}/dashboard", status_code=302)
@@ -208,9 +211,6 @@ app.add_middleware(CanonicalHostMiddleware)
 # ── Rate Limiting Middleware ──────────────────────────────────────────────────
 # Simple in-memory rate limiter for auth endpoints.
 # For production at scale, swap to Redis-backed (e.g. slowapi + redis).
-
-import time
-from collections import defaultdict
 
 _rate_limit_store: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT_WINDOW = 60  # seconds
@@ -374,7 +374,6 @@ async def run_seed(x_api_key: str = Header(...)):
     if x_api_key != settings.INTERNAL_API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API key")
 
-    import asyncio
     import importlib
 
     # Import and run the seed function

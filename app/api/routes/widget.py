@@ -13,7 +13,7 @@ from app.core.auth import get_current_client, is_internal_staff_role
 from app.models.models import Client
 from app.services.saas_workspace_service import get_agent_config_for_client
 from app.services.widget_service import (
-    VALID_EVENT_TYPES,
+    SHOPIFY_WIDGET_SCRIPT_PATH,
     VALID_WIDGET_POSITIONS,
     WIDGET_SCRIPT_PATH,
     WidgetAccessError,
@@ -112,6 +112,17 @@ async def get_widget_script() -> Response:
         raise HTTPException(404, "widget.js not found")
     return FileResponse(
         WIDGET_SCRIPT_PATH,
+        media_type="application/javascript",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@asset_router.get("/static/omniweb-shopify-widget.js")
+async def get_shopify_widget_script() -> Response:
+    if not Path(SHOPIFY_WIDGET_SCRIPT_PATH).exists():
+        raise HTTPException(404, "omniweb-shopify-widget.js not found")
+    return FileResponse(
+        SHOPIFY_WIDGET_SCRIPT_PATH,
         media_type="application/javascript",
         headers={"Cache-Control": "public, max-age=300"},
     )

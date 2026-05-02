@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from uuid import uuid4
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -16,7 +15,10 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, Call, Client, Transcript
 from app.services import deepgram_service
-from app.services.saas_workspace_service import client_subscription_allows_widget
+from app.services.saas_workspace_service import (
+    client_subscription_allows_widget,
+    resolve_client_by_public_identifier,
+)
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -56,11 +58,10 @@ async def run_voice_agent_bootstrap(
 
     config: AgentConfig | None = None
     if raw_id:
-        try:
-            cid = UUID(raw_id)
-        except ValueError:
-            raise HTTPException(400, detail="Invalid client_id")
-        result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == cid))
+        client = await resolve_client_by_public_identifier(db, raw_id)
+        if not client:
+            raise HTTPException(404, detail="No client found for client_id or widget key")
+        result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == client.id))
         config = result.scalar_one_or_none()
         if not config:
             raise HTTPException(404, detail="No agent configuration for this client")

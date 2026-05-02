@@ -6,9 +6,14 @@
     return;
   }
 
-  var publicWidgetId = SCRIPT.getAttribute("data-tenant-id") || SCRIPT.dataset.tenantId || "";
+  var publicWidgetId =
+    SCRIPT.getAttribute("data-tenant-id") ||
+    SCRIPT.getAttribute("data-widget-key") ||
+    SCRIPT.dataset.tenantId ||
+    SCRIPT.dataset.widgetKey ||
+    "";
   if (!publicWidgetId) {
-    console.warn("[Omniweb] Missing data-tenant-id on widget script.");
+    console.warn("[Omniweb] Missing data-tenant-id or data-widget-key on widget script.");
     return;
   }
 
@@ -244,9 +249,30 @@
 
       if (voice) {
         voice.addEventListener("click", function () {
-          voiceActive = !voiceActive;
-          voice.textContent = voiceActive ? "End voice" : "Start voice";
-          track(voiceActive ? "voice_started" : "voice_ended", {});
+          if (voiceActive) {
+            voiceActive = false;
+            voice.textContent = "Start voice";
+            track("voice_ended", {});
+            return;
+          }
+
+          voice.disabled = true;
+          voice.textContent = "Starting voice...";
+          request("/api/chat/voice-agent/bootstrap", {
+            client_id: publicWidgetId,
+          })
+            .then(function (payload) {
+              voiceActive = true;
+              voice.textContent = "End voice";
+              track("voice_started", { provider: "deepgram", clientId: payload && payload.client_id });
+            })
+            .catch(function () {
+              addMessage("assistant", "Sorry — voice is not available right now. Please try chat instead.");
+              voice.textContent = "Start voice";
+            })
+            .finally(function () {
+              voice.disabled = false;
+            });
         });
       }
 

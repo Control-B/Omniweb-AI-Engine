@@ -11,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models.models import AgentConfig, Client, Engagement
-from app.services.saas_workspace_service import client_subscription_allows_widget, get_agent_config_for_client, normalize_website_input
+from app.services.saas_workspace_service import (
+    client_subscription_allows_widget,
+    get_agent_config_for_client,
+    normalize_website_input,
+)
 
 settings = get_settings()
 
@@ -28,6 +32,7 @@ VALID_EVENT_TYPES = {
     "voice_ended",
 }
 WIDGET_SCRIPT_PATH = Path(__file__).resolve().parent.parent / "static" / "widget.js"
+SHOPIFY_WIDGET_SCRIPT_PATH = Path(__file__).resolve().parent.parent / "static" / "omniweb-shopify-widget.js"
 
 
 class WidgetAccessError(Exception):
@@ -132,6 +137,8 @@ def get_primary_domain(client: Client, agent: AgentConfig | None) -> str | None:
 
 def get_allowed_domains(client: Client, agent: AgentConfig | None) -> list[str]:
     domains = normalize_allowed_domains(getattr(client, "allowed_domains", []) or [])
+    if "omniweb.ai" not in domains:
+        domains.append("omniweb.ai")
     primary = get_primary_domain(client, agent)
     if primary and primary not in domains:
         domains.append(primary)

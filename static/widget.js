@@ -1,12 +1,16 @@
 /**
  * Omniweb SaaS widget — loads config from the engine (no private prompts in JS).
  * Usage:
- * <script src="https://YOUR_ENGINE/widget.js" data-widget-key="..." async></script>
+ * <script src="https://YOUR_ENGINE/widget.js" data-tenant-id="..." async></script>
  */
 (function () {
   var script = document.currentScript;
   if (!script) return;
-  var key = script.getAttribute("data-widget-key");
+  var key =
+    script.getAttribute("data-tenant-id") ||
+    script.getAttribute("data-widget-key") ||
+    script.dataset.tenantId ||
+    script.dataset.widgetKey;
   if (!key) return;
 
   var srcUrl = script.src ? new URL(script.src) : null;

@@ -20,6 +20,7 @@ from app.core.logging import get_logger
 from app.models.models import AgentConfig
 from app.services import elevenlabs_service
 from app.services.omniweb_brain_service import BrainRequest, OmniwebBrainService
+from app.services.saas_workspace_service import resolve_client_by_public_identifier
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -87,11 +88,9 @@ async def chat_respond(
     if not raw_id:
         raise HTTPException(400, "client_id is required")
 
-    try:
-        from uuid import UUID
-        tenant_id = UUID(raw_id)
-    except ValueError:
-        raise HTTPException(400, "Invalid client_id")
+    client = await resolve_client_by_public_identifier(db, raw_id)
+    if not client:
+        raise HTTPException(404, "No client found for client_id or widget key")
 
     user_message = ""
     for message in reversed(body.messages):
@@ -104,7 +103,7 @@ async def chat_respond(
     try:
         response = await OmniwebBrainService(db).run(
             BrainRequest(
-                tenant_id=tenant_id,
+                tenant_id=client.id,
                 channel_type="chat",
                 user_message=user_message,
                 metadata=body.metadata or {},

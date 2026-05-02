@@ -157,6 +157,12 @@ ingress:
         path:
           prefix: /static
     - component:
+        name: api
+        preserve_path_prefix: true
+      match:
+        path:
+          prefix: /widget.js
+    - component:
         name: dashboard
       match:
         path:

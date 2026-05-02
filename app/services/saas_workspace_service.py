@@ -250,3 +250,17 @@ async def resolve_client_by_widget_key(db: AsyncSession, widget_key: str) -> Cli
         return client
     result = await db.execute(select(Client).where(Client.embed_code == key))
     return result.scalar_one_or_none()
+
+
+async def resolve_client_by_public_identifier(db: AsyncSession, identifier: str) -> Client | None:
+    """Resolve customer-facing widget identifiers without exposing UUID-only contracts."""
+    raw = (identifier or "").strip()
+    if not raw:
+        return None
+    try:
+        client = await db.get(Client, UUID(raw))
+    except ValueError:
+        client = None
+    if client:
+        return client
+    return await resolve_client_by_widget_key(db, raw)

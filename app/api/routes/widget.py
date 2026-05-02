@@ -125,6 +125,20 @@ async def get_widget_embed_code(
     client = await _get_tenant_client(db, current)
     agent = await get_agent_config_for_client(db, client.id)
     ensure_public_widget_id(client)
+
+    # Auto-seed omniweb.ai as an allowed domain so the widget always works
+    # on the primary site without any manual configuration step.
+    existing = normalize_allowed_domains(getattr(client, "allowed_domains", []) or [])
+    if "omniweb.ai" not in existing:
+        existing.append("omniweb.ai")
+        client.allowed_domains = existing
+
+    # Default widget to enabled if it hasn't been explicitly disabled
+    if getattr(client, "widget_enabled", None) is None:
+        client.widget_enabled = True
+    if (client.saas_widget_status or "active") == "disabled" and getattr(client, "widget_enabled", True):
+        client.saas_widget_status = "active"
+
     await db.commit()
     await db.refresh(client)
     return success_response(get_widget_settings_payload(client, agent))
@@ -147,7 +161,10 @@ async def patch_widget_settings(
         if body.widgetEnabled is False:
             client.saas_widget_status = "disabled"
     if body.allowedDomains is not None:
-        client.allowed_domains = normalize_allowed_domains(body.allowedDomains)
+        domains = normalize_allowed_domains(body.allowedDomains)
+        if "omniweb.ai" not in domains:
+            domains.append("omniweb.ai")
+        client.allowed_domains = domains
     if body.widgetPrimaryColor is not None:
         client.widget_primary_color = body.widgetPrimaryColor.strip() or None
     if body.widgetPosition is not None:

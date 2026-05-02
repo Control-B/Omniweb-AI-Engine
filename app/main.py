@@ -309,6 +309,7 @@ app.include_router(subscribe.router, prefix=API_PREFIX)
 app.include_router(widget.router, prefix=API_PREFIX)
 app.include_router(webhooks.router, prefix=API_PREFIX)
 app.include_router(widget.asset_router)
+app.include_router(widget.asset_router, prefix=API_PREFIX)
 
 # Admin API
 app.include_router(admin.router, prefix=API_PREFIX)

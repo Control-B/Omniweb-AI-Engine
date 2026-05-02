@@ -55,7 +55,7 @@ const nextConfig = {
     };
     const widgetProxy = {
       source: "/widget.js",
-      destination: `${engineUrl}/widget.js`,
+      destination: `${engineUrl}/api/widget.js`,
     };
 
     if (process.env.NODE_ENV === "production") return [staticProxy, widgetProxy];

@@ -174,7 +174,13 @@ def get_widget_settings_payload(client: Client, agent: AgentConfig | None) -> di
     allowed_domains = get_allowed_domains(client, agent)
     public_widget_id = ensure_public_widget_id(client)
     widget_enabled = widget_is_enabled(client)
-    welcome_message = client.widget_welcome_message or (agent.agent_greeting if agent else None) or DEFAULT_WELCOME_MESSAGE
+    agent_greeting = (agent.agent_greeting if agent else None) or None
+    legacy_widget_welcome = client.widget_welcome_message or None
+    welcome_message = (
+        agent_greeting
+        if agent_greeting and agent_greeting.strip()
+        else legacy_widget_welcome or DEFAULT_WELCOME_MESSAGE
+    )
     primary_color = client.widget_primary_color or theme.get("theme_color") or DEFAULT_WIDGET_COLOR
     position = client.widget_position or theme.get("position") or DEFAULT_WIDGET_POSITION
     if position not in VALID_WIDGET_POSITIONS:

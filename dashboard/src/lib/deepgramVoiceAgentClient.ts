@@ -12,6 +12,14 @@ export type VoiceAgentHandlers = {
   onClose?: () => void;
 };
 
+type SpeechMediaTrackConstraints = MediaTrackConstraints & {
+  voiceIsolation?: boolean;
+  googEchoCancellation?: boolean;
+  googNoiseSuppression?: boolean;
+  googHighpassFilter?: boolean;
+  googAutoGainControl?: boolean;
+};
+
 function getAudioContextClass(): typeof AudioContext | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as {
@@ -21,18 +29,41 @@ function getAudioContextClass(): typeof AudioContext | null {
   return w.AudioContext || w.webkitAudioContext || null;
 }
 
+function speechAudioConstraints(): MediaStreamConstraints {
+  const audio: SpeechMediaTrackConstraints = {
+    channelCount: { ideal: 1 },
+    echoCancellation: { ideal: true },
+    noiseSuppression: { ideal: true },
+    autoGainControl: { ideal: true },
+    sampleRate: { ideal: 16000 },
+    sampleSize: { ideal: 16 },
+    voiceIsolation: true,
+    googEchoCancellation: true,
+    googNoiseSuppression: true,
+    googHighpassFilter: true,
+    googAutoGainControl: true,
+  };
+  return { audio };
+}
+
+async function optimizeSpeechTrack(stream: MediaStream): Promise<void> {
+  const [track] = stream.getAudioTracks();
+  if (!track) return;
+  track.contentHint = "speech";
+  const constraints = speechAudioConstraints().audio;
+  if (constraints && typeof constraints !== "boolean" && typeof track.applyConstraints === "function") {
+    await track.applyConstraints(constraints).catch(() => {
+      // Some browsers ignore unknown constraints at getUserMedia but reject them here.
+    });
+  }
+}
+
 function floatToInt16Buffer(channel: Float32Array): ArrayBuffer {
   const buf = new Int16Array(channel.length);
   for (let i = 0; i < channel.length; i += 1) {
     buf[i] = Math.min(1, Math.max(-1, channel[i] ?? 0)) * 0x7fff;
   }
   return buf.buffer;
-}
-
-function silence16kHzPcm(inputFrameLength: number, inputSampleRate: number): ArrayBuffer {
-  const ratio = inputSampleRate / 16000;
-  const outLen = Math.max(1, Math.floor(inputFrameLength / ratio));
-  return new Int16Array(outLen).buffer;
 }
 
 /** Deepgram Voice Agent ``audio.input`` is linear16 @ 16 kHz — browser mic is usually 44.1/48 kHz. */
@@ -61,6 +92,9 @@ export class DeepgramVoiceAgentSession {
   private ttsContext: AudioContext | null = null;
   private micSource: MediaStreamAudioSourceNode | null = null;
   private micStream: MediaStream | null = null;
+  private micHighPass: BiquadFilterNode | null = null;
+  private micCompressor: DynamicsCompressorNode | null = null;
+  private micMutedOutput: GainNode | null = null;
   private processor: ScriptProcessorNode | null = null;
   private ttsAnalyser: AnalyserNode | null = null;
   private handlers: VoiceAgentHandlers;
@@ -72,10 +106,8 @@ export class DeepgramVoiceAgentSession {
   private playHead = 0;
   private readonly outputSampleRate = 24000;
   private welcomeTimer: ReturnType<typeof setTimeout> | null = null;
-  private micNoiseFloor = 0.006;
-  private micSpeechFrames = 0;
-  private micSilenceFrames = 0;
-  private micIsSpeaking = false;
+  private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  private lastClientMessageAt = 0;
 
   constructor(handlers: VoiceAgentHandlers) {
     this.handlers = handlers;
@@ -144,87 +176,49 @@ export class DeepgramVoiceAgentSession {
     this.playHead = this.ttsContext.currentTime;
 
     if (params.enableMic) {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: false,
-          sampleRate: 16000,
-        },
-      });
-        this.micStream = stream;
+      const stream = await navigator.mediaDevices.getUserMedia(speechAudioConstraints());
+      await optimizeSpeechTrack(stream);
+      this.micStream = stream;
       this.micContext = new AudioContextClass();
       await this.micContext.resume();
       this.micSource = this.micContext.createMediaStreamSource(stream);
+      this.micHighPass = this.micContext.createBiquadFilter();
+      this.micHighPass.type = "highpass";
+      this.micHighPass.frequency.value = 85;
+      this.micHighPass.Q.value = 0.7;
+      this.micCompressor = this.micContext.createDynamicsCompressor();
+      this.micCompressor.threshold.value = -45;
+      this.micCompressor.knee.value = 24;
+      this.micCompressor.ratio.value = 4;
+      this.micCompressor.attack.value = 0.003;
+      this.micCompressor.release.value = 0.25;
+      this.micMutedOutput = this.micContext.createGain();
+      this.micMutedOutput.gain.value = 0;
       this.processor = this.micContext.createScriptProcessor(4096, 1, 1);
-      this.micSource.connect(this.processor);
-      this.processor.connect(this.micContext.destination);
+      this.micSource.connect(this.micHighPass);
+      this.micHighPass.connect(this.micCompressor);
+      this.micCompressor.connect(this.processor);
+      this.processor.connect(this.micMutedOutput);
+      this.micMutedOutput.connect(this.micContext.destination);
       const inRate = this.micContext.sampleRate;
       this.processor.onaudioprocess = (ev) => {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.settingsApplied) return;
         const ch = ev.inputBuffer.getChannelData(0);
-        const silence = () => {
-          this.ws?.send(silence16kHzPcm(ch.length, inRate));
-        };
-
-        // Keep the stream alive without feeding the assistant's own speaker output back.
-        if (this.scheduledSources.size > 0) {
-          silence();
-          return;
-        }
-
-        const rms = Math.sqrt(ch.reduce((sum, sample) => sum + sample * sample, 0) / ch.length);
-        let peak = 0;
-        for (let i = 0; i < ch.length; i += 1) {
-          peak = Math.max(peak, Math.abs(ch[i] ?? 0));
-        }
-
-        const speechThreshold = Math.max(0.018, this.micNoiseFloor * 3.4);
-        const releaseThreshold = Math.max(0.012, this.micNoiseFloor * 2.2);
-        const hasSpeechEnergy = rms >= speechThreshold && peak >= speechThreshold * 1.7;
-
-        if (!this.micIsSpeaking && !hasSpeechEnergy) {
-          this.micNoiseFloor = this.micNoiseFloor * 0.96 + rms * 0.04;
-          this.micSpeechFrames = 0;
-          silence();
-          return;
-        }
-
-        if (hasSpeechEnergy) {
-          this.micSpeechFrames += 1;
-          this.micSilenceFrames = 0;
-        } else {
-          this.micSilenceFrames += 1;
-        }
-
-        if (!this.micIsSpeaking && this.micSpeechFrames < 3) {
-          silence();
-          return;
-        }
-        this.micIsSpeaking = true;
-
-        if (this.micIsSpeaking && rms < releaseThreshold && this.micSilenceFrames > 12) {
-          this.micIsSpeaking = false;
-          this.micSpeechFrames = 0;
-          this.micSilenceFrames = 0;
-          silence();
-          return;
-        }
-
+        // Deepgram Voice Agent expects continuous binary mic audio after SettingsApplied.
+        // Browser constraints and Web Audio cleanup handle noise/echo without starving ASR.
         const pcm = float32To16kHzPcm(ch, inRate);
-        if (pcm.byteLength) this.ws.send(pcm);
+        if (pcm.byteLength) this.sendBinary(pcm);
       };
     }
 
     await this.ttsContext.resume();
   }
 
-    setMicrophoneEnabled(enabled: boolean) {
-      this.micStream?.getAudioTracks().forEach((track) => {
-        track.enabled = enabled;
-      });
-    }
+  setMicrophoneEnabled(enabled: boolean) {
+    this.micStream?.getAudioTracks().forEach((track) => {
+      track.enabled = enabled;
+    });
+  }
 
   private onMessage = (ev: MessageEvent) => {
     if (ev.data instanceof ArrayBuffer) {
@@ -242,12 +236,13 @@ export class DeepgramVoiceAgentSession {
           clearTimeout(this.welcomeTimer);
           this.welcomeTimer = null;
         }
-        this.ws.send(this.pendingSettingsJson);
+        this.sendText(this.pendingSettingsJson);
         this.pendingSettingsJson = null;
       }
 
       if (data.type === "SettingsApplied") {
         this.settingsApplied = true;
+        this.startKeepAlive();
         this.flushInjects();
       }
       if (data.type === "UserStartedSpeaking") {
@@ -307,7 +302,7 @@ export class DeepgramVoiceAgentSession {
   private flushInjects() {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     for (const t of this.pendingInjects) {
-      this.ws.send(JSON.stringify({ type: "InjectUserMessage", content: t }));
+      this.sendJson({ type: "InjectUserMessage", content: t });
     }
     this.pendingInjects = [];
   }
@@ -319,7 +314,41 @@ export class DeepgramVoiceAgentSession {
       this.pendingInjects.push(t);
       return;
     }
-    this.ws.send(JSON.stringify({ type: "InjectUserMessage", content: t }));
+    this.sendJson({ type: "InjectUserMessage", content: t });
+  }
+
+  private sendBinary(payload: ArrayBuffer) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(payload);
+    this.lastClientMessageAt = Date.now();
+  }
+
+  private sendText(payload: string) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(payload);
+    this.lastClientMessageAt = Date.now();
+  }
+
+  private sendJson(payload: Record<string, unknown>) {
+    this.sendText(JSON.stringify(payload));
+  }
+
+  private startKeepAlive() {
+    this.stopKeepAlive();
+    this.lastClientMessageAt = Date.now();
+    this.keepAliveTimer = setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.settingsApplied) return;
+      if (Date.now() - this.lastClientMessageAt >= 7_500) {
+        this.sendJson({ type: "KeepAlive" });
+      }
+    }, 2_000);
+  }
+
+  private stopKeepAlive() {
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -330,10 +359,8 @@ export class DeepgramVoiceAgentSession {
     this.pendingSettingsJson = null;
     this.settingsApplied = false;
     this.pendingInjects = [];
-    this.micNoiseFloor = 0.006;
-    this.micSpeechFrames = 0;
-    this.micSilenceFrames = 0;
-    this.micIsSpeaking = false;
+    this.lastClientMessageAt = 0;
+    this.stopKeepAlive();
     if (this.ws) {
       try {
         this.ws.removeEventListener("message", this.onMessage);
@@ -352,6 +379,30 @@ export class DeepgramVoiceAgentSession {
       }
       this.processor = null;
     }
+    if (this.micMutedOutput) {
+      try {
+        this.micMutedOutput.disconnect();
+      } catch {
+        /* ignore */
+      }
+      this.micMutedOutput = null;
+    }
+    if (this.micCompressor) {
+      try {
+        this.micCompressor.disconnect();
+      } catch {
+        /* ignore */
+      }
+      this.micCompressor = null;
+    }
+    if (this.micHighPass) {
+      try {
+        this.micHighPass.disconnect();
+      } catch {
+        /* ignore */
+      }
+      this.micHighPass = null;
+    }
     if (this.micSource) {
       try {
         this.micSource.disconnect();
@@ -360,10 +411,10 @@ export class DeepgramVoiceAgentSession {
       }
       this.micSource = null;
     }
-      if (this.micStream) {
-        this.micStream.getTracks().forEach((track) => track.stop());
-        this.micStream = null;
-      }
+    if (this.micStream) {
+      this.micStream.getTracks().forEach((track) => track.stop());
+      this.micStream = null;
+    }
     if (this.micContext) {
       try {
         await this.micContext.close();

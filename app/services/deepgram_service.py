@@ -274,6 +274,7 @@ def build_voice_agent_settings(
                 "prompt": composed,
             },
             "speak": speak,
+            "greeting": config.agent_greeting or "Hi there. How can I help you today?",
         },
     }
 

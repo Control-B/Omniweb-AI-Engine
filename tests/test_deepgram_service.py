@@ -9,6 +9,7 @@ def _agent_config(**overrides):
         "llm_model": None,
         "voice_id": None,
         "agent_name": "Alex",
+        "agent_greeting": "Welcome to Omniweb. How can I help?",
         "business_name": "Omniweb",
         "business_type": None,
         "industry": "general",
@@ -52,6 +53,7 @@ def test_voice_agent_settings_put_listen_language_inside_provider(monkeypatch):
     assert "model" not in settings["agent"]["think"]
     assert settings["agent"]["think"]["provider"]["type"] == "open_ai"
     assert settings["agent"]["think"]["provider"]["model"] == "gpt-4o-mini"
+    assert settings["agent"]["greeting"] == "Welcome to Omniweb. How can I help?"
 
 
 def test_voice_agent_settings_omits_multi_listen_language(monkeypatch):

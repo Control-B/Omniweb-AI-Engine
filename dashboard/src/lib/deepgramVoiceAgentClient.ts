@@ -29,6 +29,12 @@ function floatToInt16Buffer(channel: Float32Array): ArrayBuffer {
   return buf.buffer;
 }
 
+function silence16kHzPcm(inputFrameLength: number, inputSampleRate: number): ArrayBuffer {
+  const ratio = inputSampleRate / 16000;
+  const outLen = Math.max(1, Math.floor(inputFrameLength / ratio));
+  return new Int16Array(outLen).buffer;
+}
+
 /** Deepgram Voice Agent ``audio.input`` is linear16 @ 16 kHz — browser mic is usually 44.1/48 kHz. */
 function float32To16kHzPcm(input: Float32Array, inputSampleRate: number): ArrayBuffer {
   if (!input.length) return new ArrayBuffer(0);
@@ -157,9 +163,17 @@ export class DeepgramVoiceAgentSession {
       const inRate = this.micContext.sampleRate;
       this.processor.onaudioprocess = (ev) => {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.settingsApplied) return;
-        // Avoid feeding the assistant's own speaker output back into the microphone.
-        if (this.scheduledSources.size > 0) return;
         const ch = ev.inputBuffer.getChannelData(0);
+        const silence = () => {
+          this.ws?.send(silence16kHzPcm(ch.length, inRate));
+        };
+
+        // Keep the stream alive without feeding the assistant's own speaker output back.
+        if (this.scheduledSources.size > 0) {
+          silence();
+          return;
+        }
+
         const rms = Math.sqrt(ch.reduce((sum, sample) => sum + sample * sample, 0) / ch.length);
         let peak = 0;
         for (let i = 0; i < ch.length; i += 1) {
@@ -173,6 +187,7 @@ export class DeepgramVoiceAgentSession {
         if (!this.micIsSpeaking && !hasSpeechEnergy) {
           this.micNoiseFloor = this.micNoiseFloor * 0.96 + rms * 0.04;
           this.micSpeechFrames = 0;
+          silence();
           return;
         }
 
@@ -183,13 +198,17 @@ export class DeepgramVoiceAgentSession {
           this.micSilenceFrames += 1;
         }
 
-        if (!this.micIsSpeaking && this.micSpeechFrames < 3) return;
+        if (!this.micIsSpeaking && this.micSpeechFrames < 3) {
+          silence();
+          return;
+        }
         this.micIsSpeaking = true;
 
         if (this.micIsSpeaking && rms < releaseThreshold && this.micSilenceFrames > 12) {
           this.micIsSpeaking = false;
           this.micSpeechFrames = 0;
           this.micSilenceFrames = 0;
+          silence();
           return;
         }
 

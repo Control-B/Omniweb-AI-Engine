@@ -836,7 +836,24 @@
     var voiceSession = null;
     var connecting = false;
     var languages = [];
-    var selectedLang = { code: "en", label: "English" };
+    var configuredDefault = (config.defaultLanguage || "auto").toLowerCase();
+    var configuredSupported = (config.supportedLanguages || []).map(function (c) {
+      return String(c || "").toLowerCase();
+    }).filter(Boolean);
+    var AUTO_LANG = { code: "auto", label: "Auto (detect language)", flag: "🌐", auto: true };
+    var lastTurn = { role: null, content: "", bubble: null, body: null, finalizedAt: 0 };
+
+    function initialSelectedLang() {
+      if (configuredSupported.length === 1) {
+        var only = configuredSupported[0];
+        return { code: only, label: only.toUpperCase(), flag: LANG_FLAGS[only] || "🌐" };
+      }
+      if (configuredDefault === "auto" || configuredDefault === "multi" || configuredSupported.length !== 1) {
+        return AUTO_LANG;
+      }
+      return { code: configuredDefault, label: configuredDefault.toUpperCase(), flag: LANG_FLAGS[configuredDefault] || "🌐" };
+    }
+    var selectedLang = initialSelectedLang();
 
     function setSubtitle(text, color) {
       ui.statusText.textContent = text;
@@ -865,16 +882,6 @@
     function addBubble(role, content) {
       var text = String(content || "").trim();
       if (!text) return;
-      var last = ui.transcript.lastElementChild;
-      if (
-        last &&
-        last.classList &&
-        last.classList.contains("ow-msg") &&
-        last.classList.contains(role === "user" ? "user" : "assistant") &&
-        last.getAttribute("data-content") === text
-      ) {
-        return;
-      }
       removeEmptyState();
       var bubble = el("div", { className: "ow-msg " + (role === "user" ? "user" : "assistant") });
       bubble.setAttribute("data-content", text);
@@ -885,6 +892,46 @@
       bubble.appendChild(body);
       ui.transcript.appendChild(bubble);
       ui.transcript.scrollTop = ui.transcript.scrollHeight;
+      lastTurn = { role: role, content: text, bubble: bubble, body: body, finalizedAt: Date.now() };
+    }
+
+    // Merge consecutive ConversationText events from the same role into one
+    // bubble. Deepgram streams partial → full assistant text in multiple
+    // events, and sometimes re-emits the same final text. Without merging,
+    // every event renders as a separate bubble.
+    function applyTranscript(role, content) {
+      var text = String(content || "").trim();
+      if (!text) return;
+      var SAME_TURN_MS = 8000;
+      var canMerge =
+        lastTurn.bubble &&
+        lastTurn.role === role &&
+        lastTurn.body &&
+        Date.now() - lastTurn.finalizedAt < SAME_TURN_MS;
+      if (canMerge) {
+        var prev = lastTurn.content;
+        if (text === prev) return;
+        if (text.length > prev.length && text.indexOf(prev) === 0) {
+          lastTurn.body.textContent = text;
+          lastTurn.bubble.setAttribute("data-content", text);
+          lastTurn.content = text;
+          lastTurn.finalizedAt = Date.now();
+          ui.transcript.scrollTop = ui.transcript.scrollHeight;
+          return;
+        }
+        if (prev.length > text.length && prev.indexOf(text) === 0) {
+          return;
+        }
+        if (prev.indexOf(text) >= 0) return;
+        var combined = (prev + " " + text).replace(/\s+/g, " ").trim();
+        lastTurn.body.textContent = combined;
+        lastTurn.bubble.setAttribute("data-content", combined);
+        lastTurn.content = combined;
+        lastTurn.finalizedAt = Date.now();
+        ui.transcript.scrollTop = ui.transcript.scrollHeight;
+        return;
+      }
+      addBubble(role, text);
     }
 
     function showError(message) {
@@ -925,9 +972,15 @@
       refreshSubtitle();
     }
 
+    function effectiveLanguageCode() {
+      if (!selectedLang) return "en";
+      if (selectedLang.auto || selectedLang.code === "auto") return "multi";
+      return selectedLang.code || "en";
+    }
+
     function bootstrapVoice() {
       var body = {
-        language: (selectedLang && selectedLang.code) || "en",
+        language: effectiveLanguageCode(),
         widget_key: publicWidgetId,
         public_widget_key: publicWidgetId,
       };
@@ -943,7 +996,7 @@
         .then(function (payload) {
           var session = new VoiceSession({
             onTranscript: function (line) {
-              addBubble(line.role, line.content);
+              applyTranscript(line.role, line.content);
             },
             onError: function (m) { showError(m); },
             onClose: function () {
@@ -1044,13 +1097,13 @@
 
       // Default text-chat path: REST request, no voice playback.
       setActiveMode("text");
-      addBubble("user", text);
+      applyTranscript("user", text);
       showThinking();
       request("/api/widget/chat", {
         publicWidgetId: publicWidgetId,
         sessionId: sessionId,
         message: text,
-        language: (selectedLang && selectedLang.code) || "en",
+        language: effectiveLanguageCode(),
         domain: window.location.hostname,
         pageUrl: window.location.href,
       })
@@ -1061,8 +1114,8 @@
             response.data &&
             response.data.message &&
             response.data.message.content;
-          if (content) addBubble("assistant", content);
-          else addBubble("assistant", "Sorry — I didn't catch that. Could you rephrase?");
+          if (content) applyTranscript("assistant", content);
+          else applyTranscript("assistant", "Sorry — I didn't catch that. Could you rephrase?");
         })
         .catch(function (e) {
           clearThinking();
@@ -1075,11 +1128,34 @@
         .then(function (data) {
           var list = (data && data.languages) || [];
           if (!list.length) return;
-          languages = list;
-          var def = list.find ? list.find(function (l) { return l.code === "en"; }) : null;
-          if (!def) def = list[0];
-          if (def) {
-            selectedLang = def;
+          // Filter to the tenant's configured supported languages so the
+          // picker matches what the dashboard says is enabled.
+          var filtered = list;
+          if (configuredSupported.length) {
+            filtered = list.filter(function (l) {
+              return configuredSupported.indexOf((l.code || "").toLowerCase()) >= 0;
+            });
+            if (!filtered.length) filtered = list;
+          }
+          var allowAuto = configuredSupported.length !== 1;
+          languages = allowAuto ? [AUTO_LANG].concat(filtered) : filtered;
+
+          var initial = null;
+          if (allowAuto && (configuredDefault === "auto" || configuredDefault === "multi")) {
+            initial = AUTO_LANG;
+          } else {
+            for (var i = 0; i < filtered.length; i += 1) {
+              if ((filtered[i].code || "").toLowerCase() === configuredDefault) {
+                initial = filtered[i];
+                break;
+              }
+            }
+            if (!initial) {
+              initial = allowAuto ? AUTO_LANG : filtered[0];
+            }
+          }
+          if (initial) {
+            selectedLang = initial;
             renderLangButton();
           }
         })
@@ -1154,6 +1230,7 @@
 
     // Initial UI state. The voice agent delivers its own configured greeting;
     // pre-rendering it here causes the welcome message to appear twice.
+    renderLangButton();
     refreshSubtitle();
     loadLanguages();
     installPing();

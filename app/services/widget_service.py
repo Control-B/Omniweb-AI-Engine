@@ -186,6 +186,12 @@ def get_widget_settings_payload(client: Client, agent: AgentConfig | None) -> di
     if position not in VALID_WIDGET_POSITIONS:
         position = DEFAULT_WIDGET_POSITION
 
+    raw_languages = list(agent.supported_languages or ["en"]) if agent else ["en"]
+    supported_languages = [
+        str(code).lower().strip() for code in raw_languages if str(code).strip()
+    ] or ["en"]
+    default_language = "auto" if len(supported_languages) > 1 else supported_languages[0]
+
     return {
         "publicWidgetId": public_widget_id,
         "embedCode": build_widget_embed_code(public_widget_id),
@@ -200,6 +206,8 @@ def get_widget_settings_payload(client: Client, agent: AgentConfig | None) -> di
         "voiceEnabled": bool(client.voice_enabled),
         "businessName": (agent.business_name if agent and agent.business_name else client.name) or "Omniweb",
         "agentMode": (agent.agent_mode if agent and agent.agent_mode else "general_lead_gen"),
+        "supportedLanguages": supported_languages,
+        "defaultLanguage": default_language,
     }
 
 
@@ -215,6 +223,8 @@ def build_public_widget_config(client: Client, agent: AgentConfig | None) -> dic
         "primaryColor": settings_payload["widgetPrimaryColor"],
         "position": settings_payload["widgetPosition"],
         "welcomeMessage": settings_payload["widgetWelcomeMessage"],
+        "supportedLanguages": settings_payload["supportedLanguages"],
+        "defaultLanguage": settings_payload["defaultLanguage"],
         "features": {
             "textChat": True,
             "voice": bool(settings_payload["voiceEnabled"]),

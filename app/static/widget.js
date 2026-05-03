@@ -676,7 +676,18 @@
 
   var LANG_FLAGS = {
     en: "🇺🇸", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪", it: "🇮🇹",
-    pt: "🇧🇷", ja: "🇯🇵", ko: "🇰🇷", zh: "🇨🇳", hi: "🇮🇳", multi: "🌐",
+    pt: "🇧🇷", nl: "🇳🇱", sv: "🇸🇪", ro: "🇷🇴", ru: "🇷🇺",
+    uk: "🇺🇦", pl: "🇵🇱", ar: "🇸🇦", tr: "🇹🇷", hi: "🇮🇳",
+    bn: "🇧🇩", zh: "🇨🇳", ja: "🇯🇵", ko: "🇰🇷", id: "🇮🇩",
+    vi: "🇻🇳", tl: "🇵🇭", sw: "🇰🇪", multi: "🌐", auto: "🌐",
+  };
+
+  var LANG_LABELS = {
+    en: "English", es: "Spanish", fr: "French", de: "German", it: "Italian",
+    pt: "Portuguese", nl: "Dutch", sv: "Swedish", ro: "Romanian", ru: "Russian",
+    uk: "Ukrainian", pl: "Polish", ar: "Arabic", tr: "Turkish", hi: "Hindi",
+    bn: "Bengali", zh: "Chinese", ja: "Japanese", ko: "Korean", id: "Indonesian",
+    vi: "Vietnamese", tl: "Filipino", sw: "Swahili",
   };
 
   // Map full BCP-47 browser locales to Omniweb-supported language codes so
@@ -884,9 +895,20 @@
     var sendingText = false;
     var languages = [];
     var configuredDefault = (config.defaultLanguage || "auto").toLowerCase();
-    var configuredSupported = (config.supportedLanguages || []).map(function (c) {
+    var rawConfiguredSupported = (config.supportedLanguages || []).map(function (c) {
       return String(c || "").toLowerCase();
     }).filter(Boolean);
+    // "multi" / "auto" are not real language codes — they signal that the
+    // shop wants automatic detection over the full supported set, so don't
+    // use them to filter the picker.
+    var configuredSupported = rawConfiguredSupported.filter(function (c) {
+      return c !== "multi" && c !== "auto" && c !== "all";
+    });
+    var configuredAutoOnly =
+      rawConfiguredSupported.length === 0 ||
+      rawConfiguredSupported.indexOf("multi") >= 0 ||
+      rawConfiguredSupported.indexOf("auto") >= 0 ||
+      rawConfiguredSupported.indexOf("all") >= 0;
     var detectedBrowserLanguage = detectBrowserLanguage();
     var AUTO_LANG = { code: "auto", label: "Auto (detect language)", flag: "🌐", auto: true };
     var lastTurn = { role: null, content: "", bubble: null, body: null, finalizedAt: 0 };
@@ -894,14 +916,26 @@
     var welcomeShownThisSession = false;
 
     function initialSelectedLang() {
+      // Default to Auto whenever multi/auto is configured or more than one
+      // language is supported. Only lock to a single language when the shop
+      // explicitly enabled exactly one specific language.
+      if (configuredAutoOnly) return AUTO_LANG;
       if (configuredSupported.length === 1) {
         var only = configuredSupported[0];
-        return { code: only, label: only.toUpperCase(), flag: LANG_FLAGS[only] || "🌐" };
+        return {
+          code: only,
+          label: LANG_LABELS[only] || only.toUpperCase(),
+          flag: LANG_FLAGS[only] || "🌐",
+        };
       }
       if (configuredDefault === "auto" || configuredDefault === "multi" || configuredSupported.length !== 1) {
         return AUTO_LANG;
       }
-      return { code: configuredDefault, label: configuredDefault.toUpperCase(), flag: LANG_FLAGS[configuredDefault] || "🌐" };
+      return {
+        code: configuredDefault,
+        label: LANG_LABELS[configuredDefault] || configuredDefault.toUpperCase(),
+        flag: LANG_FLAGS[configuredDefault] || "🌐",
+      };
     }
     var selectedLang = initialSelectedLang();
 
@@ -1279,31 +1313,49 @@
         .then(function (data) {
           var list = (data && data.languages) || [];
           if (!list.length) return;
+
+          // Decorate each language with a label + flag so the picker has a
+          // complete display set even when the API omits them.
+          var decorated = list.map(function (l) {
+            var code = String(l.code || "").toLowerCase();
+            return {
+              code: code,
+              label: l.label || LANG_LABELS[code] || code.toUpperCase(),
+              flag: l.flag || LANG_FLAGS[code] || "🌐",
+            };
+          }).filter(function (l) { return l.code; });
+
           // Filter to the tenant's configured supported languages so the
-          // picker matches what the dashboard says is enabled.
-          var filtered = list;
-          if (configuredSupported.length) {
-            filtered = list.filter(function (l) {
-              return configuredSupported.indexOf((l.code || "").toLowerCase()) >= 0;
+          // picker matches what the dashboard says is enabled. When the shop
+          // chose Auto/multi/all (or hasn't configured anything), show every
+          // available language so visitors can switch freely.
+          var filtered = decorated;
+          if (!configuredAutoOnly && configuredSupported.length) {
+            filtered = decorated.filter(function (l) {
+              return configuredSupported.indexOf(l.code) >= 0;
             });
-            if (!filtered.length) filtered = list;
+            if (!filtered.length) filtered = decorated;
           }
-          var allowAuto = configuredSupported.length !== 1;
+
+          // Always allow Auto unless the shop locked the widget to exactly
+          // one specific language.
+          var lockedToOne = !configuredAutoOnly && configuredSupported.length === 1;
+          var allowAuto = !lockedToOne;
           languages = allowAuto ? [AUTO_LANG].concat(filtered) : filtered;
 
           var initial = null;
-          if (allowAuto && (configuredDefault === "auto" || configuredDefault === "multi")) {
+          if (allowAuto) {
+            // Auto is always the default whenever it's available. The user
+            // can still pick any specific language from the menu.
             initial = AUTO_LANG;
           } else {
             for (var i = 0; i < filtered.length; i += 1) {
-              if ((filtered[i].code || "").toLowerCase() === configuredDefault) {
+              if (filtered[i].code === configuredDefault) {
                 initial = filtered[i];
                 break;
               }
             }
-            if (!initial) {
-              initial = allowAuto ? AUTO_LANG : filtered[0];
-            }
+            if (!initial) initial = filtered[0];
           }
           if (initial) {
             selectedLang = initial;

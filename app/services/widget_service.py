@@ -186,11 +186,24 @@ def get_widget_settings_payload(client: Client, agent: AgentConfig | None) -> di
     if position not in VALID_WIDGET_POSITIONS:
         position = DEFAULT_WIDGET_POSITION
 
-    raw_languages = list(agent.supported_languages or ["en"]) if agent else ["en"]
+    raw_languages = list(agent.supported_languages or ["multi"]) if agent else ["multi"]
     supported_languages = [
         str(code).lower().strip() for code in raw_languages if str(code).strip()
-    ] or ["en"]
-    default_language = "auto" if len(supported_languages) > 1 else supported_languages[0]
+    ] or ["multi"]
+    # "multi" / "auto" / "all" are signal codes meaning "auto-detect across
+    # the full set of supported languages" — surface that to the widget by
+    # setting defaultLanguage="auto" and letting the widget show every
+    # language returned by /api/chat/languages.
+    auto_signals = {"multi", "auto", "all"}
+    has_auto_signal = any(code in auto_signals for code in supported_languages)
+    real_codes = [code for code in supported_languages if code not in auto_signals]
+
+    if has_auto_signal or not real_codes:
+        default_language = "auto"
+    elif len(real_codes) == 1:
+        default_language = real_codes[0]
+    else:
+        default_language = "auto"
 
     return {
         "publicWidgetId": public_widget_id,

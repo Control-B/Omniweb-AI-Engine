@@ -71,7 +71,7 @@ model AgentConfig {
   businessName       String?
   greeting           String   @default("Thank you for visiting today, I am your AI assistant... how can I assist you?")
   systemPrompt       String   @default("")
-  supportedLanguages String[] @default(["en"])
+  supportedLanguages String[] @default(["multi"])
   voiceEnabled       Boolean  @default(true)
   textEnabled        Boolean  @default(true)
   widgetSettings     Json     @default("{}")

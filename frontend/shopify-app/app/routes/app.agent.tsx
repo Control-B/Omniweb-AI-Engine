@@ -23,6 +23,7 @@ import { syncShopToEngine } from "../services/engine.server";
 import { ensureStorefrontAccessToken } from "../services/storefront-token.server";
 
 const LANGUAGE_CHOICES = [
+  { label: "✓ All languages (select every language below)", value: "all" },
   { label: "🌐 Auto (detect language)", value: "multi" },
   { label: "🇺🇸 English", value: "en" },
   { label: "🇪🇸 Spanish", value: "es" },
@@ -50,6 +51,11 @@ const LANGUAGE_CHOICES = [
 ];
 
 const ALL_LANGUAGE_VALUES = LANGUAGE_CHOICES.map((l) => l.value);
+// Real BCP-47-ish codes only — exclude the "all" toggle and the "multi"
+// auto-detect signal so we can compute the "every language is selected" state.
+const REAL_LANGUAGE_VALUES = LANGUAGE_CHOICES
+  .filter((l) => l.value !== "all" && l.value !== "multi")
+  .map((l) => l.value);
 
 const PRIMARY_GOAL_CHOICES = [
   { label: "All goals", value: "all" },
@@ -125,7 +131,7 @@ export async function action({ request }: { request: Request }) {
       include: { subscription: true, knowledgeSources: true },
     });
 
-    const languagesRaw = String(form.get("supportedLanguages") || "en");
+    const languagesRaw = String(form.get("supportedLanguages") || "multi");
     const goalsRaw = String(form.get("primaryGoals") || "all");
 
     // Always save to DB first — this is the authoritative save.
@@ -144,7 +150,7 @@ export async function action({ request }: { request: Request }) {
         businessName: String(form.get("businessName") || ""),
         greeting: String(form.get("greeting") || DEFAULT_GREETING),
         systemPrompt: String(form.get("systemPrompt") || ""),
-        supportedLanguages: ["en"],
+        supportedLanguages: ["multi"],
       },
     });
 
@@ -212,10 +218,17 @@ export default function AgentSettings() {
   const [systemPrompt, setSystemPrompt] = useState(config?.systemPrompt || "");
   const [responseLength, setResponseLength] = useState("moderate");
 
-  const savedLangs = config?.supportedLanguages || ["en"];
-  const [selectedLangs, setSelectedLangs] = useState<string[]>(
-    savedLangs.length === ALL_LANGUAGE_VALUES.length ? ALL_LANGUAGE_VALUES : savedLangs
-  );
+  // Default to Auto-detect for new configs so visitors get language detection
+  // out of the box. If every real language is already saved, surface that as
+  // the "All" + every-language state so the checkbox reflects reality.
+  const savedLangs = config?.supportedLanguages || ["multi"];
+  const everyRealSaved =
+    REAL_LANGUAGE_VALUES.length > 0 &&
+    REAL_LANGUAGE_VALUES.every((v) => savedLangs.includes(v));
+  const initialLangs = everyRealSaved
+    ? ["all", ...REAL_LANGUAGE_VALUES]
+    : savedLangs;
+  const [selectedLangs, setSelectedLangs] = useState<string[]>(initialLangs);
 
   const [selectedGoals, setSelectedGoals] = useState<string[]>(ALL_GOAL_VALUES);
 
@@ -234,13 +247,20 @@ export default function AgentSettings() {
     const hadAll = selectedLangs.includes("all");
     const hasAll = values.includes("all");
     if (!hadAll && hasAll) {
-      setSelectedLangs(ALL_LANGUAGE_VALUES);
+      // Toggling "All" ON checks every real language (keeps Auto if it was
+      // already on, since Auto can coexist with specific languages).
+      const next = ["all", ...REAL_LANGUAGE_VALUES];
+      if (selectedLangs.includes("multi") && !next.includes("multi")) next.push("multi");
+      setSelectedLangs(next);
     } else if (hadAll && !hasAll) {
-      setSelectedLangs([]);
+      // Toggling "All" OFF clears every real language and keeps only Auto if
+      // it was selected, so the picker doesn't accidentally end up empty.
+      const keepAuto = selectedLangs.includes("multi");
+      setSelectedLangs(keepAuto ? ["multi"] : []);
     } else {
       const withoutAll = values.filter((v) => v !== "all");
-      const allSelected = ALL_LANGUAGE_VALUES.filter((v) => v !== "all").every((v) => withoutAll.includes(v));
-      setSelectedLangs(allSelected ? ALL_LANGUAGE_VALUES : withoutAll);
+      const allRealSelected = REAL_LANGUAGE_VALUES.every((v) => withoutAll.includes(v));
+      setSelectedLangs(allRealSelected ? ["all", ...withoutAll] : withoutAll);
     }
   };
 

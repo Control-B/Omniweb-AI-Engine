@@ -38,6 +38,7 @@ def _agent(**overrides):
         "website_domain": None,
         "widget_config": {},
         "enabled_features": {},
+        "supported_languages": ["multi"],
     }
     values.update(overrides)
     return SimpleNamespace(**values)

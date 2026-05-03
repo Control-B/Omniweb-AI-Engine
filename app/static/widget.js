@@ -47,6 +47,12 @@
   var SILENCE_FRAME_SAMPLES = 1600; // 100 ms of linear16 @ 16 kHz
   var KEEPALIVE_IDLE_MS = 7500;
   var WELCOME_TIMEOUT_MS = 12000;
+  var NOISE_GATE_RMS = 0.012;
+  var NOISE_GATE_PEAK = 0.04;
+  var MIN_SPEECH_FRAMES = 2;
+  var SPEECH_HANGOVER_MS = 650;
+  var BARGE_IN_DELAY_MS = 300;
+  var BARGE_IN_SPEECH_WINDOW_MS = 900;
 
   // ---------- helpers --------------------------------------------------------
 
@@ -192,6 +198,20 @@
     return out.buffer;
   }
 
+  function looksLikeSpeech(channel) {
+    if (!channel || !channel.length) return false;
+    var sum = 0;
+    var peak = 0;
+    for (var i = 0; i < channel.length; i += 1) {
+      var v = channel[i] || 0;
+      var a = v < 0 ? -v : v;
+      sum += v * v;
+      if (a > peak) peak = a;
+    }
+    var rms = Math.sqrt(sum / channel.length);
+    return rms >= NOISE_GATE_RMS && peak >= NOISE_GATE_PEAK;
+  }
+
   // ---------- Deepgram voice agent session (vanilla port) --------------------
 
   function VoiceSession(handlers) {
@@ -216,6 +236,10 @@
     this.audioWatchdog = null;
     this.lastClientMessageAt = 0;
     this.lastBinaryAudioAt = 0;
+    this.lastSpeechAudioAt = 0;
+    this.lastSpeechFrameAt = 0;
+    this.speechFrameCount = 0;
+    this.bargeInTimer = null;
   }
 
   VoiceSession.prototype.connect = function (params) {
@@ -307,8 +331,23 @@
                   if (!self.ws || self.ws.readyState !== WebSocket.OPEN || !self.settingsApplied) return;
                   self._ensureMicRunning();
                   var ch = ev.inputBuffer.getChannelData(0);
-                  var pcm = float32To16kHzPcm(ch, inRate);
-                  if (pcm.byteLength) self._sendBinary(pcm);
+                  var now = Date.now();
+                  var speechLike = looksLikeSpeech(ch);
+                  if (speechLike) {
+                    self.speechFrameCount += 1;
+                    self.lastSpeechFrameAt = now;
+                  } else if (now - self.lastSpeechFrameAt > SPEECH_HANGOVER_MS) {
+                    self.speechFrameCount = 0;
+                  }
+                  if (self.speechFrameCount >= MIN_SPEECH_FRAMES || (self.lastSpeechAudioAt && now - self.lastSpeechFrameAt <= SPEECH_HANGOVER_MS)) {
+                    var pcm = float32To16kHzPcm(ch, inRate);
+                    if (pcm.byteLength) {
+                      if (speechLike) self.lastSpeechAudioAt = now;
+                      self._sendBinary(pcm);
+                    }
+                  } else {
+                    self._sendSilence();
+                  }
                 };
                 return self.ttsContext.resume();
               });
@@ -387,11 +426,27 @@
   };
 
   VoiceSession.prototype._stopPlayback = function () {
+    if (this.bargeInTimer) {
+      clearTimeout(this.bargeInTimer);
+      this.bargeInTimer = null;
+    }
     for (var i = 0; i < this.scheduledSources.length; i += 1) {
       try { this.scheduledSources[i].stop(); } catch (_) {}
     }
     this.scheduledSources = [];
     if (this.ttsContext) this.playHead = this.ttsContext.currentTime;
+  };
+
+  VoiceSession.prototype._maybeStopPlaybackForBargeIn = function () {
+    var self = this;
+    if (Date.now() - self.lastSpeechAudioAt > BARGE_IN_SPEECH_WINDOW_MS) return;
+    if (self.bargeInTimer) clearTimeout(self.bargeInTimer);
+    self.bargeInTimer = setTimeout(function () {
+      self.bargeInTimer = null;
+      if (Date.now() - self.lastSpeechAudioAt <= BARGE_IN_SPEECH_WINDOW_MS) {
+        self._stopPlayback();
+      }
+    }, BARGE_IN_DELAY_MS);
   };
 
   VoiceSession.prototype._playPcm = function (buf) {
@@ -439,8 +494,12 @@
       this._startKeepAlive();
       this._startWatchdog();
     }
-    if (data.type === "UserStartedSpeaking") this._stopPlayback();
+    if (data.type === "UserStartedSpeaking") this._maybeStopPlaybackForBargeIn();
     if (data.type === "AgentStartedSpeaking" && this.handlers.onAgentSpeaking) {
+      if (this.bargeInTimer) {
+        clearTimeout(this.bargeInTimer);
+        this.bargeInTimer = null;
+      }
       this.handlers.onAgentSpeaking(true);
     }
     if ((data.type === "AgentAudioDone" || data.type === "AgentStoppedSpeaking") && this.handlers.onAgentSpeaking) {
@@ -479,6 +538,13 @@
     self.settingsApplied = false;
     self.lastClientMessageAt = 0;
     self.lastBinaryAudioAt = 0;
+    self.lastSpeechAudioAt = 0;
+    self.lastSpeechFrameAt = 0;
+    self.speechFrameCount = 0;
+    if (self.bargeInTimer) {
+      clearTimeout(self.bargeInTimer);
+      self.bargeInTimer = null;
+    }
     self._stopKeepAlive();
     self._stopWatchdog();
     if (self.ws) {
@@ -797,10 +863,23 @@
     }
 
     function addBubble(role, content) {
+      var text = String(content || "").trim();
+      if (!text) return;
+      var last = ui.transcript.lastElementChild;
+      if (
+        last &&
+        last.classList &&
+        last.classList.contains("ow-msg") &&
+        last.classList.contains(role === "user" ? "user" : "assistant") &&
+        last.getAttribute("data-content") === text
+      ) {
+        return;
+      }
       removeEmptyState();
       var bubble = el("div", { className: "ow-msg " + (role === "user" ? "user" : "assistant") });
+      bubble.setAttribute("data-content", text);
       var roleTag = el("p", { className: "ow-role", text: role === "user" ? "You" : "Assistant" });
-      var body = el("p", { text: content });
+      var body = el("p", { text: text });
       body.style.margin = "0";
       bubble.appendChild(roleTag);
       bubble.appendChild(body);
@@ -1073,8 +1152,8 @@
       setActiveMode("text");
     }
 
-    // Initial UI state
-    if (config.welcomeMessage) addBubble("assistant", config.welcomeMessage);
+    // Initial UI state. The voice agent delivers its own configured greeting;
+    // pre-rendering it here causes the welcome message to appear twice.
     refreshSubtitle();
     loadLanguages();
     installPing();

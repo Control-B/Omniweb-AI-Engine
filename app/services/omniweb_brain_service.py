@@ -222,7 +222,12 @@ def compose_channel_prompt(config: AgentConfig, channel_type: str) -> str:
     )
     channel_block = {
         "chat": "Channel: website chat. Keep replies concise, helpful, and action-oriented.",
-        "web_voice": "Channel: web voice. Speak naturally, one idea at a time, and allow interruptions.",
+        "web_voice": (
+            "Channel: web voice. Speak naturally, one idea at a time, and allow interruptions. "
+            "Use short, conversational replies that sound spoken rather than written. "
+            "Do not answer random noises, music, TV, side conversations, or unclear fragments. "
+            "Only respond when the visitor clearly addresses you; if the audio is garbled or not directed at you, stay quiet."
+        ),
         "ai_telephony": (
             "Channel: AI telephony over a phone call. This is the same Omniweb agent brain, "
             "but the caller hears spoken responses. Be warm, concise, collect lead details naturally, "

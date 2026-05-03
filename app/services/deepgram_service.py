@@ -254,6 +254,7 @@ def build_voice_agent_settings(
     listen_provider: dict[str, Any] = {
         "type": "deepgram",
         "model": settings.DEEPGRAM_STT_MODEL,
+        "smart_format": True,
     }
     if listen_language != "multi":
         listen_provider["language"] = listen_language
@@ -275,6 +276,7 @@ def build_voice_agent_settings(
                 "provider": {
                     "type": "open_ai",
                     "model": think_model,
+                    "temperature": 0.65,
                 },
                 "prompt": composed,
             },

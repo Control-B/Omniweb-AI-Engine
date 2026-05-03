@@ -1325,42 +1325,35 @@
             };
           }).filter(function (l) { return l.code; });
 
-          // Filter to the tenant's configured supported languages so the
-          // picker matches what the dashboard says is enabled. When the shop
-          // chose Auto/multi/all (or hasn't configured anything), show every
-          // available language so visitors can switch freely.
-          var filtered = decorated;
-          if (!configuredAutoOnly && configuredSupported.length) {
-            filtered = decorated.filter(function (l) {
-              return configuredSupported.indexOf(l.code) >= 0;
-            });
-            if (!filtered.length) filtered = decorated;
-          }
+          // Always expose Auto + every supported language so visitors can
+          // switch freely. The shop's configuredSupported list controls the
+          // *default* selection, not what the picker offers — locking the
+          // picker to a single row leaves the visitor with nothing to pick
+          // and the dropdown looks broken.
+          languages = [AUTO_LANG].concat(decorated);
 
-          // Always allow Auto unless the shop locked the widget to exactly
-          // one specific language.
-          var lockedToOne = !configuredAutoOnly && configuredSupported.length === 1;
-          var allowAuto = !lockedToOne;
-          languages = allowAuto ? [AUTO_LANG].concat(filtered) : filtered;
-
-          var initial = null;
-          if (allowAuto) {
-            // Auto is always the default whenever it's available. The user
-            // can still pick any specific language from the menu.
+          var initial = AUTO_LANG;
+          if (configuredAutoOnly) {
             initial = AUTO_LANG;
-          } else {
-            for (var i = 0; i < filtered.length; i += 1) {
-              if (filtered[i].code === configuredDefault) {
-                initial = filtered[i];
+          } else if (configuredSupported.length === 1) {
+            // Single specific language configured — pre-select it but still
+            // let the visitor switch to any other language from the menu.
+            for (var i = 0; i < decorated.length; i += 1) {
+              if (decorated[i].code === configuredSupported[0]) {
+                initial = decorated[i];
                 break;
               }
             }
-            if (!initial) initial = filtered[0];
+          } else {
+            for (var j = 0; j < decorated.length; j += 1) {
+              if (decorated[j].code === configuredDefault) {
+                initial = decorated[j];
+                break;
+              }
+            }
           }
-          if (initial) {
-            selectedLang = initial;
-            renderLangButton();
-          }
+          selectedLang = initial;
+          renderLangButton();
         })
         .catch(function () { /* keep defaults */ });
     }

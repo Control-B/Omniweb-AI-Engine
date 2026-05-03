@@ -232,31 +232,25 @@ def build_voice_agent_settings(
 
     if settings.ELEVENLABS_API_KEY and not use_aura_direct:
         eleven_voice_id = _elevenlabs_voice_for_config(config)
-        # Do NOT pass language_code — eleven_turbo_v2_5 is natively multilingual and
-        # auto-detects the language from the LLM-generated text.  Specifying a code
-        # can cause ElevenLabs to reject languages it handles fine when left to detect.
-        # voice_settings tuned for natural, conversational delivery (less "reading"-like):
-        #   - lower stability widens prosodic variation so cadence isn't flat,
-        #   - higher style increases expressive characteristics of the voice,
-        #   - speaker_boost keeps the speaker's identity strong across the variation.
-        eleven_voice_settings = {
-            "stability": float(getattr(config, "voice_stability", None) or 0.32),
-            "similarity_boost": float(getattr(config, "voice_similarity_boost", None) or 0.78),
-            "style": 0.55,
-            "use_speaker_boost": True,
-        }
+        # Deepgram's Voice Agent ``agent.speak.provider`` only accepts the fields
+        # documented in the API spec (``type``, ``model_id``, ``language_code``,
+        # ``endpoint``). Sending extra keys like ``voice_settings`` makes Deepgram
+        # reject the Settings frame with "Error parsing client message. Check the
+        # agent.speak field against the API spec." Voice tuning is handled per
+        # voice in the ElevenLabs dashboard instead, since Deepgram owns the
+        # WebSocket BOS message that would otherwise carry voice_settings.
+        # Do NOT pass language_code — eleven_turbo_v2_5 is natively multilingual
+        # and auto-detects the language from the LLM-generated text.  Specifying
+        # a code can cause ElevenLabs to reject languages it handles fine when
+        # left to detect.
         speak: list[dict[str, Any]] | dict[str, Any] = [
             {
                 "provider": {
                     "type": "eleven_labs",
                     "model_id": "eleven_turbo_v2_5",
-                    "voice_settings": eleven_voice_settings,
                 },
                 "endpoint": {
-                    "url": (
-                        f"wss://api.elevenlabs.io/v1/text-to-speech/{eleven_voice_id}/multi-stream-input"
-                        f"?optimize_streaming_latency=2"
-                    ),
+                    "url": f"wss://api.elevenlabs.io/v1/text-to-speech/{eleven_voice_id}/multi-stream-input",
                     "headers": {"xi-api-key": settings.ELEVENLABS_API_KEY},
                 },
             },

@@ -4,14 +4,13 @@ from __future__ import annotations
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.core.auth import get_current_client, is_internal_staff_role
 from app.core.config import get_settings
-from app.core.database import AsyncSessionLocal
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, Client
 from app.services.prompt_engine import compose_system_prompt
@@ -22,6 +21,8 @@ from app.services.saas_workspace_service import (
     client_subscription_allows_widget,
     default_setup_progress,
     get_agent_config_for_client,
+    is_platform_domain,
+    normalize_public_domain,
     normalize_website_input,
     resolve_client_by_widget_key,
 )
@@ -301,14 +302,19 @@ async def patch_setup_progress(
 @public_router.get("/bootstrap")
 async def public_widget_bootstrap(
     widget_key: str,
+    request: Request,
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     client = await resolve_client_by_widget_key(db, widget_key.strip())
     if not client:
         raise HTTPException(404, "Widget not found")
 
+    request_domain = normalize_public_domain(
+        request.headers.get("origin") or request.headers.get("referer")
+    )
+    platform_request = is_platform_domain(request_domain)
     allowed = client_subscription_allows_widget(client)
-    active = client.saas_widget_status == "active" and allowed
+    active = platform_request or (client.saas_widget_status == "active" and allowed)
 
     agent = await get_agent_config_for_client(db, client.id)
     ui = _saas_ui(agent) if agent else {}
@@ -338,6 +344,7 @@ async def public_widget_bootstrap(
 @public_router.post("/chat")
 async def public_widget_chat(
     body: PublicChatIn,
+    request: Request,
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     # TODO: Redis-backed rate limit per widget_key + IP for production scale.
@@ -348,7 +355,13 @@ async def public_widget_chat(
     if not client:
         raise HTTPException(403, "Invalid widget key")
 
-    if client.saas_widget_status != "active" or not client_subscription_allows_widget(client):
+    request_domain = normalize_public_domain(
+        request.headers.get("origin") or request.headers.get("referer")
+    )
+    if (
+        not is_platform_domain(request_domain)
+        and (client.saas_widget_status != "active" or not client_subscription_allows_widget(client))
+    ):
         raise HTTPException(403, "Widget is not active")
 
     agent = await get_agent_config_for_client(db, client.id)

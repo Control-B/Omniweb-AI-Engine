@@ -276,6 +276,14 @@ def normalize_public_domain(value: str | None) -> str:
     return host[4:] if host.startswith("www.") else host
 
 
+def platform_domain() -> str:
+    return normalize_public_domain("https://omniweb.ai")
+
+
+def is_platform_domain(domain: str | None) -> bool:
+    return normalize_public_domain(domain) == platform_domain()
+
+
 async def resolve_client_by_public_domain(db: AsyncSession, domain: str) -> Client | None:
     """Resolve legacy anonymous widget calls by the embedding website domain."""
     normalized = normalize_public_domain(domain)

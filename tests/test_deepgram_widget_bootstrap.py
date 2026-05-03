@@ -148,3 +148,41 @@ async def test_voice_bootstrap_can_resolve_legacy_origin_domain(monkeypatch):
 
     assert response["ok"] is True
     assert response["client_id"] == str(tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_voice_bootstrap_allows_platform_domain_for_stale_billing(monkeypatch):
+    tenant_id = uuid4()
+    client = SimpleNamespace(
+        id=tenant_id,
+        public_widget_key="public-key-123",
+        stripe_subscription_id=None,
+        subscription_status="expired",
+        trial_ends_at=datetime.now(timezone.utc) - timedelta(days=1),
+    )
+    agent = SimpleNamespace(client_id=tenant_id, agent_name="Omniweb AI")
+    db = _TenantDb(client, agent)
+
+    async def grant_temporary_token(ttl_seconds):
+        return {"access_token": "token", "expires_in": ttl_seconds}
+
+    monkeypatch.setattr(
+        deepgram,
+        "settings",
+        SimpleNamespace(deepgram_configured=True, LANDING_PAGE_CLIENT_ID=""),
+    )
+    monkeypatch.setattr(deepgram.deepgram_service, "grant_temporary_token", grant_temporary_token)
+    monkeypatch.setattr(
+        deepgram.deepgram_service,
+        "build_voice_agent_settings",
+        lambda *_args, **_kwargs: {"agent": "settings"},
+    )
+
+    response = await run_voice_agent_bootstrap(
+        VoiceAgentBootstrapRequest(widget_key="public-key-123", language="en"),
+        db,
+        _Request(origin="https://omniweb.ai"),
+    )
+
+    assert response["ok"] is True
+    assert response["client_id"] == str(tenant_id)

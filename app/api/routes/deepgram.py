@@ -17,6 +17,7 @@ from app.models.models import AgentConfig, Call, Client, Transcript
 from app.services import deepgram_service
 from app.services.saas_workspace_service import (
     client_subscription_allows_widget,
+    is_platform_domain,
     normalize_public_domain,
     resolve_client_by_public_domain,
     resolve_client_by_public_identifier,
@@ -67,12 +68,13 @@ async def run_voice_agent_bootstrap(
         or ""
     ).strip()
 
+    origin = request.headers.get("origin") if request else None
+    referer = request.headers.get("referer") if request else None
+    request_domain = normalize_public_domain(origin or referer)
+
     client: Client | None = None
     if not raw_id:
-        origin = request.headers.get("origin") if request else None
-        referer = request.headers.get("referer") if request else None
-        domain = normalize_public_domain(origin or referer)
-        client = await resolve_client_by_public_domain(db, domain)
+        client = await resolve_client_by_public_domain(db, request_domain)
         if not client:
             raise HTTPException(
                 400,
@@ -90,7 +92,11 @@ async def run_voice_agent_bootstrap(
 
     # ── Subscription / trial gate ────────────────────────────────────────────
     tenant = await db.get(Client, config.client_id)
-    if tenant and not client_subscription_allows_widget(tenant):
+    if (
+        tenant
+        and not is_platform_domain(request_domain)
+        and not client_subscription_allows_widget(tenant)
+    ):
         raise HTTPException(
             403,
             detail="Trial expired or subscription inactive. Please subscribe to continue using the widget.",

@@ -14,6 +14,7 @@ from app.models.models import AgentConfig, Client, Engagement
 from app.services.saas_workspace_service import (
     client_subscription_allows_widget,
     get_agent_config_for_client,
+    is_platform_domain,
     normalize_website_input,
 )
 
@@ -244,9 +245,9 @@ async def validate_widget_request(
         raise WidgetAccessError("WIDGET_BLOCKED", "Widget is not available for this account.")
     if not is_domain_allowed(normalized_domain, allowed_domains, primary_domain):
         raise WidgetAccessError("WIDGET_BLOCKED", "Widget is not available for this account.")
-    if not widget_is_enabled(client):
+    if not is_platform_domain(normalized_domain) and not widget_is_enabled(client):
         raise WidgetAccessError("WIDGET_BLOCKED", "Widget is not available for this account.")
-    if not client_subscription_allows_widget(client):
+    if not is_platform_domain(normalized_domain) and not client_subscription_allows_widget(client):
         raise WidgetAccessError("WIDGET_BLOCKED", "Widget is not available for this account.")
 
     return client, agent, normalized_domain, allowed_domains, primary_domain

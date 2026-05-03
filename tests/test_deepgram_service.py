@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from app.services import deepgram_service
 
 SARAH_VOICE_ID = "nf4MCGNSdM0hxM95ZBQR"
+ADAM_VOICE_ID = "pNInz6obpgDQGcFmaJgB"
 LEGACY_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
 
 
@@ -102,6 +103,96 @@ def test_voice_agent_settings_replaces_legacy_elevenlabs_default(monkeypatch):
     speak = settings["agent"]["speak"]
     assert isinstance(speak, list)
     assert f"/text-to-speech/{SARAH_VOICE_ID}/" in speak[0]["endpoint"]["url"]
+
+
+def _settings_with_elevenlabs(**overrides):
+    base = dict(
+        DEEPGRAM_AGENT_MODEL="gpt-4o-mini",
+        DEEPGRAM_STT_MODEL="nova-3",
+        DEEPGRAM_TTS_VOICE="aura-asteria-en",
+        ELEVENLABS_API_KEY="test-key",
+        ELEVENLABS_DEFAULT_VOICE_ID=SARAH_VOICE_ID,
+        ELEVENLABS_MALE_VOICE_ID=ADAM_VOICE_ID,
+    )
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+def test_voice_override_female_uses_elevenlabs_female_with_aura_female_fallback(monkeypatch):
+    monkeypatch.setattr(deepgram_service, "settings", _settings_with_elevenlabs())
+
+    settings = deepgram_service.build_voice_agent_settings(
+        _agent_config(),
+        language="en",
+        voice_override="female",
+    )
+    speak = settings["agent"]["speak"]
+
+    assert isinstance(speak, list) and len(speak) == 2
+    eleven = speak[0]
+    assert eleven["provider"]["type"] == "eleven_labs"
+    assert f"/text-to-speech/{SARAH_VOICE_ID}/" in eleven["endpoint"]["url"]
+
+    fallback = speak[1]
+    assert fallback["provider"]["type"] == "deepgram"
+    assert fallback["provider"]["model"] == deepgram_service.DEEPGRAM_AURA_DEFAULT_FEMALE
+
+
+def test_voice_override_male_uses_elevenlabs_male_with_aura_male_fallback(monkeypatch):
+    monkeypatch.setattr(deepgram_service, "settings", _settings_with_elevenlabs())
+
+    settings = deepgram_service.build_voice_agent_settings(
+        _agent_config(),
+        language="en",
+        voice_override="male",
+    )
+    speak = settings["agent"]["speak"]
+
+    assert isinstance(speak, list) and len(speak) == 2
+    eleven = speak[0]
+    assert eleven["provider"]["type"] == "eleven_labs"
+    assert f"/text-to-speech/{ADAM_VOICE_ID}/" in eleven["endpoint"]["url"]
+
+    fallback = speak[1]
+    assert fallback["provider"]["type"] == "deepgram"
+    assert fallback["provider"]["model"] == deepgram_service.DEEPGRAM_AURA_DEFAULT_MALE
+
+
+def test_voice_override_aura_male_model_is_treated_as_male(monkeypatch):
+    """Older clients that send a specific Aura model id (e.g. ``aura-2-orion-en``)
+    should still resolve to the male voice path."""
+    monkeypatch.setattr(deepgram_service, "settings", _settings_with_elevenlabs())
+
+    settings = deepgram_service.build_voice_agent_settings(
+        _agent_config(),
+        language="en",
+        voice_override="aura-2-orion-en",
+    )
+    speak = settings["agent"]["speak"]
+
+    assert f"/text-to-speech/{ADAM_VOICE_ID}/" in speak[0]["endpoint"]["url"]
+    assert speak[1]["provider"]["model"] == deepgram_service.DEEPGRAM_AURA_DEFAULT_MALE
+
+
+def test_voice_override_male_without_elevenlabs_falls_back_to_aura_male(monkeypatch):
+    monkeypatch.setattr(
+        deepgram_service,
+        "settings",
+        _settings_with_elevenlabs(ELEVENLABS_API_KEY=""),
+    )
+
+    settings = deepgram_service.build_voice_agent_settings(
+        _agent_config(),
+        language="en",
+        voice_override="male",
+    )
+    speak = settings["agent"]["speak"]
+
+    # No ElevenLabs key — speak collapses to a single Aura provider, but the
+    # gender must still be honored so the caller hears a male voice.
+    assert isinstance(speak, dict)
+    assert speak["provider"]["type"] == "deepgram"
+    assert speak["provider"]["model"] == deepgram_service.DEEPGRAM_AURA_DEFAULT_MALE
 
 
 def test_voice_agent_speak_only_uses_deepgram_spec_fields(monkeypatch):

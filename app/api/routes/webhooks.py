@@ -9,7 +9,7 @@ Clients can:
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, HttpUrl
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.core.auth import get_current_client
 from app.core.logging import get_logger
-from app.models.models import Client, WebhookEvent
+from app.models.models import AppointmentRequest, Client, WebhookEvent
 from app.services.webhook_service import test_webhook
 
 logger = get_logger(__name__)
@@ -59,6 +59,67 @@ class WebhookSecretOut(BaseModel):
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
+
+@router.post("/calcom")
+async def calcom_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Receive Cal.com DIY booking webhooks.
+
+    v1 is deliberately permissive for development: if no webhook secret is
+    configured we safely parse/log and try to reconcile by attendee email or
+    conversation id. Signature verification can be tightened when Cal.com is
+    wired to send signed production events.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {"raw": str(payload)[:1000]}
+
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    attendee = data.get("attendee") if isinstance(data.get("attendee"), dict) else {}
+    email = (
+        data.get("attendeeEmail")
+        or attendee.get("email")
+        or data.get("email")
+        or ""
+    )
+    conversation_id = (
+        data.get("conversationId")
+        or (data.get("metadata") or {}).get("conversation_id")
+        or (data.get("metadata") or {}).get("conversationId")
+        or ""
+    )
+
+    appointment = None
+    if email:
+        result = await db.execute(
+            select(AppointmentRequest)
+            .where(AppointmentRequest.visitor_email == str(email).lower())
+            .order_by(desc(AppointmentRequest.created_at))
+        )
+        appointment = result.scalar_one_or_none()
+    if not appointment and conversation_id:
+        result = await db.execute(
+            select(AppointmentRequest)
+            .where(AppointmentRequest.conversation_id == str(conversation_id)[:120])
+            .order_by(desc(AppointmentRequest.created_at))
+        )
+        appointment = result.scalar_one_or_none()
+
+    if appointment:
+        appointment.status = "booked"
+        metadata = dict(appointment.metadata_json or {})
+        metadata["calcomWebhook"] = payload
+        appointment.metadata_json = metadata
+        await db.commit()
+    else:
+        await db.rollback()
+
+    return {"ok": True, "matched": bool(appointment)}
 
 @router.get("/config", response_model=WebhookConfigOut)
 async def get_webhook_config(

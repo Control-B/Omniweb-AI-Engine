@@ -18,7 +18,37 @@ settings = get_settings()
 DEEPGRAM_GRANT_URL = "https://api.deepgram.com/v1/auth/grant"
 DEEPGRAM_AGENT_WS_URL = "wss://agent.deepgram.com/v1/agent/converse"
 SARAH_ELEVENLABS_VOICE_ID = "nf4MCGNSdM0hxM95ZBQR"
+ADAM_ELEVENLABS_VOICE_ID = "pNInz6obpgDQGcFmaJgB"
 LEGACY_DEFAULT_ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
+
+# Aura-2 voice gender lookup. Used to map a specific Aura model name in
+# ``voice_override`` to the matching gender so the test console works whether
+# it sends ``female``/``male`` keywords or a real Aura model id.
+DEEPGRAM_AURA_FEMALE_VOICES = {
+    "aura-2-amalthea-en", "aura-2-andromeda-en", "aura-2-asteria-en",
+    "aura-2-athena-en", "aura-2-aurora-en", "aura-2-callista-en",
+    "aura-2-cora-en", "aura-2-cordelia-en", "aura-2-delia-en",
+    "aura-2-electra-en", "aura-2-harmonia-en", "aura-2-helena-en",
+    "aura-2-hera-en", "aura-2-iris-en", "aura-2-janus-en",
+    "aura-2-juno-en", "aura-2-luna-en", "aura-2-minerva-en",
+    "aura-2-ophelia-en", "aura-2-pandora-en", "aura-2-phoebe-en",
+    "aura-2-selene-en", "aura-2-thalia-en", "aura-2-vesta-en",
+    "aura-asteria-en", "aura-athena-en", "aura-hera-en",
+    "aura-luna-en", "aura-stella-en",
+}
+DEEPGRAM_AURA_MALE_VOICES = {
+    "aura-2-apollo-en", "aura-2-arcas-en", "aura-2-aries-en",
+    "aura-2-atlas-en", "aura-2-cronos-en", "aura-2-draco-en",
+    "aura-2-helios-en", "aura-2-hermes-en", "aura-2-hyperion-en",
+    "aura-2-jupiter-en", "aura-2-mars-en", "aura-2-neptune-en",
+    "aura-2-odysseus-en", "aura-2-orion-en", "aura-2-orpheus-en",
+    "aura-2-perseus-en", "aura-2-pluto-en", "aura-2-saturn-en",
+    "aura-2-theo-en", "aura-2-uranus-en", "aura-2-zeus-en",
+    "aura-arcas-en", "aura-orion-en", "aura-perseus-en",
+    "aura-zeus-en",
+}
+DEEPGRAM_AURA_DEFAULT_FEMALE = "aura-2-asteria-en"
+DEEPGRAM_AURA_DEFAULT_MALE = "aura-2-orion-en"
 SUPPORTED_VOICE_LANGUAGE_CODES = {
     "en", "es", "fr", "de", "it", "pt", "nl", "sv", "ro",
     "ru", "uk", "pl",
@@ -178,6 +208,44 @@ def _elevenlabs_voice_for_config(config: AgentConfig) -> str:
     return SARAH_ELEVENLABS_VOICE_ID
 
 
+def _female_elevenlabs_voice_id() -> str:
+    """ElevenLabs female voice — configured default falls back to Sarah."""
+    configured = (settings.ELEVENLABS_DEFAULT_VOICE_ID or "").strip()
+    if configured and configured != LEGACY_DEFAULT_ELEVENLABS_VOICE_ID:
+        return configured
+    return SARAH_ELEVENLABS_VOICE_ID
+
+
+def _male_elevenlabs_voice_id() -> str:
+    """ElevenLabs male voice — configured override falls back to Adam."""
+    configured = (getattr(settings, "ELEVENLABS_MALE_VOICE_ID", "") or "").strip()
+    return configured or ADAM_ELEVENLABS_VOICE_ID
+
+
+def _voice_gender_from_override(voice_override: str | None) -> str | None:
+    """Map a ``voice_override`` string to ``"female"``/``"male"``/``None``.
+
+    Accepts both semantic keywords ("female", "male") sent by the test
+    console and explicit Aura model names so older clients keep working.
+    Returns ``None`` for unknown values so the caller falls through to the
+    tenant's configured voice.
+    """
+    if not voice_override:
+        return None
+    raw = voice_override.strip().lower()
+    if not raw:
+        return None
+    if raw in {"female", "f", "woman"}:
+        return "female"
+    if raw in {"male", "m", "man"}:
+        return "male"
+    if raw in DEEPGRAM_AURA_FEMALE_VOICES:
+        return "female"
+    if raw in DEEPGRAM_AURA_MALE_VOICES:
+        return "male"
+    return None
+
+
 def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> str:
     supported = [str(item).lower().strip() for item in (config.supported_languages or ["en"])]
     if requested:
@@ -217,12 +285,28 @@ def build_voice_agent_settings(
         # Unsupported STT code (sw, kri, su…) — use multi for best-effort recognition
         listen_language = "multi"
 
-    # If a specific Deepgram Aura voice is requested (e.g. male from test console),
-    # use Deepgram directly and skip ElevenLabs so the caller hears the correct voice.
-    requested_aura = (voice_override or "").strip()
-    use_aura_direct = bool(requested_aura and "aura" in requested_aura.lower())
+    # The widget can pin the spoken voice to a gender via ``voice_override``
+    # (sent as ``female``/``male`` from the test console, or as a specific Aura
+    # model name from older clients). When a gender is requested we line up an
+    # ElevenLabs voice of that gender as the primary TTS and a matching Aura
+    # voice as the deterministic fallback so the caller always hears the
+    # gender they picked, even if ElevenLabs is unavailable.
+    requested_gender = _voice_gender_from_override(voice_override)
+    if requested_gender == "female":
+        eleven_voice_id_for_gender = _female_elevenlabs_voice_id()
+        deepgram_aura_for_gender = DEEPGRAM_AURA_DEFAULT_FEMALE
+    elif requested_gender == "male":
+        eleven_voice_id_for_gender = _male_elevenlabs_voice_id()
+        deepgram_aura_for_gender = DEEPGRAM_AURA_DEFAULT_MALE
+    else:
+        eleven_voice_id_for_gender = None
+        deepgram_aura_for_gender = None
 
-    deepgram_model = requested_aura if use_aura_direct else _deepgram_tts_for_language(language_tag, config)
+    deepgram_model = (
+        deepgram_aura_for_gender
+        if deepgram_aura_for_gender
+        else _deepgram_tts_for_language(language_tag, config)
+    )
     deepgram_speak: dict[str, Any] = {
         "provider": {
             "type": "deepgram",
@@ -230,8 +314,8 @@ def build_voice_agent_settings(
         }
     }
 
-    if settings.ELEVENLABS_API_KEY and not use_aura_direct:
-        eleven_voice_id = _elevenlabs_voice_for_config(config)
+    if settings.ELEVENLABS_API_KEY:
+        eleven_voice_id = eleven_voice_id_for_gender or _elevenlabs_voice_for_config(config)
         # Deepgram's Voice Agent ``agent.speak.provider`` only accepts the fields
         # documented in the API spec (``type``, ``model_id``, ``language_code``,
         # ``endpoint``). Sending extra keys like ``voice_settings`` makes Deepgram

@@ -12,6 +12,15 @@ from app.api.deps import get_session
 from app.core.auth import get_current_client, is_internal_staff_role
 from app.models.models import Client
 from app.services.omniweb_brain_service import BrainRequest, OmniwebBrainService
+from app.services.assistant_scheduling_service import (
+    SchedulePayload,
+    create_schedule_request,
+    has_scheduling_intent,
+    merge_schedule_state,
+    missing_fields_prompt,
+    missing_schedule_fields,
+    send_schedule_emails,
+)
 from app.services.saas_workspace_service import get_agent_config_for_client
 from app.services.widget_service import (
     SHOPIFY_WIDGET_SCRIPT_PATH,
@@ -323,6 +332,85 @@ async def post_widget_chat(
     else:
         effective_language = selected_language or detected_language or None
 
+    metadata = dict(engagement.metadata_json or {})
+    scheduling_state = metadata.get("scheduling") if isinstance(metadata.get("scheduling"), dict) else {}
+    scheduling_active = bool(scheduling_state.get("active")) or has_scheduling_intent(body.message)
+    if scheduling_active:
+        scheduling_state = merge_schedule_state(
+            scheduling_state,
+            body.message,
+            source_url=body.pageUrl,
+        )
+        scheduling_state["active"] = True
+        missing = missing_schedule_fields(scheduling_state)
+        actions: list[dict[str, Any]] = []
+        if missing:
+            reply = missing_fields_prompt(missing, language=effective_language)
+        else:
+            try:
+                appointment, schedule_client, schedule_agent, duplicate = await create_schedule_request(
+                    db,
+                    SchedulePayload(
+                        tenant_id=client.id,
+                        conversation_id=body.sessionId,
+                        visitor_name=str(scheduling_state.get("visitorName") or ""),
+                        visitor_email=str(scheduling_state.get("visitorEmail") or ""),
+                        visitor_phone=scheduling_state.get("visitorPhone"),
+                        requested_service=scheduling_state.get("requestedService"),
+                        preferred_date=scheduling_state.get("preferredDate"),
+                        preferred_time=scheduling_state.get("preferredTime"),
+                        notes=scheduling_state.get("notes"),
+                        source_url=body.pageUrl,
+                    ),
+                )
+                email_status = {"visitorConfirmation": False, "businessNotification": False}
+                if not duplicate:
+                    email_status = await send_schedule_emails(
+                        db,
+                        appointment=appointment,
+                        client=schedule_client,
+                        agent=schedule_agent,
+                    )
+                scheduling_state["active"] = False
+                scheduling_state["appointmentRequestId"] = str(appointment.id)
+                scheduling_state["bookingUrl"] = appointment.booking_url
+                reply = "I found the booking page. You can choose the best available time here."
+                actions.append(
+                    {
+                        "type": "schedule_appointment",
+                        "payload": {
+                            "bookingUrl": appointment.booking_url,
+                            "appointmentRequestId": str(appointment.id),
+                            "emailStatus": email_status,
+                        },
+                    }
+                )
+                append_widget_event(
+                    engagement,
+                    event_type="lead_captured",
+                    domain=normalized_domain,
+                    page_url=body.pageUrl,
+                    metadata={"source": "schedule_appointment", "appointmentRequestId": str(appointment.id)},
+                )
+            except Exception:
+                reply = "I could not open the booking page. Please leave your email and someone will contact you."
+        metadata["scheduling"] = scheduling_state
+        engagement.metadata_json = metadata
+        append_widget_transcript(engagement, "Assistant", reply)
+        await db.commit()
+        return JSONResponse(
+            content=success_response(
+                {
+                    "sessionId": body.sessionId,
+                    "message": {
+                        "role": "assistant",
+                        "content": reply,
+                    },
+                    "actions": actions,
+                }
+            )
+        )
+
     try:
         brain_response = await OmniwebBrainService(db).run(
             BrainRequest(
@@ -355,6 +443,7 @@ async def post_widget_chat(
                     "role": "assistant",
                     "content": reply,
                 },
+                "actions": brain_response.actions if "brain_response" in locals() else [],
             }
         )
     )

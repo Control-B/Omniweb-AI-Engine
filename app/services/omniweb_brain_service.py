@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, TenantEscalationRule
+from app.services.assistant_scheduling_service import has_scheduling_intent
 from app.services.prompt_engine import compose_system_prompt
 
 logger = get_logger(__name__)
@@ -124,6 +125,18 @@ class OmniwebBrainService:
         actions: list[dict[str, Any]] = []
         if escalation.get("triggered"):
             actions.append({"type": "escalate", "payload": escalation})
+        if has_scheduling_intent(message):
+            actions.append(
+                {
+                    "type": "schedule_appointment",
+                    "payload": {
+                        "requiredFields": ["visitorName", "visitorEmail"],
+                        "optionalFields": ["visitorPhone", "requestedService", "preferredDate", "preferredTime", "notes"],
+                    },
+                }
+            )
+            actions.append({"type": "send_email_notification", "payload": {"trigger": "schedule_appointment"}})
+            actions.append({"type": "send_lead_summary", "payload": {"trigger": "schedule_appointment"}})
 
         return BrainResponse(
             response_text=response_text,
@@ -289,6 +302,9 @@ def compose_channel_prompt(
         "Never reply with vague filler like 'Tell me one quick detail about what you need' or 'How can I help you'.\n"
         "2. Recommend the most relevant service, product, or next step for this business when it fits.\n"
         "3. Ask ONE specific qualifying question only when you genuinely need more information to help.\n"
+        "If the visitor wants to book, schedule, get a call, set up a demo, or have someone contact them: briefly explain the benefit, "
+        "then ask only for missing details needed to schedule. The backend scheduling tool needs name and email; phone, service, date, "
+        "time, and notes are helpful but optional. Do not invent a booking link and do not send duplicate scheduling responses.\n"
         "Keep replies under 3 sentences, conversational, and conversion-focused. Match the visitor's language."
     )
 

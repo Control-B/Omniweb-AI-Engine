@@ -22,6 +22,12 @@ router = APIRouter(prefix="/scheduling", tags=["scheduling"])
 class SchedulingConfigPatch(BaseModel):
     calcom_user_id: str | None = None
     default_event_type_id: str | None = None
+    booking_url: str | None = None
+    notification_email: str | None = None
+    resend_from_email: str | None = None
+    resend_reply_to_email: str | None = None
+    appointment_instructions: str | None = None
+    scheduling_behavior: str | None = Field(None, pattern="^(booking_link_only|collect_request_then_link|collect_request_then_notify)$")
     event_type_ids: list[str] | None = None
     booking_mode: str | None = Field(None, pattern="^(manual|ai-assisted|ai auto-book)$")
     status: str | None = Field(None, pattern="^(connected|disabled|error)$")

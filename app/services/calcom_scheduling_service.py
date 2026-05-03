@@ -96,8 +96,12 @@ class CalcomSchedulingService:
 
         config = TenantSchedulingConfig(
             tenant_id=tenant_id,
-            default_event_type_id=settings.CALCOM_DEFAULT_EVENT_TYPE_ID or None,
-            event_type_ids=([settings.CALCOM_DEFAULT_EVENT_TYPE_ID] if settings.CALCOM_DEFAULT_EVENT_TYPE_ID else []),
+            default_event_type_id=(settings.CALCOM_EVENT_TYPE_ID or settings.CALCOM_DEFAULT_EVENT_TYPE_ID or None),
+            event_type_ids=(
+                [settings.CALCOM_EVENT_TYPE_ID or settings.CALCOM_DEFAULT_EVENT_TYPE_ID]
+                if (settings.CALCOM_EVENT_TYPE_ID or settings.CALCOM_DEFAULT_EVENT_TYPE_ID)
+                else []
+            ),
             status="disabled",
         )
         self.db.add(config)
@@ -121,6 +125,25 @@ class CalcomSchedulingService:
             config.booking_mode = payload["booking_mode"]
         if "status" in payload and payload["status"] in {"connected", "disabled", "error"}:
             config.status = payload["status"]
+        settings_json = dict(config.settings_json or {})
+        settings_key_map = {
+            "booking_url": "bookingUrl",
+            "notification_email": "notificationEmail",
+            "resend_from_email": "resendFromEmail",
+            "resend_reply_to_email": "resendReplyToEmail",
+            "appointment_instructions": "appointmentInstructions",
+            "scheduling_behavior": "schedulingBehavior",
+        }
+        for payload_key, settings_key in settings_key_map.items():
+            if payload_key in payload:
+                value = payload.get(payload_key)
+                if isinstance(value, str):
+                    value = value.strip()
+                if value:
+                    settings_json[settings_key] = value
+                else:
+                    settings_json.pop(settings_key, None)
+        config.settings_json = settings_json
 
         await self.db.flush()
         return await self.status(tenant_id, refresh_health=False)
@@ -143,6 +166,7 @@ class CalcomSchedulingService:
                 "eventTypeIds": config.event_type_ids or [],
                 "bookingMode": config.booking_mode,
                 "status": config.status,
+                "settings": config.settings_json or {},
             },
             "internalUrlConfigured": bool(self.base_url),
             "eventTypes": event_types,
@@ -377,14 +401,14 @@ class CalcomSchedulingService:
 
     def _allowed_event_type_ids(self, config: TenantSchedulingConfig) -> list[str]:
         allowed = [_coerce_event_type_id(item) for item in (config.event_type_ids or [])]
-        default_id = _coerce_event_type_id(config.default_event_type_id or settings.CALCOM_DEFAULT_EVENT_TYPE_ID)
+        default_id = _coerce_event_type_id(config.default_event_type_id or settings.CALCOM_EVENT_TYPE_ID or settings.CALCOM_DEFAULT_EVENT_TYPE_ID)
         if default_id and default_id not in allowed:
             allowed.append(default_id)
         return [item for item in allowed if item]
 
     def _resolve_event_type_id(self, config: TenantSchedulingConfig, event_type_id: str | int | None) -> str:
         requested = _coerce_event_type_id(event_type_id)
-        default_id = _coerce_event_type_id(config.default_event_type_id or settings.CALCOM_DEFAULT_EVENT_TYPE_ID)
+        default_id = _coerce_event_type_id(config.default_event_type_id or settings.CALCOM_EVENT_TYPE_ID or settings.CALCOM_DEFAULT_EVENT_TYPE_ID)
         resolved = requested or default_id
         if not resolved:
             raise SchedulingServiceError(

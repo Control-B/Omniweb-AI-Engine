@@ -122,6 +122,8 @@ class Client(Base):
     escalation_rules: Mapped[list["TenantEscalationRule"]] = relationship(back_populates="client")
     scheduling_config: Mapped["TenantSchedulingConfig | None"] = relationship(back_populates="client", uselist=False)
     scheduling_bookings: Mapped[list["SchedulingBooking"]] = relationship(back_populates="client")
+    appointment_requests: Mapped[list["AppointmentRequest"]] = relationship(back_populates="client")
+    email_logs: Mapped[list["EmailLog"]] = relationship(back_populates="client")
 
     __table_args__ = (
         Index("ix_clients_email", "email"),
@@ -561,6 +563,66 @@ class SchedulingBooking(Base):
         Index("ix_scheduling_bookings_created_at", "created_at"),
         Index("ix_scheduling_bookings_status", "status"),
         UniqueConstraint("tenant_id", "calcom_booking_uid", name="uq_scheduling_bookings_tenant_uid"),
+    )
+
+
+class AppointmentRequest(Base):
+    """Website assistant appointment intent/request before Cal.com booking completion."""
+    __tablename__ = "appointment_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    conversation_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    visitor_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    visitor_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    visitor_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    requested_service: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    preferred_date: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    preferred_time: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    booking_url: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="appointment_requests")
+
+    __table_args__ = (
+        Index("ix_appointment_requests_tenant_id", "tenant_id"),
+        Index("ix_appointment_requests_conversation_id", "conversation_id"),
+        Index("ix_appointment_requests_visitor_email", "visitor_email"),
+        Index("ix_appointment_requests_status", "status"),
+        Index("ix_appointment_requests_created_at", "created_at"),
+    )
+
+
+class EmailLog(Base):
+    """Transactional email delivery audit log."""
+    __tablename__ = "email_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    conversation_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    recipient: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    type: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), default="resend", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    client: Mapped["Client"] = relationship(back_populates="email_logs")
+
+    __table_args__ = (
+        Index("ix_email_logs_tenant_id", "tenant_id"),
+        Index("ix_email_logs_conversation_id", "conversation_id"),
+        Index("ix_email_logs_recipient", "recipient"),
+        Index("ix_email_logs_type", "type"),
+        Index("ix_email_logs_status", "status"),
+        Index("ix_email_logs_created_at", "created_at"),
     )
 
 

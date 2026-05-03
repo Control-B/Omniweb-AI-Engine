@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"  # legacy alias
     APP_BASE_URL: str = DEFAULT_ENGINE_BASE_URL
     ENGINE_BASE_URL: str = DEFAULT_ENGINE_BASE_URL
+    APP_PUBLIC_URL: str = DEFAULT_PLATFORM_URL
+    BACKEND_API_URL: str = DEFAULT_ENGINE_BASE_URL
     PUBLIC_WIDGET_BASE_URL: str = ""
     PLATFORM_URL: str = DEFAULT_PLATFORM_URL
     NON_CANONICAL_ENGINE_HOSTS: list[str] = [
@@ -59,7 +61,10 @@ class Settings(BaseSettings):
 
     # ── ElevenLabs (Voice + Text + KB engine) ────────────────
     ELEVENLABS_API_KEY: str = ""
-    ELEVENLABS_DEFAULT_VOICE_ID: str = "nf4MCGNSdM0hxM95ZBQR"  # Sarah
+    ELEVENLABS_DEFAULT_VOICE_ID: str = "nf4MCGNSdM0hxM95ZBQR"  # Sarah (female)
+    # Adam — natural-sounding male voice baked into every ElevenLabs account.
+    # Override per-deployment if you'd rather use a different male voice ID.
+    ELEVENLABS_MALE_VOICE_ID: str = "pNInz6obpgDQGcFmaJgB"
     ELEVENLABS_DEFAULT_LANGUAGE: str = "en"
     ELEVENLABS_VOICE_ID_AR: str | None = None
     ELEVENLABS_VOICE_ID_DE: str | None = None
@@ -98,7 +103,10 @@ class Settings(BaseSettings):
 
     # ── Cal.diy / self-hosted Cal.com (internal scheduling engine) ──
     CALCOM_INTERNAL_URL: str = "http://calcom:3000/api/v2"
+    CALCOM_BASE_URL: str = "https://cal.com"
     CALCOM_DEFAULT_EVENT_TYPE_ID: str = ""
+    CALCOM_EVENT_TYPE_ID: str = ""
+    CALCOM_BOOKING_URL: str = ""
     CALCOM_INTERNAL_SERVICE_HEADER: str = "omniweb"
 
     # ── OpenAI (LLM for post-call processing) ────────────────
@@ -122,6 +130,8 @@ class Settings(BaseSettings):
     # ── Email ────────────────────────────────────────────────
     # Option 1: Resend (recommended — just set RESEND_API_KEY)
     RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "Omniweb AI <noreply@omniweb.ai>"
+    RESEND_REPLY_TO_EMAIL: str = ""
     # Option 2: SMTP (set SMTP_HOST + credentials)
     SMTP_HOST: str = ""
     SMTP_PORT: str = "587"

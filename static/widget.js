@@ -622,6 +622,10 @@
     ".ow-msg.user .ow-role { color: rgba(255,255,255,.75); }",
     ".ow-msg.assistant { background: rgba(139,92,246,.08); border: 1px solid rgba(139,92,246,.18); color: #ede9fe; margin-right: 32px; align-self: flex-start; max-width: 90%; }",
     ".ow-msg.assistant .ow-role { color: #a78bfa; }",
+    ".ow-booking-action { align-self: flex-start; max-width: 100%; margin: -2px 32px 4px 0; animation: ow-msg-in .22s ease-out; }",
+    ".ow-booking-btn { display: inline-flex; width: auto; max-width: 100%; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 12px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #a855f7 100%); color: #fff; padding: 11px 14px; font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; box-shadow: 0 8px 22px rgba(139,92,246,.35); }",
+    ".ow-booking-btn:hover { filter: brightness(1.08); }",
+    "@media (max-width: 480px) { .ow-booking-action { align-self: stretch; margin-right: 0; } .ow-booking-btn { width: 100%; } }",
     ".ow-typing { display: inline-flex; gap: 4px; align-items: center; padding: 2px 0; }",
     ".ow-typing span { width: 6px; height: 6px; border-radius: 9999px; background: #a78bfa; animation: ow-dot 1.2s ease-in-out infinite; }",
     ".ow-typing span:nth-child(2) { animation-delay: .15s; }",
@@ -979,6 +983,28 @@
       lastTurn = { role: role, content: text, bubble: bubble, body: body, finalizedAt: Date.now() };
     }
 
+    function addBookingAction(bookingUrl) {
+      var url = String(bookingUrl || "").trim();
+      if (!url) return;
+      removeEmptyState();
+      var wrap = el("div", { className: "ow-booking-action" });
+      var btn = el("button", {
+        className: "ow-booking-btn",
+        text: "Book Appointment",
+        attrs: { type: "button" },
+      });
+      btn.addEventListener("click", function () {
+        try {
+          window.open(url, "_blank", "noopener,noreferrer");
+        } catch (_) {
+          window.location.href = url;
+        }
+      });
+      wrap.appendChild(btn);
+      ui.transcript.appendChild(wrap);
+      ui.transcript.scrollTop = ui.transcript.scrollHeight;
+    }
+
     var GREETING_PATTERN = /^(welcome|hello|hi|hey|good (morning|afternoon|evening)|greetings|hola|bonjour|hallo|ciao|olá|olaaa|namaste|salaam|salam|salom|你好|こんにちは|안녕)/i;
 
     function looksLikeGreeting(text) {
@@ -1190,16 +1216,22 @@
       return stopSession();
     }
 
-    function showThinking() {
+    function looksLikeScheduleIntent(text) {
+      return /(book|schedule|appointment|consultation|demo|call me|contact me|need service)/i.test(text || "");
+    }
+
+    function showThinking(label) {
       removeEmptyState();
       var existing = ui.transcript.querySelector(".ow-msg.assistant.ow-thinking");
       if (existing) return existing;
       var bubble = el("div", { className: "ow-msg assistant ow-thinking" });
       var roleTag = el("p", { className: "ow-role", text: "Assistant" });
-      var dots = el("p", {
-        className: "ow-typing",
-        html: "<span></span><span></span><span></span>",
-      });
+      var dots = label
+        ? el("p", { text: label })
+        : el("p", {
+            className: "ow-typing",
+            html: "<span></span><span></span><span></span>",
+          });
       dots.style.margin = "0";
       bubble.appendChild(roleTag);
       bubble.appendChild(dots);
@@ -1265,7 +1297,7 @@
       // Default text-chat path: REST request, no voice playback.
       setActiveMode("text");
       applyTranscript("user", text);
-      showThinking();
+      showThinking(looksLikeScheduleIntent(text) ? "Preparing booking link…" : null);
       setSending(true);
       var lp = languagePayload();
       chatRequestWithTimeout({
@@ -1290,6 +1322,14 @@
               : "";
           if (content) {
             applyTranscript("assistant", content);
+            var actions = (response && response.data && response.data.actions) || [];
+            for (var i = 0; i < actions.length; i += 1) {
+              var action = actions[i] || {};
+              var payload = action.payload || {};
+              if (action.type === "schedule_appointment" && payload.bookingUrl) {
+                addBookingAction(payload.bookingUrl);
+              }
+            }
           } else {
             applyTranscript(
               "assistant",

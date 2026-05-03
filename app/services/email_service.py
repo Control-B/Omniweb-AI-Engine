@@ -14,10 +14,14 @@ Supported emails:
   - Weekly reports
 """
 import asyncio
+from html import escape
 from typing import Optional
+from uuid import UUID
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.models.models import EmailLog
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -70,13 +74,15 @@ async def _send_resend(*, to: str, subject: str, html_body: str, text_body: Opti
     import httpx
 
     payload: dict = {
-        "from": settings.SMTP_FROM or "Omniweb AI <noreply@omniweb.ai>",
+        "from": settings.RESEND_FROM_EMAIL or settings.SMTP_FROM or "Omniweb AI <noreply@omniweb.ai>",
         "to": [to],
         "subject": subject,
         "html": html_body,
     }
     if text_body:
         payload["text"] = text_body
+    if settings.RESEND_REPLY_TO_EMAIL:
+        payload["reply_to"] = [settings.RESEND_REPLY_TO_EMAIL]
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
@@ -269,6 +275,182 @@ async def send_new_lead_notification(*, to: str, lead_name: str, lead_phone: str
     """
     text = f"New lead: {lead_name} ({lead_phone}) — Intent: {lead_intent}, Score: {score_pct}%"
     return await send_email(to=to, subject=subject, html_body=html, text_body=text)
+
+
+async def _log_email(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    conversation_id: str | None,
+    recipient: str,
+    subject: str,
+    email_type: str,
+    ok: bool,
+    error_message: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    db.add(
+        EmailLog(
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            recipient=recipient,
+            subject=subject[:255],
+            type=email_type,
+            provider="resend",
+            status="sent" if ok else "failed",
+            error_message=error_message,
+            metadata_json=metadata or {},
+        )
+    )
+    await db.flush()
+
+
+def _appointment_details_html(data: dict) -> str:
+    rows = [
+        ("Business", data.get("business_name")),
+        ("Visitor", data.get("visitor_name")),
+        ("Email", data.get("visitor_email")),
+        ("Phone", data.get("visitor_phone")),
+        ("Service", data.get("requested_service")),
+        ("Preferred date", data.get("preferred_date")),
+        ("Preferred time", data.get("preferred_time")),
+        ("Source", data.get("source_url")),
+        ("Notes", data.get("notes")),
+    ]
+    body = "".join(
+        f"<tr><td style='padding:6px 12px 6px 0;color:#64748b'>{escape(label)}</td>"
+        f"<td style='padding:6px 0;font-weight:600;color:#0f172a'>{escape(str(value or '—'))}</td></tr>"
+        for label, value in rows
+    )
+    booking_url = escape(str(data.get("booking_url") or ""))
+    return f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:640px;margin:0 auto;padding:28px 20px;color:#0f172a">
+      <h1 style="font-size:22px;margin:0 0 12px">{escape(str(data.get('title') or 'Appointment request'))}</h1>
+      <p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 18px">{escape(str(data.get('intro') or 'Here are the appointment details.'))}</p>
+      <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px;padding:14px;margin:18px 0">{body}</table>
+      <p style="margin:24px 0">
+        <a href="{booking_url}" style="display:inline-block;background:#6d5dfc;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Open booking page</a>
+      </p>
+      <p style="font-size:12px;color:#94a3b8">Powered by Omniweb AI</p>
+    </div>
+    """
+
+
+def _appointment_details_text(data: dict) -> str:
+    lines = [
+        str(data.get("title") or "Appointment request"),
+        "",
+        str(data.get("intro") or "Here are the appointment details."),
+        "",
+        f"Business: {data.get('business_name') or '—'}",
+        f"Visitor: {data.get('visitor_name') or '—'}",
+        f"Email: {data.get('visitor_email') or '—'}",
+        f"Phone: {data.get('visitor_phone') or '—'}",
+        f"Service: {data.get('requested_service') or '—'}",
+        f"Preferred date: {data.get('preferred_date') or '—'}",
+        f"Preferred time: {data.get('preferred_time') or '—'}",
+        f"Source: {data.get('source_url') or '—'}",
+        f"Notes: {data.get('notes') or '—'}",
+        "",
+        f"Booking page: {data.get('booking_url') or '—'}",
+    ]
+    return "\n".join(lines)
+
+
+async def sendAppointmentRequestEmail(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    conversation_id: str | None,
+    to: str,
+    **data,
+) -> bool:
+    subject = f"Appointment request from {data.get('visitor_name') or 'a website visitor'}"
+    payload = {
+        **data,
+        "title": "New appointment request",
+        "intro": "A visitor asked your AI assistant to schedule an appointment.",
+    }
+    ok = await send_email(
+        to=to,
+        subject=subject,
+        html_body=_appointment_details_html(payload),
+        text_body=_appointment_details_text(payload),
+    )
+    await _log_email(db, tenant_id=tenant_id, conversation_id=conversation_id, recipient=to, subject=subject, email_type="appointment_request", ok=ok, metadata={"booking_url": data.get("booking_url")})
+    return ok
+
+
+async def sendVisitorConfirmationEmail(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    conversation_id: str | None,
+    to: str,
+    **data,
+) -> bool:
+    business = data.get("business_name") or "the team"
+    subject = f"Your appointment request with {business}"
+    payload = {
+        **data,
+        "title": "Your appointment request",
+        "intro": f"Thanks for reaching out. You can choose the best available time for {business} using the booking page below.",
+    }
+    ok = await send_email(
+        to=to,
+        subject=subject,
+        html_body=_appointment_details_html(payload),
+        text_body=_appointment_details_text(payload),
+    )
+    await _log_email(db, tenant_id=tenant_id, conversation_id=conversation_id, recipient=to, subject=subject, email_type="visitor_confirmation", ok=ok, metadata={"booking_url": data.get("booking_url")})
+    return ok
+
+
+async def sendLeadNotificationEmail(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    conversation_id: str | None,
+    to: str,
+    **data,
+) -> bool:
+    subject = f"New lead from {data.get('visitor_name') or 'website visitor'}"
+    payload = {
+        **data,
+        "title": "New AI assistant lead",
+        "intro": "Your AI assistant captured a visitor who may need follow-up.",
+    }
+    ok = await send_email(
+        to=to,
+        subject=subject,
+        html_body=_appointment_details_html(payload),
+        text_body=_appointment_details_text(payload),
+    )
+    await _log_email(db, tenant_id=tenant_id, conversation_id=conversation_id, recipient=to, subject=subject, email_type="lead_notification", ok=ok, metadata={"source_url": data.get("source_url")})
+    return ok
+
+
+async def sendWidgetInstallEmail(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    conversation_id: str | None = None,
+    to: str,
+    business_name: str,
+    widget_url: str,
+) -> bool:
+    subject = f"{business_name or 'Your'} Omniweb widget is installed"
+    html = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:28px 20px">
+      <h1 style="font-size:22px;margin:0 0 12px">Widget installed</h1>
+      <p style="color:#475569;line-height:1.6">Your Omniweb AI widget is installed and ready to help visitors.</p>
+      <p><a href="{escape(widget_url)}" style="display:inline-block;background:#6d5dfc;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Open widget</a></p>
+    </div>
+    """
+    text = f"Your Omniweb AI widget is installed: {widget_url}"
+    ok = await send_email(to=to, subject=subject, html_body=html, text_body=text)
+    await _log_email(db, tenant_id=tenant_id, conversation_id=conversation_id, recipient=to, subject=subject, email_type="widget_install", ok=ok, metadata={"widget_url": widget_url})
+    return ok
 
 
 async def send_trial_expiring_email(*, to: str, name: str, days_left: int) -> bool:

@@ -26,6 +26,7 @@ from app.api.routes import (
     agent,
     agent_config,
     analytics,
+    assistant,
     auth,
     automations,
     calls,
@@ -239,6 +240,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         ):
             limit = _RATE_LIMIT_MAX_AUTH
             key = f"auth:{client_ip}"
+        elif path.startswith("/api/assistant/schedule"):
+            limit = 20
+            key = f"assistant_schedule:{client_ip}"
         elif path.startswith("/api/public/widget/") or path.startswith("/api/widget/"):
             limit = 45
             key = f"widget_pub:{client_ip}"
@@ -292,6 +296,7 @@ app.include_router(numbers.router, prefix=API_PREFIX)
 app.include_router(agent.router, prefix=API_PREFIX)
 app.include_router(agent_config.router, prefix=API_PREFIX)
 app.include_router(analytics.router, prefix=API_PREFIX)
+app.include_router(assistant.router, prefix=API_PREFIX)
 app.include_router(dashboard_sync.router, prefix=API_PREFIX)
 app.include_router(automations.router, prefix=API_PREFIX)
 app.include_router(chat.router, prefix=API_PREFIX)

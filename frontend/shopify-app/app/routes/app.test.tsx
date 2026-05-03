@@ -13,8 +13,11 @@ import { prisma } from "../db.server";
 import { syncShopToEngine } from "../services/engine.server";
 import { ensureStorefrontAccessToken } from "../services/storefront-token.server";
 
-const FEMALE_VOICE = "aura-2-asteria-en";
-const MALE_VOICE   = "aura-2-orion-en";
+// Send semantic gender keywords — the engine maps these to the ElevenLabs
+// female/male voice (Sarah / Adam by default) with a Deepgram Aura voice of
+// the matching gender as the deterministic fallback.
+const FEMALE_VOICE = "female";
+const MALE_VOICE   = "male";
 
 export async function loader({ request }: { request: Request }) {
   const { admin, session } = await authenticate.admin(request);

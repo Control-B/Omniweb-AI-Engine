@@ -171,7 +171,7 @@ class OmniwebBrainService:
         try:
             client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
             completion = await client.chat.completions.create(
-                model=settings.OPENAI_MODEL or config.llm_model or "gpt-4o",
+                model=(config.llm_model or "").strip() or settings.OPENAI_MODEL or "gpt-4o",
                 messages=[
                     {"role": "system", "content": self.compose_prompt(config, channel_type)},
                     {"role": "user", "content": message},

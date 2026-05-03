@@ -1000,6 +1000,7 @@ export async function getWidgetEmbedCode(): Promise<{
   public_widget_key: string;
   embed_snippet: string;
   script_url: string;
+  gtm_instructions?: string[];
 }> {
   return apiFetch("/widget/embed-code");
 }

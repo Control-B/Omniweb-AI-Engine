@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   getAgentConfig,
   updateAgentConfig,
-  getWidgetEmbed,
+  getWidgetEmbedCode,
   getMeWorkspace,
 } from "@/lib/api";
 import {
@@ -73,18 +73,21 @@ function TrialBanner({
 
 function SnippetModal({
   snippet,
-  widgetUrl,
-  expiresAt,
+  scriptUrl,
+  publicWidgetKey,
+  gtmInstructions,
   onCopied,
   onClose,
 }: {
   snippet: string;
-  widgetUrl: string | null | undefined;
-  expiresAt: string | null | undefined;
+  scriptUrl: string;
+  publicWidgetKey: string;
+  gtmInstructions: string[];
   onCopied: () => void;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<"snippet" | "gtm">("snippet");
 
   const copy = async () => {
     try {
@@ -100,61 +103,103 @@ function SnippetModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
       <div className="relative w-full max-w-2xl rounded-2xl border border-white/10 bg-slate-900 shadow-2xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-1">Install Snippet</h2>
+        <h2 className="text-lg font-semibold text-white mb-1">Install Widget</h2>
         <p className="text-sm text-slate-400 mb-4">
-          Paste this snippet into the{" "}
-          <code className="text-cyan-300 text-xs bg-black/40 rounded px-1">
-            &lt;head&gt;
-          </code>{" "}
-          or before the closing{" "}
-          <code className="text-cyan-300 text-xs bg-black/40 rounded px-1">
-            &lt;/body&gt;
-          </code>{" "}
-          tag of every page on your website.
+          Use the same Omniweb script everywhere: paste it into your website, or
+          install it through Google Tag Manager.
         </p>
 
-        {expiresAt && (
-          <p className="text-xs text-amber-400 mb-3">
-            ⚠ Widget expires {new Date(expiresAt).toLocaleDateString()} — subscribe
-            to keep it running.
-          </p>
-        )}
-
-        <div className="relative rounded-xl bg-black/60 border border-white/10 overflow-hidden mb-4">
-          <pre className="p-4 text-xs text-cyan-200 whitespace-pre-wrap break-all overflow-auto max-h-64">
-            {snippet}
-          </pre>
+        <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/30 p-1">
           <button
-            onClick={copy}
-            className="absolute top-3 right-3 flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 px-3 py-1.5 text-xs text-white transition-colors"
+            type="button"
+            onClick={() => setActiveTab("snippet")}
+            className={`rounded-lg px-3 py-2 text-sm transition-colors ${
+              activeTab === "snippet"
+                ? "bg-cyan-600 text-white"
+                : "text-slate-400 hover:text-white"
+            }`}
           >
-            {copied ? (
-              <>
-                <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-                Copied!
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5" />
-                Copy
-              </>
-            )}
+            Code snippet
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("gtm")}
+            className={`rounded-lg px-3 py-2 text-sm transition-colors ${
+              activeTab === "gtm"
+                ? "bg-cyan-600 text-white"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            Google Tag Manager
           </button>
         </div>
 
-        {widgetUrl && (
-          <p className="text-xs text-slate-500 mb-4">
-            Direct widget URL:{" "}
+        {activeTab === "snippet" ? (
+          <>
+            <p className="mb-3 text-sm text-slate-400">
+              Paste this before the closing{" "}
+              <code className="rounded bg-black/40 px-1 text-xs text-cyan-300">
+                &lt;/body&gt;
+              </code>{" "}
+              tag on every page where the assistant should appear.
+            </p>
+            <div className="relative mb-4 overflow-hidden rounded-xl border border-white/10 bg-black/60">
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all p-4 pr-24 text-xs text-cyan-200">
+                {snippet}
+              </pre>
+              <button
+                onClick={copy}
+                className="absolute right-3 top-3 flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-800 px-3 py-1.5 text-xs text-white transition-colors hover:bg-slate-700"
+              >
+                {copied ? (
+                  <>
+                    <CheckCircle className="h-3.5 w-3.5 text-green-400" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy
+                  </>
+                )}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="mb-4 space-y-4">
+            <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-300">
+              {gtmInstructions.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                Custom HTML tag content
+              </p>
+              <pre className="whitespace-pre-wrap break-all text-xs text-cyan-200">
+                {snippet}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        <div className="mb-4 grid gap-2 rounded-xl border border-white/10 bg-slate-950/70 p-4 text-xs text-slate-400 sm:grid-cols-2">
+          <div>
+            <span className="block text-slate-500">Public widget key</span>
+            <span className="font-mono text-slate-200">{publicWidgetKey}</span>
+          </div>
+          <div>
+            <span className="block text-slate-500">Script URL</span>
             <a
-              href={widgetUrl}
+              href={scriptUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-cyan-400 hover:text-cyan-300 underline"
+              className="break-all text-cyan-400 hover:text-cyan-300"
             >
-              {widgetUrl}
+              {scriptUrl}
             </a>
-          </p>
-        )}
+          </div>
+        </div>
 
         <div className="flex justify-end">
           <button
@@ -284,9 +329,10 @@ export default function AgentConfigPage() {
 
   const [snippetLoading, setSnippetLoading] = useState(false);
   const [snippetData, setSnippetData] = useState<{
-    embed_code: string;
-    widget_url: string | null;
-    embed_expires_at: string | null;
+    embed_snippet: string;
+    public_widget_key: string;
+    script_url: string;
+    gtm_instructions: string[];
   } | null>(null);
   const [showSnippet, setShowSnippet] = useState(false);
 
@@ -388,11 +434,19 @@ export default function AgentConfigPage() {
     if (!user) return;
     setSnippetLoading(true);
     try {
-      const data = await getWidgetEmbed(user.client_id);
+      const data = await getWidgetEmbedCode();
       setSnippetData({
-        embed_code: data.embed_code,
-        widget_url: data.widget_url ?? null,
-        embed_expires_at: data.embed_expires_at ?? null,
+        embed_snippet: data.embed_snippet,
+        public_widget_key: data.public_widget_key,
+        script_url: data.script_url,
+        gtm_instructions:
+          data.gtm_instructions && data.gtm_instructions.length
+            ? data.gtm_instructions
+            : [
+                "Create a new Google Tag Manager Custom HTML tag.",
+                "Paste the Omniweb script snippet into the tag.",
+                "Set the trigger to All Pages, then submit and publish.",
+              ],
       });
       setShowSnippet(true);
     } catch (err: any) {
@@ -650,9 +704,10 @@ export default function AgentConfigPage() {
       {/* Snippet modal */}
       {showSnippet && snippetData && (
         <SnippetModal
-          snippet={snippetData.embed_code}
-          widgetUrl={snippetData.widget_url}
-          expiresAt={snippetData.embed_expires_at}
+          snippet={snippetData.embed_snippet}
+          scriptUrl={snippetData.script_url}
+          publicWidgetKey={snippetData.public_widget_key}
+          gtmInstructions={snippetData.gtm_instructions}
           onCopied={handleSnippetCopied}
           onClose={() => setShowSnippet(false)}
         />

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.core.auth import get_current_client, is_internal_staff_role
 from app.models.models import Client
+from app.services.omniweb_brain_service import BrainRequest, OmniwebBrainService
 from app.services.saas_workspace_service import get_agent_config_for_client
 from app.services.widget_service import (
     SHOPIFY_WIDGET_SCRIPT_PATH,
@@ -308,10 +309,27 @@ async def post_widget_chat(
         event_type="message_sent",
         domain=normalized_domain,
         page_url=body.pageUrl,
-        metadata={"source": "widget_chat_placeholder"},
+        metadata={"source": "widget_chat"},
     )
 
-    reply = mock_chat_reply(body.message)
+    try:
+        brain_response = await OmniwebBrainService(db).run(
+            BrainRequest(
+                tenant_id=client.id,
+                channel_type="chat",
+                user_message=body.message,
+                metadata={
+                    "provider": "omniweb_widget",
+                    "session_id": body.sessionId,
+                    "domain": normalized_domain,
+                    "page_url": body.pageUrl,
+                },
+            )
+        )
+        reply = brain_response.response_text
+    except Exception:
+        reply = mock_chat_reply(body.message)
+
     append_widget_transcript(engagement, "Assistant", reply)
     await db.commit()
 

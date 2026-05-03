@@ -68,6 +68,13 @@ def _engine_base() -> str:
     return (settings.ENGINE_BASE_URL or settings.APP_BASE_URL).rstrip("/")
 
 
+def _widget_snippet(base_url: str, public_widget_key: str) -> str:
+    return (
+        f'<script src="{base_url}/widget.js" '
+        f'data-tenant-id="{public_widget_key}" async></script>'
+    )
+
+
 async def _get_tenant_client(db: AsyncSession, current: dict) -> Client:
     if is_internal_staff_role(current.get("role")):
         raise HTTPException(403, "Use a tenant account for this endpoint")
@@ -240,13 +247,16 @@ async def get_widget_embed_code(
     if not client.public_widget_key:
         raise HTTPException(400, "Complete onboarding to receive an embed key")
     base = _engine_base()
-    snippet = (
-        f'<script\n  src="{base}/widget.js"\n  data-widget-key="{client.public_widget_key}"\n  async>\n</script>'
-    )
+    snippet = _widget_snippet(base, client.public_widget_key)
     return {
         "public_widget_key": client.public_widget_key,
         "embed_snippet": snippet,
         "script_url": f"{base}/widget.js",
+        "gtm_instructions": [
+            "Create a new Google Tag Manager Custom HTML tag.",
+            "Paste the Omniweb script snippet into the tag.",
+            "Set the trigger to All Pages, then submit and publish.",
+        ],
     }
 
 

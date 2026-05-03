@@ -39,6 +39,19 @@ SCHEDULING_INTENT_KEYWORDS = (
     "schedule",
 )
 
+EMAIL_REQUEST_INTENT_KEYWORDS = (
+    "email me",
+    "send me an email",
+    "send an email",
+    "send email",
+    "email the details",
+    "send me details",
+    "send me information",
+    "send info",
+    "send it to my email",
+    "send this to my email",
+)
+
 TRUSTED_BOOKING_DOMAINS = {
     "cal.com",
     "www.cal.com",
@@ -61,9 +74,25 @@ class SchedulePayload:
     source_url: str | None = None
 
 
+@dataclass
+class EmailRequestPayload:
+    tenant_id: UUID
+    conversation_id: str
+    visitor_email: str
+    visitor_name: str | None = None
+    visitor_phone: str | None = None
+    notes: str | None = None
+    source_url: str | None = None
+
+
 def has_scheduling_intent(text: str) -> bool:
     normalized = (text or "").lower()
     return any(keyword in normalized for keyword in SCHEDULING_INTENT_KEYWORDS)
+
+
+def has_email_request_intent(text: str) -> bool:
+    normalized = (text or "").lower()
+    return any(keyword in normalized for keyword in EMAIL_REQUEST_INTENT_KEYWORDS)
 
 
 def extract_email(text: str) -> str | None:
@@ -109,6 +138,40 @@ def merge_schedule_state(existing: dict[str, Any] | None, message: str, *, sourc
     if not state.get("notes") and notes:
         state["notes"] = "\n".join(notes[-3:])
     return state
+
+
+def merge_email_request_state(existing: dict[str, Any] | None, message: str, *, source_url: str | None = None) -> dict[str, Any]:
+    state = dict(existing or {})
+    if email := extract_email(message):
+        state["visitorEmail"] = email
+    if phone := extract_phone(message):
+        state["visitorPhone"] = phone
+    if name := extract_name(message):
+        state["visitorName"] = name
+    if source_url:
+        state["sourceUrl"] = source_url
+    notes = [str(item) for item in state.get("notesHistory", []) if item]
+    if message.strip():
+        notes.append(message.strip()[:1000])
+    state["notesHistory"] = notes[-5:]
+    state["notes"] = "\n".join(notes[-3:])
+    return state
+
+
+def missing_email_request_fields(state: dict[str, Any]) -> list[str]:
+    return [] if (state.get("visitorEmail") or "").strip() else ["email"]
+
+
+def missing_email_fields_prompt(*, language: str | None = None) -> str:
+    lang = (language or "").strip().lower().split("-", 1)[0]
+    localized = {
+        "es": "Claro. ¿A qué correo debo enviarlo?",
+        "fr": "Bien sûr. À quelle adresse e-mail dois-je l'envoyer ?",
+        "de": "Gerne. An welche E-Mail-Adresse soll ich es senden?",
+        "pt": "Claro. Para qual e-mail devo enviar?",
+        "it": "Certo. A quale indirizzo email devo inviarlo?",
+    }
+    return localized.get(lang, "Absolutely. What email address should I send it to?")
 
 
 def missing_schedule_fields(state: dict[str, Any]) -> list[str]:
@@ -346,3 +409,69 @@ async def send_schedule_emails(
         **details,
     )
     return {"visitorConfirmation": visitor_ok, "businessNotification": owner_ok}
+
+
+async def send_requested_email(
+    db: AsyncSession,
+    payload: EmailRequestPayload,
+) -> dict[str, bool]:
+    client = await db.get(Client, payload.tenant_id)
+    if not client:
+        raise ValueError("Tenant not found")
+    result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == client.id))
+    agent = result.scalar_one_or_none()
+
+    visitor_email = _clean(payload.visitor_email, 255)
+    if not visitor_email or "@" not in visitor_email:
+        raise ValueError("visitorEmail is required")
+
+    scheduling_result = await db.execute(
+        select(TenantSchedulingConfig).where(TenantSchedulingConfig.tenant_id == client.id)
+    )
+    scheduling_config = scheduling_result.scalar_one_or_none()
+    scheduling_settings = (
+        scheduling_config.settings_json
+        if scheduling_config and isinstance(scheduling_config.settings_json, dict)
+        else {}
+    )
+    notify_to = (
+        str(scheduling_settings.get("notificationEmail") or "").strip()
+        or (client.notification_email or "").strip()
+        or (agent.handoff_email if agent else "")
+        or client.email
+    )
+    from_email = str(scheduling_settings.get("resendFromEmail") or "").strip() or None
+    tenant_reply_to_email = (
+        str(scheduling_settings.get("resendReplyToEmail") or "").strip()
+        or notify_to
+    )
+    business_name = (agent.business_name if agent and agent.business_name else client.name) or "the business"
+    visitor_name = _clean(payload.visitor_name, 255) or "Website visitor"
+    details = {
+        "business_name": business_name,
+        "visitor_name": visitor_name,
+        "visitor_email": visitor_email.lower(),
+        "visitor_phone": _clean(payload.visitor_phone, 30),
+        "notes": _clean(payload.notes, 4000),
+        "source_url": _clean(payload.source_url, 2048),
+    }
+
+    visitor_ok = await email_service.sendVisitorRequestedEmail(
+        db,
+        tenant_id=client.id,
+        conversation_id=payload.conversation_id[:120],
+        to=visitor_email.lower(),
+        from_email=from_email,
+        reply_to_email=tenant_reply_to_email,
+        **details,
+    )
+    owner_ok = await email_service.sendLeadNotificationEmail(
+        db,
+        tenant_id=client.id,
+        conversation_id=payload.conversation_id[:120],
+        to=notify_to,
+        from_email=from_email,
+        reply_to_email=visitor_email.lower(),
+        **details,
+    )
+    return {"visitorEmail": visitor_ok, "businessNotification": owner_ok}

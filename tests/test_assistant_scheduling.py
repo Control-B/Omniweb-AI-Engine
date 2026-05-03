@@ -240,6 +240,113 @@ async def test_schedule_emails_use_tenant_sender_and_notification_settings(monke
     assert sent[1]["reply_to_email"] == "jane@example.com"
 
 
+@pytest.mark.asyncio
+async def test_requested_email_sends_visitor_and_team_notifications(monkeypatch):
+    sent: list[dict] = []
+
+    async def fake_send_email(**kwargs):
+        sent.append(kwargs)
+        return True
+
+    monkeypatch.setattr(email_service, "send_email", fake_send_email)
+    tenant_id = uuid4()
+    scheduling_config = SimpleNamespace(
+        settings_json={
+            "notificationEmail": "team@acme.test",
+            "resendFromEmail": "Acme <hello@acme.test>",
+            "resendReplyToEmail": "support@acme.test",
+        }
+    )
+    db = _Db(client=_client(tenant_id), results=[_agent(tenant_id), scheduling_config])
+
+    status = await svc.send_requested_email(
+        db,
+        svc.EmailRequestPayload(
+            tenant_id=tenant_id,
+            conversation_id="session-email",
+            visitor_email="visitor@example.com",
+            visitor_name="Visitor",
+            notes="Please email me more information.",
+            source_url="https://example.com",
+        ),
+    )
+
+    assert status == {"visitorEmail": True, "businessNotification": True}
+    assert sent[0]["to"] == "visitor@example.com"
+    assert sent[0]["from_email"] == "Acme <hello@acme.test>"
+    assert sent[0]["reply_to_email"] == "support@acme.test"
+    assert sent[1]["to"] == "team@acme.test"
+    assert sent[1]["reply_to_email"] == "visitor@example.com"
+    assert any(isinstance(obj, EmailLog) and obj.type == "visitor_requested_email" for obj in db.added)
+    assert any(isinstance(obj, EmailLog) and obj.type == "lead_notification" for obj in db.added)
+
+
+def test_email_request_intent_collects_only_email():
+    state = svc.merge_email_request_state({}, "Please send me an email with more info")
+
+    assert svc.has_email_request_intent("Please send me an email with more info") is True
+    assert svc.missing_email_request_fields(state) == ["email"]
+    assert "email" in svc.missing_email_fields_prompt().lower()
+
+
+@pytest.mark.asyncio
+async def test_verified_resend_sender_uses_tenant_from_email(monkeypatch):
+    async def fake_domain_status(domain):
+        assert domain == "acme.test"
+        return "verified"
+
+    monkeypatch.setattr(email_service, "_resend_domain_status", fake_domain_status)
+    monkeypatch.setattr(
+        email_service,
+        "settings",
+        SimpleNamespace(
+            RESEND_API_KEY="resend-key",
+            RESEND_FROM_EMAIL="Omniweb <noreply@omniweb.ai>",
+            SMTP_FROM="",
+            RESEND_REPLY_TO_EMAIL="",
+        ),
+    )
+
+    resolved_from, resolved_reply_to, identity = await email_service._resolve_resend_from_email(
+        "Acme <hello@acme.test>",
+        "support@acme.test",
+    )
+
+    assert resolved_from == "Acme <hello@acme.test>"
+    assert resolved_reply_to == "support@acme.test"
+    assert identity["verified"] is True
+    assert identity["fallback"] is False
+
+
+@pytest.mark.asyncio
+async def test_unverified_resend_sender_falls_back_to_platform_from(monkeypatch):
+    async def fake_domain_status(domain):
+        assert domain == "acme.test"
+        return "pending"
+
+    monkeypatch.setattr(email_service, "_resend_domain_status", fake_domain_status)
+    monkeypatch.setattr(
+        email_service,
+        "settings",
+        SimpleNamespace(
+            RESEND_API_KEY="resend-key",
+            RESEND_FROM_EMAIL="Omniweb <noreply@omniweb.ai>",
+            SMTP_FROM="",
+            RESEND_REPLY_TO_EMAIL="",
+        ),
+    )
+
+    resolved_from, resolved_reply_to, identity = await email_service._resolve_resend_from_email(
+        "Acme <hello@acme.test>",
+        None,
+    )
+
+    assert resolved_from == "Omniweb <noreply@omniweb.ai>"
+    assert resolved_reply_to == "hello@acme.test"
+    assert identity["verified"] is False
+    assert identity["fallback"] is True
+
+
 def test_assistant_only_asks_for_missing_fields():
     state = svc.merge_schedule_state({}, "I want to book an appointment. My email is jane@example.com")
 

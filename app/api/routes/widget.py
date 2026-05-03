@@ -13,12 +13,18 @@ from app.core.auth import get_current_client, is_internal_staff_role
 from app.models.models import Client
 from app.services.omniweb_brain_service import BrainRequest, OmniwebBrainService
 from app.services.assistant_scheduling_service import (
+    EmailRequestPayload,
     SchedulePayload,
     create_schedule_request,
+    has_email_request_intent,
     has_scheduling_intent,
+    merge_email_request_state,
     merge_schedule_state,
+    missing_email_fields_prompt,
+    missing_email_request_fields,
     missing_fields_prompt,
     missing_schedule_fields,
+    send_requested_email,
     send_schedule_emails,
 )
 from app.services.saas_workspace_service import get_agent_config_for_client
@@ -332,7 +338,72 @@ async def post_widget_chat(
     else:
         effective_language = selected_language or detected_language or None
 
-    metadata = dict(engagement.metadata_json or {})
+    metadata = dict(getattr(engagement, "metadata_json", None) or {})
+    email_request_state = metadata.get("emailRequest") if isinstance(metadata.get("emailRequest"), dict) else {}
+    email_request_active = bool(email_request_state.get("active")) or has_email_request_intent(body.message)
+    if email_request_active:
+        email_request_state = merge_email_request_state(
+            email_request_state,
+            body.message,
+            source_url=body.pageUrl,
+        )
+        email_request_state["active"] = True
+        actions: list[dict[str, Any]] = []
+        missing = missing_email_request_fields(email_request_state)
+        if missing:
+            reply = missing_email_fields_prompt(language=effective_language)
+        else:
+            try:
+                email_status = await send_requested_email(
+                    db,
+                    EmailRequestPayload(
+                        tenant_id=client.id,
+                        conversation_id=body.sessionId,
+                        visitor_name=email_request_state.get("visitorName"),
+                        visitor_email=str(email_request_state.get("visitorEmail") or ""),
+                        visitor_phone=email_request_state.get("visitorPhone"),
+                        notes=email_request_state.get("notes"),
+                        source_url=body.pageUrl,
+                    ),
+                )
+                email_request_state["active"] = False
+                email_request_state["emailStatus"] = email_status
+                reply = "Done. I sent the email and shared your request with the team."
+                actions.append(
+                    {
+                        "type": "send_email_notification",
+                        "payload": {
+                            "emailStatus": email_status,
+                            "recipient": email_request_state.get("visitorEmail"),
+                        },
+                    }
+                )
+                append_widget_event(
+                    engagement,
+                    event_type="lead_captured",
+                    domain=normalized_domain,
+                    page_url=body.pageUrl,
+                    metadata={"source": "email_request"},
+                )
+            except Exception:
+                reply = "I could not send the email right now. Please leave your email and someone will contact you."
+        metadata["emailRequest"] = email_request_state
+        engagement.metadata_json = metadata
+        append_widget_transcript(engagement, "Assistant", reply)
+        await db.commit()
+        return JSONResponse(
+            content=success_response(
+                {
+                    "sessionId": body.sessionId,
+                    "message": {
+                        "role": "assistant",
+                        "content": reply,
+                    },
+                    "actions": actions,
+                }
+            )
+        )
+
     scheduling_state = metadata.get("scheduling") if isinstance(metadata.get("scheduling"), dict) else {}
     scheduling_active = bool(scheduling_state.get("active")) or has_scheduling_intent(body.message)
     if scheduling_active:
@@ -443,7 +514,7 @@ async def post_widget_chat(
                     "role": "assistant",
                     "content": reply,
                 },
-                "actions": brain_response.actions if "brain_response" in locals() else [],
+                "actions": getattr(brain_response, "actions", []) if "brain_response" in locals() else [],
             }
         )
     )

@@ -15,6 +15,7 @@ Supported emails:
 """
 import asyncio
 import re
+import time
 from html import escape
 from typing import Optional
 from uuid import UUID
@@ -42,6 +43,8 @@ def _email_backend() -> str:
 # ── Core send function ──────────────────────────────────────────────────────
 
 _EMAIL_RE = re.compile(r"^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$")
+_RESEND_DOMAIN_STATUS_CACHE: dict[str, tuple[float, str | None]] = {}
+_RESEND_DOMAIN_STATUS_TTL_SECONDS = 300
 
 
 def _sanitize_header(value: str | None, *, allow_display_name: bool = False) -> str | None:
@@ -62,6 +65,134 @@ def _sanitize_header(value: str | None, *, allow_display_name: bool = False) -> 
             return cleaned
         return None
     return cleaned if _EMAIL_RE.match(cleaned) else None
+
+
+def _email_from_header(value: str | None) -> str | None:
+    cleaned = _sanitize_header(value, allow_display_name=True)
+    if not cleaned:
+        return None
+    match = re.search(r"<([^<>]+)>", cleaned)
+    email = match.group(1).strip() if match else cleaned
+    return email if _EMAIL_RE.match(email) else None
+
+
+def _domain_from_email(value: str | None) -> str | None:
+    email = _email_from_header(value)
+    if not email or "@" not in email:
+        return None
+    return email.rsplit("@", 1)[1].lower()
+
+
+async def _resend_domain_status(domain: str) -> str | None:
+    """Return Resend's status for a domain, if the platform API key can check it."""
+    domain = (domain or "").strip().lower()
+    if not domain or not settings.RESEND_API_KEY:
+        return None
+    cached = _RESEND_DOMAIN_STATUS_CACHE.get(domain)
+    now = time.monotonic()
+    if cached and now - cached[0] < _RESEND_DOMAIN_STATUS_TTL_SECONDS:
+        return cached[1]
+
+    import httpx
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.resend.com/domains",
+                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+                timeout=10,
+            )
+        if response.status_code >= 400:
+            logger.warning("Unable to check Resend domain status", status=response.status_code)
+            return None
+        payload = response.json()
+        domains = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(domains, list):
+            return None
+        for item in domains:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("name") or "").strip().lower() == domain:
+                status = str(item.get("status") or "").strip().lower() or None
+                _RESEND_DOMAIN_STATUS_CACHE[domain] = (now, status)
+                return status
+    except Exception as exc:
+        logger.warning("Unable to check Resend domain status", domain=domain, error=str(exc))
+        return None
+
+    _RESEND_DOMAIN_STATUS_CACHE[domain] = (now, None)
+    return None
+
+
+async def resend_sender_identity_status(from_email: str | None) -> dict:
+    sanitized = _sanitize_header(from_email, allow_display_name=True)
+    domain = _domain_from_email(sanitized)
+    if not sanitized:
+        return {
+            "configured": False,
+            "sender": None,
+            "domain": None,
+            "status": "not_configured",
+            "verified": False,
+            "fallback": True,
+            "message": "No tenant sender configured. Omniweb's platform sender will be used.",
+        }
+    if not domain:
+        return {
+            "configured": True,
+            "sender": sanitized,
+            "domain": None,
+            "status": "invalid",
+            "verified": False,
+            "fallback": True,
+            "message": "The sender email is invalid. Omniweb's platform sender will be used.",
+        }
+    if not settings.RESEND_API_KEY:
+        return {
+            "configured": True,
+            "sender": sanitized,
+            "domain": domain,
+            "status": "provider_not_configured",
+            "verified": False,
+            "fallback": True,
+            "message": "Resend is not configured on the backend yet.",
+        }
+    status = await _resend_domain_status(domain)
+    verified = status == "verified"
+    return {
+        "configured": True,
+        "sender": sanitized,
+        "domain": domain,
+        "status": status or "unknown",
+        "verified": verified,
+        "fallback": not verified,
+        "message": (
+            "Tenant sender is verified and will be used."
+            if verified
+            else "Tenant sender is not verified in Resend yet. Omniweb's platform sender will be used with tenant reply-to."
+        ),
+    }
+
+
+async def _resolve_resend_from_email(from_email: str | None, reply_to_email: str | None) -> tuple[str, str | None, dict]:
+    platform_from = (
+        _sanitize_header(settings.RESEND_FROM_EMAIL, allow_display_name=True)
+        or _sanitize_header(settings.SMTP_FROM, allow_display_name=True)
+        or "Omniweb AI <noreply@omniweb.ai>"
+    )
+    identity = await resend_sender_identity_status(from_email)
+    if identity.get("verified"):
+        return str(identity["sender"]), reply_to_email, identity
+
+    fallback_reply_to = reply_to_email or _email_from_header(from_email)
+    if identity.get("configured"):
+        logger.info(
+            "Using platform sender because tenant sender is not verified",
+            tenant_sender=identity.get("sender"),
+            domain=identity.get("domain"),
+            status=identity.get("status"),
+        )
+    return platform_from, fallback_reply_to, identity
 
 async def send_email(
     *,
@@ -120,13 +251,12 @@ async def _send_resend(
     """Send via Resend API (https://resend.com/docs)."""
     import httpx
 
+    resolved_from, resolved_reply_to_input, identity = await _resolve_resend_from_email(
+        from_email,
+        reply_to_email,
+    )
     payload: dict = {
-        "from": (
-            _sanitize_header(from_email, allow_display_name=True)
-            or _sanitize_header(settings.RESEND_FROM_EMAIL, allow_display_name=True)
-            or _sanitize_header(settings.SMTP_FROM, allow_display_name=True)
-            or "Omniweb AI <noreply@omniweb.ai>"
-        ),
+        "from": resolved_from,
         "to": [to],
         "subject": subject,
         "html": html_body,
@@ -134,7 +264,7 @@ async def _send_resend(
     if text_body:
         payload["text"] = text_body
     resolved_reply_to = (
-        _sanitize_header(reply_to_email)
+        _sanitize_header(resolved_reply_to_input)
         or _sanitize_header(settings.RESEND_REPLY_TO_EMAIL)
     )
     if resolved_reply_to:
@@ -155,7 +285,11 @@ async def _send_resend(
         logger.error(f"Resend API error {resp.status_code}: {resp.text}")
         return False
 
-    logger.info(f"Email sent via Resend to {to}: {subject}")
+    logger.info(
+        f"Email sent via Resend to {to}: {subject}",
+        sender_identity_status=identity.get("status"),
+        sender_identity_verified=identity.get("verified"),
+    )
     return True
 
 
@@ -394,14 +528,21 @@ def _appointment_details_html(data: dict) -> str:
         for label, value in rows
     )
     booking_url = escape(str(data.get("booking_url") or ""))
+    booking_link = (
+        f"""
+      <p style="margin:24px 0">
+        <a href="{booking_url}" style="display:inline-block;background:#6d5dfc;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Open booking page</a>
+      </p>
+      """
+        if booking_url
+        else ""
+    )
     return f"""
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:640px;margin:0 auto;padding:28px 20px;color:#0f172a">
       <h1 style="font-size:22px;margin:0 0 12px">{escape(str(data.get('title') or 'Appointment request'))}</h1>
       <p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 18px">{escape(str(data.get('intro') or 'Here are the appointment details.'))}</p>
       <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px;padding:14px;margin:18px 0">{body}</table>
-      <p style="margin:24px 0">
-        <a href="{booking_url}" style="display:inline-block;background:#6d5dfc;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Open booking page</a>
-      </p>
+      {booking_link}
       <p style="font-size:12px;color:#94a3b8">Powered by Omniweb AI</p>
     </div>
     """
@@ -422,10 +563,48 @@ def _appointment_details_text(data: dict) -> str:
         f"Preferred time: {data.get('preferred_time') or '—'}",
         f"Source: {data.get('source_url') or '—'}",
         f"Notes: {data.get('notes') or '—'}",
-        "",
-        f"Booking page: {data.get('booking_url') or '—'}",
     ]
+    if str(data.get("booking_url") or "").strip():
+        lines.extend(["", f"Booking page: {data.get('booking_url')}"])
     return "\n".join(lines)
+
+
+async def sendVisitorRequestedEmail(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    conversation_id: str | None,
+    to: str,
+    from_email: str | None = None,
+    reply_to_email: str | None = None,
+    **data,
+) -> bool:
+    business = data.get("business_name") or "our team"
+    subject = f"Information from {business}"
+    payload = {
+        **data,
+        "title": f"Thanks for contacting {business}",
+        "intro": "Your request was received by the AI assistant. The team has your details and can follow up if needed.",
+    }
+    ok = await send_email(
+        to=to,
+        subject=subject,
+        html_body=_appointment_details_html(payload),
+        text_body=_appointment_details_text(payload),
+        from_email=from_email,
+        reply_to_email=reply_to_email,
+    )
+    await _log_email(
+        db,
+        tenant_id=tenant_id,
+        conversation_id=conversation_id,
+        recipient=to,
+        subject=subject,
+        email_type="visitor_requested_email",
+        ok=ok,
+        metadata={"source_url": data.get("source_url")},
+    )
+    return ok
 
 
 async def sendAppointmentRequestEmail(

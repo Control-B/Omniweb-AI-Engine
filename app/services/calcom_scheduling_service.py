@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, SchedulingBooking, TenantSchedulingConfig
+from app.services import email_service
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -150,6 +151,13 @@ class CalcomSchedulingService:
 
     async def status(self, tenant_id: UUID, *, refresh_health: bool = True) -> dict[str, Any]:
         config = await self.get_or_create_config(tenant_id)
+        settings_json = config.settings_json or {}
+        resend_from_email = (
+            str(settings_json.get("resendFromEmail") or "")
+            if isinstance(settings_json, dict)
+            else ""
+        )
+        email_identity = await email_service.resend_sender_identity_status(resend_from_email)
         health = await self.health_check(tenant_id) if refresh_health else {
             "ok": config.last_health_status == "connected",
             "status": config.last_health_status or config.status,
@@ -166,8 +174,9 @@ class CalcomSchedulingService:
                 "eventTypeIds": config.event_type_ids or [],
                 "bookingMode": config.booking_mode,
                 "status": config.status,
-                "settings": config.settings_json or {},
+                "settings": settings_json,
             },
+            "emailIdentity": email_identity,
             "internalUrlConfigured": bool(self.base_url),
             "eventTypes": event_types,
             "recentBookings": recent_bookings,

@@ -107,7 +107,11 @@ export class DeepgramVoiceAgentSession {
   private readonly outputSampleRate = 24000;
   private welcomeTimer: ReturnType<typeof setTimeout> | null = null;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  private audioWatchdog: ReturnType<typeof setInterval> | null = null;
   private lastClientMessageAt = 0;
+  private lastBinaryAudioAt = 0;
+  private readonly silenceFallbackMs = 250;
+  private readonly silenceFrameSamples = 1600; // 100 ms of linear16 @ 16 kHz
 
   constructor(handlers: VoiceAgentHandlers) {
     this.handlers = handlers;
@@ -203,6 +207,7 @@ export class DeepgramVoiceAgentSession {
       const inRate = this.micContext.sampleRate;
       this.processor.onaudioprocess = (ev) => {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.settingsApplied) return;
+        void this.ensureMicContextRunning();
         const ch = ev.inputBuffer.getChannelData(0);
         // Deepgram Voice Agent expects continuous binary mic audio after SettingsApplied.
         // Browser constraints and Web Audio cleanup handle noise/echo without starving ASR.
@@ -212,6 +217,22 @@ export class DeepgramVoiceAgentSession {
     }
 
     await this.ttsContext.resume();
+  }
+
+  private async ensureMicContextRunning(): Promise<void> {
+    const ctx = this.micContext;
+    if (!ctx) return;
+    if (ctx.state === "running") return;
+    try {
+      await ctx.resume();
+    } catch {
+      /* ignore — will retry on next watchdog tick */
+    }
+  }
+
+  private sendSilenceFrame() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.sendBinary(new Int16Array(this.silenceFrameSamples).buffer);
   }
 
   setMicrophoneEnabled(enabled: boolean) {
@@ -242,7 +263,9 @@ export class DeepgramVoiceAgentSession {
 
       if (data.type === "SettingsApplied") {
         this.settingsApplied = true;
+        this.sendSilenceFrame();
         this.startKeepAlive();
+        this.startAudioWatchdog();
         this.flushInjects();
       }
       if (data.type === "UserStartedSpeaking") {
@@ -320,7 +343,9 @@ export class DeepgramVoiceAgentSession {
   private sendBinary(payload: ArrayBuffer) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     this.ws.send(payload);
-    this.lastClientMessageAt = Date.now();
+    const now = Date.now();
+    this.lastClientMessageAt = now;
+    this.lastBinaryAudioAt = now;
   }
 
   private sendText(payload: string) {
@@ -351,6 +376,25 @@ export class DeepgramVoiceAgentSession {
     }
   }
 
+  private startAudioWatchdog() {
+    this.stopAudioWatchdog();
+    this.lastBinaryAudioAt = Date.now();
+    this.audioWatchdog = setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.settingsApplied) return;
+      void this.ensureMicContextRunning();
+      if (Date.now() - this.lastBinaryAudioAt >= this.silenceFallbackMs) {
+        this.sendSilenceFrame();
+      }
+    }, 100);
+  }
+
+  private stopAudioWatchdog() {
+    if (this.audioWatchdog) {
+      clearInterval(this.audioWatchdog);
+      this.audioWatchdog = null;
+    }
+  }
+
   async disconnect(): Promise<void> {
     if (this.welcomeTimer) {
       clearTimeout(this.welcomeTimer);
@@ -360,7 +404,9 @@ export class DeepgramVoiceAgentSession {
     this.settingsApplied = false;
     this.pendingInjects = [];
     this.lastClientMessageAt = 0;
+    this.lastBinaryAudioAt = 0;
     this.stopKeepAlive();
+    this.stopAudioWatchdog();
     if (this.ws) {
       try {
         this.ws.removeEventListener("message", this.onMessage);

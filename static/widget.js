@@ -679,6 +679,52 @@
     pt: "🇧🇷", ja: "🇯🇵", ko: "🇰🇷", zh: "🇨🇳", hi: "🇮🇳", multi: "🌐",
   };
 
+  // Map full BCP-47 browser locales to Omniweb-supported language codes so
+  // Auto-detect can resolve navigator.language → a single supported code.
+  var BROWSER_LANG_MAP = {
+    en: "en", "en-us": "en", "en-gb": "en", "en-ca": "en", "en-au": "en", "en-nz": "en", "en-ie": "en", "en-in": "en", "en-za": "en",
+    es: "es", "es-mx": "es", "es-es": "es", "es-ar": "es", "es-cl": "es", "es-co": "es", "es-pe": "es", "es-us": "es", "es-419": "es",
+    fr: "fr", "fr-fr": "fr", "fr-ca": "fr", "fr-be": "fr", "fr-ch": "fr",
+    de: "de", "de-de": "de", "de-at": "de", "de-ch": "de",
+    it: "it", "it-it": "it", "it-ch": "it",
+    pt: "pt", "pt-br": "pt", "pt-pt": "pt",
+    nl: "nl", "nl-nl": "nl", "nl-be": "nl",
+    sv: "sv", "sv-se": "sv", "sv-fi": "sv",
+    ro: "ro", "ro-ro": "ro",
+    ru: "ru", "ru-ru": "ru", "ru-by": "ru", "ru-kz": "ru", "ru-ua": "ru",
+    uk: "uk", "uk-ua": "uk",
+    pl: "pl", "pl-pl": "pl",
+    ar: "ar", "ar-sa": "ar", "ar-eg": "ar", "ar-ae": "ar", "ar-ma": "ar", "ar-jo": "ar", "ar-iq": "ar", "ar-ly": "ar",
+    tr: "tr", "tr-tr": "tr",
+    hi: "hi", "hi-in": "hi",
+    bn: "bn", "bn-bd": "bn", "bn-in": "bn",
+    zh: "zh", "zh-cn": "zh", "zh-tw": "zh", "zh-hk": "zh", "zh-sg": "zh", "zh-hans": "zh", "zh-hant": "zh",
+    ja: "ja", "ja-jp": "ja",
+    ko: "ko", "ko-kr": "ko",
+    id: "id", "id-id": "id",
+    vi: "vi", "vi-vn": "vi",
+    tl: "tl", fil: "tl", "fil-ph": "tl", "tl-ph": "tl",
+    sw: "sw", "sw-ke": "sw", "sw-tz": "sw",
+  };
+
+  function detectBrowserLanguage() {
+    try {
+      var candidates = [];
+      if (window.navigator && navigator.languages && navigator.languages.length) {
+        candidates = candidates.concat(Array.prototype.slice.call(navigator.languages));
+      }
+      if (window.navigator && navigator.language) candidates.push(navigator.language);
+      for (var i = 0; i < candidates.length; i += 1) {
+        var raw = String(candidates[i] || "").toLowerCase().replace("_", "-");
+        if (!raw) continue;
+        if (BROWSER_LANG_MAP[raw]) return BROWSER_LANG_MAP[raw];
+        var base = raw.split("-")[0];
+        if (BROWSER_LANG_MAP[base]) return BROWSER_LANG_MAP[base];
+      }
+    } catch (_) {}
+    return "en";
+  }
+
   function el(tag, opts) {
     var node = document.createElement(tag);
     if (!opts) return node;
@@ -835,13 +881,17 @@
     var mode = "voice"; // "voice" | "text"
     var voiceSession = null;
     var connecting = false;
+    var sendingText = false;
     var languages = [];
     var configuredDefault = (config.defaultLanguage || "auto").toLowerCase();
     var configuredSupported = (config.supportedLanguages || []).map(function (c) {
       return String(c || "").toLowerCase();
     }).filter(Boolean);
+    var detectedBrowserLanguage = detectBrowserLanguage();
     var AUTO_LANG = { code: "auto", label: "Auto (detect language)", flag: "🌐", auto: true };
     var lastTurn = { role: null, content: "", bubble: null, body: null, finalizedAt: 0 };
+    var WELCOME_FLAG_KEY = "omniweb_welcome_seen_" + (publicWidgetId || "default");
+    var welcomeShownThisSession = false;
 
     function initialSelectedLang() {
       if (configuredSupported.length === 1) {
@@ -895,13 +945,36 @@
       lastTurn = { role: role, content: text, bubble: bubble, body: body, finalizedAt: Date.now() };
     }
 
+    var GREETING_PATTERN = /^(welcome|hello|hi|hey|good (morning|afternoon|evening)|greetings|hola|bonjour|hallo|ciao|olá|olaaa|namaste|salaam|salam|salom|你好|こんにちは|안녕)/i;
+
+    function looksLikeGreeting(text) {
+      return GREETING_PATTERN.test((text || "").trim().slice(0, 60));
+    }
+
     // Merge consecutive ConversationText events from the same role into one
     // bubble. Deepgram streams partial → full assistant text in multiple
-    // events, and sometimes re-emits the same final text. Without merging,
-    // every event renders as a separate bubble.
+    // events, sometimes re-emits the same final text, and occasionally emits
+    // a second LLM-generated greeting variant on top of its TTS greeting.
     function applyTranscript(role, content) {
       var text = String(content || "").trim();
       if (!text) return;
+
+      // Per-session welcome dedupe: once we have an assistant greeting, drop
+      // any second assistant message that also looks like a greeting until a
+      // user message arrives. This kills the "Welcome! I am Sandy…" + "Welcome!
+      // I'm here to answer questions…" duplicate from voice mode.
+      if (role === "assistant" && looksLikeGreeting(text)) {
+        if (welcomeShownThisSession && (!lastTurn.role || lastTurn.role === "assistant")) {
+          return;
+        }
+        welcomeShownThisSession = true;
+        try { window.localStorage.setItem(WELCOME_FLAG_KEY, "1"); } catch (_) {}
+      }
+      if (role === "user") {
+        // A real user turn re-arms greeting dedupe for legitimate follow-ups.
+        welcomeShownThisSession = true;
+      }
+
       var SAME_TURN_MS = 8000;
       var canMerge =
         lastTurn.bubble &&
@@ -923,6 +996,17 @@
           return;
         }
         if (prev.indexOf(text) >= 0) return;
+        if (role === "assistant" && looksLikeGreeting(prev) && looksLikeGreeting(text)) {
+          // Both look like greetings — treat as same turn variant, keep the
+          // longer one and drop the duplicate variant.
+          if (text.length > prev.length) {
+            lastTurn.body.textContent = text;
+            lastTurn.bubble.setAttribute("data-content", text);
+            lastTurn.content = text;
+            lastTurn.finalizedAt = Date.now();
+          }
+          return;
+        }
         var combined = (prev + " " + text).replace(/\s+/g, " ").trim();
         lastTurn.body.textContent = combined;
         lastTurn.bubble.setAttribute("data-content", combined);
@@ -972,15 +1056,32 @@
       refreshSubtitle();
     }
 
+    function isAutoLang() {
+      return !!(selectedLang && (selectedLang.auto || selectedLang.code === "auto"));
+    }
+
+    // Priority order: manual selection > Auto resolved to detected browser
+    // language > existing detection > English fallback.
     function effectiveLanguageCode() {
-      if (!selectedLang) return "en";
-      if (selectedLang.auto || selectedLang.code === "auto") return "multi";
+      if (!selectedLang) return detectedBrowserLanguage || "en";
+      if (isAutoLang()) return detectedBrowserLanguage || "en";
       return selectedLang.code || "en";
     }
 
-    function bootstrapVoice() {
-      var body = {
+    function languagePayload() {
+      return {
         language: effectiveLanguageCode(),
+        languageMode: isAutoLang() ? "auto" : "manual",
+        detectedLanguage: detectedBrowserLanguage,
+      };
+    }
+
+    function bootstrapVoice() {
+      var lp = languagePayload();
+      var body = {
+        language: lp.language,
+        language_mode: lp.languageMode,
+        detected_language: lp.detectedLanguage,
         widget_key: publicWidgetId,
         public_widget_key: publicWidgetId,
       };
@@ -1078,7 +1179,39 @@
       if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
     }
 
+    function setSending(flag) {
+      sendingText = !!flag;
+      ui.sendBtn.disabled = sendingText;
+      ui.input.disabled = sendingText;
+    }
+
+    function chatRequestWithTimeout(payload, timeoutMs) {
+      return new Promise(function (resolve, reject) {
+        var done = false;
+        var timer = setTimeout(function () {
+          if (done) return;
+          done = true;
+          reject(new Error("Request timed out. Please try again."));
+        }, timeoutMs || 15000);
+        request("/api/widget/chat", payload).then(
+          function (r) {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve(r);
+          },
+          function (e) {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            reject(e);
+          }
+        );
+      });
+    }
+
     function sendText() {
+      if (sendingText) return;
       var text = (ui.input.value || "").trim();
       if (!text) return;
       ui.input.value = "";
@@ -1099,27 +1232,45 @@
       setActiveMode("text");
       applyTranscript("user", text);
       showThinking();
-      request("/api/widget/chat", {
+      setSending(true);
+      var lp = languagePayload();
+      chatRequestWithTimeout({
         publicWidgetId: publicWidgetId,
         sessionId: sessionId,
         message: text,
-        language: effectiveLanguageCode(),
+        language: lp.language,
+        languageMode: lp.languageMode,
+        detectedLanguage: lp.detectedLanguage,
         domain: window.location.hostname,
         pageUrl: window.location.href,
-      })
+      }, 20000)
         .then(function (response) {
           clearThinking();
+          setSending(false);
           var content =
             response &&
             response.data &&
             response.data.message &&
-            response.data.message.content;
-          if (content) applyTranscript("assistant", content);
-          else applyTranscript("assistant", "Sorry — I didn't catch that. Could you rephrase?");
+            typeof response.data.message.content === "string"
+              ? response.data.message.content.trim()
+              : "";
+          if (content) {
+            applyTranscript("assistant", content);
+          } else {
+            applyTranscript(
+              "assistant",
+              "I'm sorry — I had trouble responding. Please try again."
+            );
+          }
         })
         .catch(function (e) {
           clearThinking();
-          showError((e && e.message) || "Sorry — something went wrong. Please try again.");
+          setSending(false);
+          var msg = (e && e.message) || "Sorry — something went wrong. Please try again.";
+          showError(msg);
+          if (typeof console !== "undefined" && console.warn) {
+            console.warn("[Omniweb] widget chat failed:", msg);
+          }
         });
     }
 
@@ -1230,6 +1381,9 @@
 
     // Initial UI state. The voice agent delivers its own configured greeting;
     // pre-rendering it here causes the welcome message to appear twice.
+    try {
+      welcomeShownThisSession = window.localStorage.getItem(WELCOME_FLAG_KEY) === "1";
+    } catch (_) { welcomeShownThisSession = false; }
     renderLangButton();
     refreshSubtitle();
     loadLanguages();

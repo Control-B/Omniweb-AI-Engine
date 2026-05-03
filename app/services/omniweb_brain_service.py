@@ -97,8 +97,14 @@ class OmniwebBrainService:
         )
         return result.scalar_one_or_none()
 
-    def compose_prompt(self, config: AgentConfig, channel_type: str) -> str:
-        return compose_channel_prompt(config, channel_type)
+    def compose_prompt(
+        self,
+        config: AgentConfig,
+        channel_type: str,
+        *,
+        language: str | None = None,
+    ) -> str:
+        return compose_channel_prompt(config, channel_type, language=language)
 
     async def run(self, request: BrainRequest) -> BrainResponse:
         config = await self.get_agent_config(request.tenant_id)
@@ -165,15 +171,22 @@ class OmniwebBrainService:
         message: str,
         metadata: dict[str, Any],
     ) -> str:
+        language = (
+            metadata.get("detected_language")
+            or metadata.get("language")
+            or metadata.get("detectedLanguage")
+            or None
+        )
         if not settings.openai_configured:
-            return self._fallback_response(config, message)
+            logger.warning("Omniweb brain falling back: OpenAI not configured", tenant_id=str(config.client_id))
+            return self._fallback_response(config, message, language=language)
 
         try:
             client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
             completion = await client.chat.completions.create(
                 model=(config.llm_model or "").strip() or settings.OPENAI_MODEL or "gpt-4o",
                 messages=[
-                    {"role": "system", "content": self.compose_prompt(config, channel_type)},
+                    {"role": "system", "content": self.compose_prompt(config, channel_type, language=language)},
                     {"role": "user", "content": message},
                 ],
                 temperature=min(max(config.temperature or 0.4, 0), 1),
@@ -185,20 +198,69 @@ class OmniwebBrainService:
                 },
             )
             text = completion.choices[0].message.content if completion.choices else None
-            return (text or "").strip() or self._fallback_response(config, message)
+            cleaned = (text or "").strip()
+            if cleaned:
+                return cleaned
+            logger.warning(
+                "Omniweb brain returned empty completion",
+                tenant_id=str(config.client_id),
+                channel_type=channel_type,
+            )
+            return self._fallback_response(config, message, language=language)
         except Exception as exc:
-            logger.error("Omniweb brain OpenAI response failed", tenant_id=str(config.client_id), error=str(exc))
-            return self._fallback_response(config, message)
+            logger.error(
+                "Omniweb brain OpenAI response failed",
+                tenant_id=str(config.client_id),
+                channel_type=channel_type,
+                error=str(exc),
+            )
+            return self._fallback_response(config, message, language=language)
 
-    def _fallback_response(self, config: AgentConfig, message: str) -> str:
-        business = config.business_name or "the team"
-        return (
-            f"Got it. I can help with that for {business}. "
-            "Tell me one quick detail about what you need, and I’ll guide you to the best next step."
-        )
+    def _fallback_response(
+        self,
+        config: AgentConfig,
+        message: str,
+        *,
+        language: str | None = None,
+    ) -> str:
+        business = config.business_name or "our team"
+        contact = config.handoff_email
+        normalized = (language or "en").strip().lower().split("-")[0]
+        templates = {
+            "en": (
+                "Sorry — I'm having trouble responding right now. Please try again in a moment, "
+                f"or share an email and {business} will follow up directly{f' at {contact}' if contact else ''}."
+            ),
+            "es": (
+                "Lo siento — estoy teniendo problemas para responder ahora mismo. Inténtalo de nuevo en un momento "
+                f"o déjame un correo y {business} te responderá directamente{f' a {contact}' if contact else ''}."
+            ),
+            "fr": (
+                "Désolé — j'ai du mal à répondre pour le moment. Réessayez dans un instant, "
+                f"ou laissez-moi un e-mail et {business} vous recontactera directement{f' à {contact}' if contact else ''}."
+            ),
+            "de": (
+                "Entschuldigung — ich habe gerade Probleme zu antworten. Bitte versuchen Sie es gleich erneut, "
+                f"oder hinterlassen Sie eine E-Mail und {business} meldet sich direkt zurück{f' unter {contact}' if contact else ''}."
+            ),
+            "pt": (
+                "Desculpe — estou com dificuldade para responder agora. Tente novamente em instantes "
+                f"ou deixe um e-mail e a {business} retornará diretamente{f' em {contact}' if contact else ''}."
+            ),
+            "it": (
+                "Mi dispiace — sto avendo problemi a rispondere in questo momento. Riprova tra poco, "
+                f"oppure lasciami un'email e {business} ti risponderà direttamente{f' a {contact}' if contact else ''}."
+            ),
+        }
+        return templates.get(normalized, templates["en"])
 
 
-def compose_channel_prompt(config: AgentConfig, channel_type: str) -> str:
+def compose_channel_prompt(
+    config: AgentConfig,
+    channel_type: str,
+    *,
+    language: str | None = None,
+) -> str:
     """Compose the shared tenant brain prompt with channel-specific behavior."""
     owner_instructions = config.custom_instructions or config.system_prompt
     custom_context = config.custom_context
@@ -220,18 +282,83 @@ def compose_channel_prompt(config: AgentConfig, channel_type: str) -> str:
         custom_escalation_triggers=_coerce_str_list(config.custom_escalation_triggers),
         custom_context=custom_context,
     )
+
+    chat_pattern = (
+        "Reply pattern (use every turn):\n"
+        "1. Directly answer the visitor's question with one concrete, useful detail or recommendation grounded in the business context above. "
+        "Never reply with vague filler like 'Tell me one quick detail about what you need' or 'How can I help you'.\n"
+        "2. Recommend the most relevant service, product, or next step for this business when it fits.\n"
+        "3. Ask ONE specific qualifying question only when you genuinely need more information to help.\n"
+        "Keep replies under 3 sentences, conversational, and conversion-focused. Match the visitor's language."
+    )
+
+    voice_pattern = (
+        "The opening greeting has ALREADY been delivered automatically by the channel before you were invoked. "
+        "DO NOT greet, introduce yourself, or repeat the welcome — the user has already heard it. "
+        "Start by listening for their first request.\n\n"
+        "When the user speaks, follow this pattern every turn:\n"
+        "1. Directly answer their question with one concrete useful detail or recommendation grounded in the business context above. "
+        "Never reply with vague filler like 'Tell me one quick detail' or 'How can I help you'.\n"
+        "2. Recommend the most relevant service, product, or next step for this business when it fits.\n"
+        "3. Ask ONE specific qualifying question only when you genuinely need more info to help.\n"
+        "Keep replies short, spoken, and natural. Allow interruptions. "
+        "Only respond when clearly addressed; if audio is garbled or not directed at you, stay quiet."
+    )
+
     channel_block = {
-        "chat": "Channel: website chat. Keep replies concise, helpful, and action-oriented.",
-        "web_voice": (
-            "Channel: web voice. Speak naturally, one idea at a time, and allow interruptions. "
-            "Use short, conversational replies that sound spoken rather than written. "
-            "Do not answer random noises, music, TV, side conversations, or unclear fragments. "
-            "Only respond when the visitor clearly addresses you; if the audio is garbled or not directed at you, stay quiet."
-        ),
+        "chat": f"Channel: website chat. {chat_pattern}",
+        "web_voice": f"Channel: web voice (real-time speech). {voice_pattern}",
         "ai_telephony": (
-            "Channel: AI telephony over a phone call. This is the same Omniweb agent brain, "
-            "but the caller hears spoken responses. Be warm, concise, collect lead details naturally, "
-            "and escalate when the caller asks for a human or the issue is outside safe handling."
+            "Channel: AI telephony over a phone call. The opening greeting has already been delivered by the channel — "
+            "do not greet again. Be warm, concise, follow the answer→recommend→qualify pattern, collect lead details "
+            "naturally, and escalate when the caller asks for a human or the issue is outside safe handling."
         ),
     }.get(channel_type, f"Channel: {channel_type}.")
-    return f"{base_prompt}\n\n## Channel Context\n{channel_block}"
+
+    sections = [base_prompt, "## Channel Context", channel_block]
+
+    normalized_language = (language or "").strip().lower()
+    if normalized_language and normalized_language not in {"auto", "multi", ""}:
+        language_name = _LANGUAGE_DISPLAY_NAMES.get(normalized_language, normalized_language)
+        sections.append("## Language")
+        sections.append(
+            f"Respond in {language_name}. If the user writes or speaks in a different language, "
+            "respond in the user's language unless the business settings explicitly require otherwise."
+        )
+    elif normalized_language in {"auto", "multi"}:
+        sections.append("## Language")
+        sections.append(
+            "Respond in the visitor's own language. Detect their language from what they write or speak "
+            "and reply in that same language. Fall back to English only when their language cannot be determined."
+        )
+
+    return "\n\n".join(sections)
+
+
+_LANGUAGE_DISPLAY_NAMES: dict[str, str] = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "sv": "Swedish",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "uk": "Ukrainian",
+    "pl": "Polish",
+    "ar": "Arabic",
+    "tr": "Turkish",
+    "hi": "Hindi",
+    "bn": "Bengali",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "id": "Indonesian",
+    "vi": "Vietnamese",
+    "tl": "Filipino",
+    "sw": "Swahili",
+    "kri": "Krio",
+    "su": "Sundanese",
+}

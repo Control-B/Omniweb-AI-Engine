@@ -96,6 +96,9 @@ class WidgetChatIn(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     domain: str = Field(..., min_length=1, max_length=255)
     pageUrl: str = Field(..., min_length=1, max_length=2048)
+    language: str | None = Field(None, max_length=12)
+    detectedLanguage: str | None = Field(None, max_length=12)
+    languageMode: str | None = Field(None, max_length=12)
 
 
 class WidgetSettingsPatch(BaseModel):
@@ -312,6 +315,14 @@ async def post_widget_chat(
         metadata={"source": "widget_chat"},
     )
 
+    selected_language = (body.language or "").strip().lower()
+    detected_language = (body.detectedLanguage or "").strip().lower()
+    language_mode = (body.languageMode or "").strip().lower()
+    if language_mode == "auto" or selected_language in {"auto", "multi"}:
+        effective_language = detected_language or "auto"
+    else:
+        effective_language = selected_language or detected_language or None
+
     try:
         brain_response = await OmniwebBrainService(db).run(
             BrainRequest(
@@ -323,6 +334,9 @@ async def post_widget_chat(
                     "session_id": body.sessionId,
                     "domain": normalized_domain,
                     "page_url": body.pageUrl,
+                    "language": effective_language,
+                    "detected_language": detected_language or None,
+                    "language_mode": language_mode or None,
                 },
             )
         )

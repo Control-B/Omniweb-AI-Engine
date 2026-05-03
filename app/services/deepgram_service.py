@@ -198,8 +198,8 @@ def build_voice_agent_settings(
     language: str | None = None,
     voice_override: str | None = None,
 ) -> dict[str, Any]:
-    composed = compose_channel_prompt(config, "web_voice")
     language_tag = _agent_language_tag(config, language)
+    composed = compose_channel_prompt(config, "web_voice", language=language_tag)
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
     # Languages explicitly supported by Deepgram nova-3 STT with a named code.
     # Languages NOT listed here (Swahili, Krio, Sundanese) fall back to "multi" so

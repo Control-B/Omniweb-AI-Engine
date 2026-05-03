@@ -49,6 +49,9 @@ def test_voice_agent_settings_put_listen_language_inside_provider(monkeypatch):
     assert listen["provider"]["type"] == "deepgram"
     assert listen["provider"]["model"] == "nova-3"
     assert listen["provider"]["language"] == "en"
+    assert "model" not in settings["agent"]["think"]
+    assert settings["agent"]["think"]["provider"]["type"] == "open_ai"
+    assert settings["agent"]["think"]["provider"]["model"] == "gpt-4o-mini"
 
 
 def test_voice_agent_settings_omits_multi_listen_language(monkeypatch):

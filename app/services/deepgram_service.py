@@ -267,8 +267,10 @@ def build_voice_agent_settings(
                 "provider": listen_provider,
             },
             "think": {
-                "provider": {"type": "open_ai"},
-                "model": think_model,
+                "provider": {
+                    "type": "open_ai",
+                    "model": think_model,
+                },
                 "prompt": composed,
             },
             "speak": speak,

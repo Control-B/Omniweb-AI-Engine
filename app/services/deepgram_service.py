@@ -246,8 +246,15 @@ def build_voice_agent_settings(
     else:
         speak = deepgram_speak
 
-    # Shape must match Deepgram Voice Agent v1 Settings (see voice-agent-settings docs):
-    # listen/speak/think use nested { "provider": { "type", "model", ... } }.
+    listen_provider: dict[str, Any] = {
+        "type": "deepgram",
+        "model": settings.DEEPGRAM_STT_MODEL,
+    }
+    if listen_language != "multi":
+        listen_provider["language"] = listen_language
+
+    # Shape must match Deepgram Voice Agent v1 Settings.
+    # Provider-specific listen options belong inside agent.listen.provider.
     return {
         "type": "Settings",
         "audio": {
@@ -257,9 +264,7 @@ def build_voice_agent_settings(
         "agent": {
             "language": language_tag,
             "listen": {
-                "provider": {"type": "deepgram"},
-                "model": settings.DEEPGRAM_STT_MODEL,
-                "language": listen_language,
+                "provider": listen_provider,
             },
             "think": {
                 "provider": {"type": "open_ai"},

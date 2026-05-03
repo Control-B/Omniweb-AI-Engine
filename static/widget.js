@@ -517,69 +517,94 @@
   // ---------- UI -------------------------------------------------------------
 
   var STYLES = [
+    "@keyframes ow-pulse { 0%, 100% { box-shadow: 0 10px 30px rgba(139,92,246,.45), 0 0 0 0 rgba(168,85,247,.45); } 50% { box-shadow: 0 14px 36px rgba(139,92,246,.55), 0 0 0 14px rgba(168,85,247,0); } }",
+    "@keyframes ow-fade-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }",
+    "@keyframes ow-msg-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }",
+    "@keyframes ow-dot { 0%, 80%, 100% { transform: scale(.6); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }",
     ":host, * { box-sizing: border-box; }",
     ":host { all: initial; font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }",
     ".ow-root { position: fixed; z-index: 2147483647; bottom: 24px; }",
     ".ow-root.right { right: 24px; }",
     ".ow-root.left { left: 24px; }",
-    ".ow-launcher { width: 64px; height: 64px; border-radius: 9999px; border: 0; cursor: pointer; padding: 0; background: conic-gradient(from 200deg at 50% 50%, #0ea5e9 0deg, #e0f2fe 80deg, #0369a1 200deg, #7dd3fc 320deg, #0ea5e9 360deg); box-shadow: 0 8px 28px rgba(56,189,248,0.4), inset 0 2px 10px rgba(255,255,255,0.32), 0 0 0 1px rgba(255,255,255,0.1); transition: transform .15s ease; }",
-    ".ow-launcher:hover { transform: scale(1.05); }",
+    ".ow-launcher { width: 60px; height: 60px; border-radius: 9999px; border: 0; cursor: pointer; padding: 0; color: #fff; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%); box-shadow: 0 10px 30px rgba(139,92,246,.45), inset 0 1px 0 rgba(255,255,255,.2); transition: transform .18s ease, box-shadow .18s ease; display: flex; align-items: center; justify-content: center; animation: ow-pulse 3.5s ease-in-out infinite; }",
+    ".ow-launcher:hover { transform: translateY(-2px) scale(1.04); }",
     ".ow-launcher:active { transform: scale(.96); }",
-    ".ow-panel { display: none; position: fixed; z-index: 2147483646; right: 24px; bottom: 100px; width: 360px; max-width: calc(100vw - 24px); height: min(640px, calc(100dvh - 120px)); max-height: calc(100dvh - 120px); border-radius: 18px; overflow: hidden; background: #0b1220; color: #e2e8f0; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 24px 60px rgba(2,6,23,.5); flex-direction: column; font-size: 14px; line-height: 1.4; }",
+    ".ow-launcher svg { width: 26px; height: 26px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); }",
+    ".ow-panel { display: none; position: fixed; z-index: 2147483646; right: 24px; bottom: 100px; width: 380px; max-width: calc(100vw - 24px); height: min(640px, calc(100dvh - 120px)); max-height: calc(100dvh - 120px); border-radius: 22px; overflow: hidden; background: linear-gradient(180deg, #110b1f 0%, #0a0712 100%); color: #ede9fe; border: 1px solid rgba(139,92,246,.18); box-shadow: 0 30px 80px rgba(15,5,40,.65), 0 0 0 1px rgba(255,255,255,.02); flex-direction: column; font-size: 14px; line-height: 1.45; }",
+    ".ow-panel.open { display: flex; animation: ow-fade-in .22s ease-out; }",
     ".ow-root.left .ow-panel { left: 24px; right: auto; }",
     "@media (max-width: 480px) { .ow-panel { right: 12px; left: 12px; bottom: 96px; width: auto; max-width: none; height: calc(100dvh - 120px); max-height: calc(100dvh - 120px); } .ow-root.left .ow-panel { left: 12px; right: 12px; } }",
-    ".ow-panel.open { display: flex; }",
-    ".ow-header { display: flex; align-items: center; gap: 12px; padding: 16px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0; }",
-    ".ow-avatar { width: 40px; height: 40px; border-radius: 9999px; flex-shrink: 0; background: conic-gradient(from 210deg at 50% 50%, #38bdf8, #f8fafc, #0284c7, #38bdf8); box-shadow: inset 0 1px 6px rgba(255,255,255,0.4); }",
+    ".ow-panel::before { content: ''; position: absolute; top: -1px; left: -1px; right: -1px; height: 120px; background: radial-gradient(120% 100% at 50% 0%, rgba(139,92,246,.22) 0%, rgba(139,92,246,0) 70%); pointer-events: none; }",
+    ".ow-header { position: relative; display: flex; align-items: center; gap: 12px; padding: 18px 18px 14px; border-bottom: 1px solid rgba(139,92,246,.12); flex-shrink: 0; }",
+    ".ow-avatar { width: 38px; height: 38px; border-radius: 9999px; flex-shrink: 0; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%); display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 4px 14px rgba(139,92,246,.45), inset 0 1px 0 rgba(255,255,255,.25); }",
+    ".ow-avatar svg { width: 18px; height: 18px; }",
     ".ow-title { flex: 1; min-width: 0; }",
-    ".ow-title-name { font-size: 14px; font-weight: 600; color: #f8fafc; line-height: 1.2; margin: 0; }",
-    ".ow-title-sub { font-size: 12px; color: #94a3b8; margin-top: 2px; }",
-    ".ow-close { background: transparent; border: 0; color: #94a3b8; cursor: pointer; padding: 6px; border-radius: 8px; line-height: 0; }",
-    ".ow-close:hover { background: rgba(255,255,255,0.05); color: #fff; }",
-    ".ow-transcript { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }",
-    ".ow-empty { color: #64748b; font-size: 12px; line-height: 1.6; padding: 4px 0; }",
-    ".ow-error { background: rgba(127,29,29,.5); border: 1px solid rgba(248,113,113,.3); color: #fecaca; font-size: 12px; line-height: 1.4; border-radius: 10px; padding: 8px 10px; }",
+    ".ow-title-name { font-size: 15px; font-weight: 600; color: #fafaff; line-height: 1.2; margin: 0; letter-spacing: -0.01em; }",
+    ".ow-title-sub { font-size: 12px; color: #a78bfa; margin-top: 3px; display: flex; align-items: center; gap: 6px; }",
+    ".ow-status-dot { width: 6px; height: 6px; border-radius: 9999px; background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.18); }",
+    ".ow-close { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); color: #c4b5fd; cursor: pointer; padding: 6px; border-radius: 10px; line-height: 0; transition: all .15s ease; }",
+    ".ow-close:hover { background: rgba(139,92,246,.12); color: #fff; border-color: rgba(139,92,246,.3); }",
+    ".ow-transcript { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 14px 16px 4px; display: flex; flex-direction: column; gap: 10px; }",
+    ".ow-transcript::-webkit-scrollbar { width: 6px; }",
+    ".ow-transcript::-webkit-scrollbar-thumb { background: rgba(139,92,246,.2); border-radius: 9999px; }",
+    ".ow-empty { color: #8b7eb8; font-size: 12px; line-height: 1.6; padding: 4px 2px; }",
+    ".ow-error { background: linear-gradient(135deg, rgba(190,18,60,.25), rgba(127,29,29,.35)); border: 1px solid rgba(248,113,113,.3); color: #fecaca; font-size: 12px; line-height: 1.4; border-radius: 12px; padding: 10px 12px; }",
     ".ow-error button { margin-top: 4px; background: transparent; border: 0; color: #fca5a5; cursor: pointer; font-size: 12px; text-decoration: underline; padding: 0; }",
-    ".ow-msg { border-radius: 10px; padding: 8px 12px; font-size: 14px; line-height: 1.4; word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap; }",
-    ".ow-msg .ow-role { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; opacity: .6; margin-bottom: 2px; }",
-    ".ow-msg.user { background: rgba(30,41,59,.8); margin-left: 16px; color: #f1f5f9; }",
-    ".ow-msg.assistant { background: rgba(8,47,73,.4); border: 1px solid rgba(34,211,238,.15); color: #ecfeff; margin-right: 16px; }",
-    ".ow-lang { padding: 8px 16px 4px; flex-shrink: 0; }",
-    ".ow-lang-label { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: #64748b; margin-bottom: 4px; }",
-    ".ow-lang-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(15,23,42,.85); border: 1px solid rgba(255,255,255,0.08); color: #e2e8f0; padding: 8px 12px; border-radius: 10px; font-size: 14px; cursor: pointer; text-align: left; }",
-    ".ow-lang-btn:hover:not(:disabled) { background: rgba(15,23,42,1); }",
+    ".ow-msg { border-radius: 14px; padding: 10px 13px; font-size: 14px; line-height: 1.45; word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap; animation: ow-msg-in .22s ease-out; }",
+    ".ow-msg .ow-role { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; opacity: .65; margin-bottom: 3px; font-weight: 600; }",
+    ".ow-msg.user { background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%); margin-left: 32px; color: #fff; align-self: flex-end; max-width: 85%; box-shadow: 0 6px 18px rgba(124,58,237,.3); }",
+    ".ow-msg.user .ow-role { color: rgba(255,255,255,.75); }",
+    ".ow-msg.assistant { background: rgba(139,92,246,.08); border: 1px solid rgba(139,92,246,.18); color: #ede9fe; margin-right: 32px; align-self: flex-start; max-width: 90%; }",
+    ".ow-msg.assistant .ow-role { color: #a78bfa; }",
+    ".ow-typing { display: inline-flex; gap: 4px; align-items: center; padding: 2px 0; }",
+    ".ow-typing span { width: 6px; height: 6px; border-radius: 9999px; background: #a78bfa; animation: ow-dot 1.2s ease-in-out infinite; }",
+    ".ow-typing span:nth-child(2) { animation-delay: .15s; }",
+    ".ow-typing span:nth-child(3) { animation-delay: .3s; }",
+    ".ow-lang { padding: 10px 16px 6px; flex-shrink: 0; }",
+    ".ow-lang-label { font-size: 10px; text-transform: uppercase; letter-spacing: .14em; color: #8b7eb8; margin-bottom: 6px; font-weight: 600; }",
+    ".ow-lang-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(255,255,255,.03); border: 1px solid rgba(139,92,246,.18); color: #ede9fe; padding: 10px 14px; border-radius: 12px; font-size: 14px; cursor: pointer; text-align: left; transition: all .15s ease; }",
+    ".ow-lang-btn:hover:not(:disabled) { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.35); }",
     ".ow-lang-btn:disabled { opacity: .5; cursor: not-allowed; }",
     ".ow-lang-menu { position: relative; }",
-    ".ow-lang-list { position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; max-height: 192px; overflow-y: auto; background: #0f172a; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 4px 0; box-shadow: 0 16px 40px rgba(2,6,23,.6); list-style: none; margin: 0; z-index: 5; }",
-    ".ow-lang-list li button { width: 100%; background: transparent; border: 0; color: #e2e8f0; padding: 8px 12px; font-size: 14px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; }",
-    ".ow-lang-list li button:hover { background: rgba(255,255,255,0.04); }",
+    ".ow-lang-list { position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; max-height: 200px; overflow-y: auto; background: #15102a; border: 1px solid rgba(139,92,246,.25); border-radius: 12px; padding: 4px 0; box-shadow: 0 18px 44px rgba(15,5,40,.7); list-style: none; margin: 0; z-index: 5; }",
+    ".ow-lang-list li button { width: 100%; background: transparent; border: 0; color: #ede9fe; padding: 9px 14px; font-size: 14px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 10px; }",
+    ".ow-lang-list li button:hover { background: rgba(139,92,246,.12); }",
     ".ow-modes { display: flex; gap: 8px; padding: 8px 16px; flex-shrink: 0; }",
-    ".ow-mode { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); background: rgba(15,23,42,.7); color: #cbd5e1; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .15s ease; }",
-    ".ow-mode:hover:not(:disabled) { background: rgba(30,41,59,.9); }",
-    ".ow-mode.active.voice { background: #06b6d4; color: #0f172a; border-color: transparent; box-shadow: 0 0 24px rgba(34,211,238,0.35); }",
-    ".ow-mode.active.text { background: #1e293b; color: #fff; border-color: rgba(255,255,255,0.15); }",
+    ".ow-mode { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 14px; border: 1px solid rgba(139,92,246,.18); background: rgba(255,255,255,.02); color: #c4b5fd; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .18s ease; }",
+    ".ow-mode:hover:not(:disabled):not(.active) { background: rgba(139,92,246,.08); border-color: rgba(139,92,246,.3); color: #ede9fe; }",
+    ".ow-mode.active { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #a855f7 100%); color: #fff; border-color: transparent; box-shadow: 0 8px 24px rgba(139,92,246,.4), inset 0 1px 0 rgba(255,255,255,.18); }",
     ".ow-mode:disabled { opacity: .5; cursor: not-allowed; }",
     ".ow-mode svg { width: 16px; height: 16px; }",
-    ".ow-compose { display: flex; align-items: flex-end; gap: 8px; padding: 12px 16px 16px; border-top: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }",
-    ".ow-input { flex: 1; min-width: 0; resize: none; background: rgba(15,23,42,.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; color: #f1f5f9; padding: 10px 12px; font-family: inherit; font-size: 14px; line-height: 1.4; min-height: 44px; max-height: 96px; outline: none; }",
-    ".ow-input::placeholder { color: #64748b; }",
-    ".ow-input:focus { border-color: rgba(34,211,238,.5); }",
-    ".ow-send { flex-shrink: 0; width: 44px; height: 44px; border-radius: 9999px; border: 0; background: #7c3aed; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }",
-    ".ow-send:hover:not(:disabled) { background: #8b5cf6; }",
-    ".ow-send:disabled { opacity: .4; cursor: not-allowed; }",
+    ".ow-compose { display: flex; align-items: flex-end; gap: 8px; padding: 10px 14px 14px; flex-shrink: 0; }",
+    ".ow-compose-wrap { flex: 1; min-width: 0; position: relative; display: flex; align-items: flex-end; background: rgba(255,255,255,.03); border: 1px solid rgba(139,92,246,.2); border-radius: 16px; padding: 4px 4px 4px 14px; transition: border-color .15s ease, box-shadow .15s ease; }",
+    ".ow-compose-wrap:focus-within { border-color: rgba(139,92,246,.55); box-shadow: 0 0 0 4px rgba(139,92,246,.12); }",
+    ".ow-input { flex: 1; min-width: 0; resize: none; background: transparent; border: 0; color: #fafaff; padding: 9px 6px 9px 0; font-family: inherit; font-size: 14px; line-height: 1.4; min-height: 38px; max-height: 110px; outline: none; }",
+    ".ow-input::placeholder { color: #7c6ea3; }",
+    ".ow-send { flex-shrink: 0; width: 38px; height: 38px; border-radius: 12px; border: 0; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #a855f7 100%); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all .18s ease; box-shadow: 0 4px 14px rgba(139,92,246,.45); }",
+    ".ow-send:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(139,92,246,.55); }",
+    ".ow-send:active:not(:disabled) { transform: scale(.96); }",
+    ".ow-send:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }",
+    ".ow-send svg { width: 18px; height: 18px; }",
     ".ow-end { display: flex; justify-content: center; padding: 0 16px 12px; flex-shrink: 0; }",
-    ".ow-end button { background: transparent; border: 0; color: #94a3b8; cursor: pointer; font-size: 12px; text-decoration: underline; padding: 4px; }",
-    ".ow-end button:hover { color: #e2e8f0; }",
+    ".ow-end button { background: rgba(255,255,255,.03); border: 1px solid rgba(248,113,113,.25); color: #fca5a5; cursor: pointer; font-size: 12px; padding: 6px 12px; border-radius: 9999px; transition: all .15s ease; }",
+    ".ow-end button:hover { background: rgba(220,38,38,.12); color: #fecaca; border-color: rgba(248,113,113,.45); }",
+    ".ow-footer { padding: 0 16px 12px; text-align: center; flex-shrink: 0; }",
+    ".ow-footer span { font-size: 10px; color: #6b5d8f; letter-spacing: .04em; }",
+    ".ow-footer b { color: #a78bfa; font-weight: 600; }",
   ].join("\n");
 
+  var ICON_LAUNCHER =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" fill="currentColor" fill-opacity=".95" stroke="none"/><path d="M19 14l.7 1.9L21.5 16.6 19.7 17.3 19 19.2 18.3 17.3 16.5 16.6 18.3 15.9 19 14z" fill="currentColor" fill-opacity=".85" stroke="none"/><path d="M5 15l.6 1.6L7.2 17.2 5.6 17.8 5 19.4 4.4 17.8 2.8 17.2 4.4 16.6 5 15z" fill="currentColor" fill-opacity=".75" stroke="none"/></svg>';
+  var ICON_AVATAR =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" fill="currentColor" stroke="none"/></svg>';
   var ICON_MIC =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>';
   var ICON_CHAT =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 1 1-3-6.245V3"/><path d="M3 21l2.5-3"/></svg>';
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
   var ICON_SEND =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>';
   var ICON_X =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>';
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>';
   var ICON_CHEVRON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>';
 
@@ -611,16 +636,21 @@
 
     var launcher = el("button", {
       className: "ow-launcher",
-      attrs: { type: "button", "aria-label": "Open Omniweb AI" },
+      html: ICON_LAUNCHER,
+      attrs: { type: "button", "aria-label": "Open AI assistant" },
     });
 
-    var panel = el("div", { className: "ow-panel", attrs: { role: "dialog", "aria-label": "Omniweb AI" } });
+    var panel = el("div", { className: "ow-panel", attrs: { role: "dialog", "aria-label": "AI assistant" } });
 
     var header = el("div", { className: "ow-header" });
-    var avatar = el("div", { className: "ow-avatar" });
+    var avatar = el("div", { className: "ow-avatar", html: ICON_AVATAR });
     var titleWrap = el("div", { className: "ow-title" });
     var titleName = el("p", { className: "ow-title-name", text: config.businessName || "Omniweb AI" });
-    var titleSub = el("p", { className: "ow-title-sub", text: "Ready to help" });
+    var titleSub = el("p", { className: "ow-title-sub" });
+    var statusDot = el("span", { className: "ow-status-dot" });
+    var statusText = el("span", { text: "Ready to help" });
+    titleSub.appendChild(statusDot);
+    titleSub.appendChild(statusText);
     titleWrap.appendChild(titleName);
     titleWrap.appendChild(titleSub);
     var closeBtn = el("button", { className: "ow-close", html: ICON_X, attrs: { type: "button", "aria-label": "Close" } });
@@ -631,7 +661,7 @@
     var transcript = el("div", { className: "ow-transcript" });
     var empty = el("p", {
       className: "ow-empty",
-      text: "Start voice or type below. Your conversation appears here in real time.",
+      text: "Ask anything — start a voice call or type a message below.",
     });
     transcript.appendChild(empty);
 
@@ -665,21 +695,27 @@
     modes.appendChild(textBtn);
 
     var compose = el("div", { className: "ow-compose" });
+    var composeWrap = el("div", { className: "ow-compose-wrap" });
     var input = el("textarea", {
       className: "ow-input",
-      attrs: { rows: "2", placeholder: "Start voice or type a message…" },
+      attrs: { rows: "1", placeholder: "Type a message…" },
     });
     var sendBtn = el("button", {
       className: "ow-send",
       html: ICON_SEND,
-      attrs: { type: "button", "aria-label": "Send" },
+      attrs: { type: "button", "aria-label": "Send message", title: "Send" },
     });
-    compose.appendChild(input);
-    compose.appendChild(sendBtn);
+    composeWrap.appendChild(input);
+    composeWrap.appendChild(sendBtn);
+    compose.appendChild(composeWrap);
 
     var endRow = el("div", { className: "ow-end", attrs: { style: "display:none" } });
     var endBtn = el("button", { text: "End voice session", attrs: { type: "button" } });
     endRow.appendChild(endBtn);
+
+    var footer = el("div", { className: "ow-footer" });
+    var footerSpan = el("span", { html: "Powered by <b>Omniweb AI</b>" });
+    footer.appendChild(footerSpan);
 
     panel.appendChild(header);
     panel.appendChild(transcript);
@@ -687,6 +723,7 @@
     panel.appendChild(modes);
     panel.appendChild(compose);
     panel.appendChild(endRow);
+    panel.appendChild(footer);
 
     root.appendChild(launcher);
     root.appendChild(panel);
@@ -695,7 +732,8 @@
       root: root,
       launcher: launcher,
       panel: panel,
-      titleSub: titleSub,
+      statusText: statusText,
+      statusDot: statusDot,
       closeBtn: closeBtn,
       transcript: transcript,
       empty: empty,
@@ -734,13 +772,16 @@
     var languages = [];
     var selectedLang = { code: "en", label: "English" };
 
-    function setSubtitle(text) {
-      ui.titleSub.textContent = text;
+    function setSubtitle(text, color) {
+      ui.statusText.textContent = text;
+      if (color) ui.statusDot.style.background = color;
+      else ui.statusDot.style.background = "#22c55e";
     }
 
     function refreshSubtitle() {
-      if (connecting) return setSubtitle("Connecting…");
-      if (voiceSession) return setSubtitle(mode === "voice" ? "Listening…" : "Type a message");
+      if (connecting) return setSubtitle("Connecting…", "#f59e0b");
+      if (voiceSession && mode === "voice") return setSubtitle("Listening…", "#22d3ee");
+      if (mode === "text") return setSubtitle("Type a message", "#a78bfa");
       setSubtitle("Ready to help");
     }
 
@@ -876,43 +917,77 @@
     function startText() {
       setActiveMode("text");
       openPanel();
-      if (!voiceSession) return startSession(false);
-      return Promise.resolve();
+      // Text chat uses the REST endpoint — make sure any active voice
+      // websocket (with TTS playback) is fully torn down so typing
+      // doesn't trigger spoken responses or duplicate transcripts.
+      return stopSession();
+    }
+
+    function showThinking() {
+      removeEmptyState();
+      var existing = ui.transcript.querySelector(".ow-msg.assistant.ow-thinking");
+      if (existing) return existing;
+      var bubble = el("div", { className: "ow-msg assistant ow-thinking" });
+      var roleTag = el("p", { className: "ow-role", text: "Assistant" });
+      var dots = el("p", {
+        className: "ow-typing",
+        html: "<span></span><span></span><span></span>",
+      });
+      dots.style.margin = "0";
+      bubble.appendChild(roleTag);
+      bubble.appendChild(dots);
+      ui.transcript.appendChild(bubble);
+      ui.transcript.scrollTop = ui.transcript.scrollHeight;
+      return bubble;
+    }
+
+    function clearThinking() {
+      var existing = ui.transcript.querySelector(".ow-msg.assistant.ow-thinking");
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
     }
 
     function sendText() {
       var text = (ui.input.value || "").trim();
       if (!text) return;
       ui.input.value = "";
-      setActiveMode("text");
-      addBubble("user", text);
 
-      // Prefer realtime injection through the open voice agent (so the agent
-      // brain sees the same conversation history) but fall back to the
-      // ``/api/widget/chat`` REST endpoint if the agent socket isn't ready.
-      if (voiceSession) {
+      // If a voice session is open AND the user is in voice mode, route
+      // through the realtime agent (so it sees the same conversation
+      // history). The agent will echo a ConversationText for the user
+      // role, which renders the bubble — so do NOT pre-add it locally
+      // (that's what was causing the "doubled input" bug).
+      if (mode === "voice" && voiceSession) {
         try {
           voiceSession.injectUserMessage(text);
           return;
-        } catch (_) { /* fallthrough */ }
+        } catch (_) { /* fall through to REST */ }
       }
+
+      // Default text-chat path: REST request, no voice playback.
+      setActiveMode("text");
+      addBubble("user", text);
+      showThinking();
       request("/api/widget/chat", {
         publicWidgetId: publicWidgetId,
         sessionId: sessionId,
         message: text,
+        language: (selectedLang && selectedLang.code) || "en",
         domain: window.location.hostname,
         pageUrl: window.location.href,
       })
         .then(function (response) {
+          clearThinking();
           var content =
             response &&
             response.data &&
             response.data.message &&
             response.data.message.content;
           if (content) addBubble("assistant", content);
+          else addBubble("assistant", "Sorry — I didn't catch that. Could you rephrase?");
         })
-        .catch(function () {
-          showError("Sorry — something went wrong. Please try again.");
+        .catch(function (e) {
+          clearThinking();
+          showError((e && e.message) || "Sorry — something went wrong. Please try again.");
         });
     }
 

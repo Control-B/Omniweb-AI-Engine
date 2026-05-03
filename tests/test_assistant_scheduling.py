@@ -197,6 +197,49 @@ async def test_resend_email_failure_logs_failed(monkeypatch):
     assert any(isinstance(obj, EmailLog) and obj.status == "failed" for obj in db.added)
 
 
+@pytest.mark.asyncio
+async def test_schedule_emails_use_tenant_sender_and_notification_settings(monkeypatch):
+    sent: list[dict] = []
+
+    async def fake_send_email(**kwargs):
+        sent.append(kwargs)
+        return True
+
+    monkeypatch.setattr(email_service, "send_email", fake_send_email)
+    tenant_id = uuid4()
+    client = _client(tenant_id)
+    agent = _agent(tenant_id)
+    scheduling_config = SimpleNamespace(
+        settings_json={
+            "notificationEmail": "dispatch@acme.test",
+            "resendFromEmail": "Acme Appointments <appointments@acme.test>",
+            "resendReplyToEmail": "frontdesk@acme.test",
+        }
+    )
+    appointment = SimpleNamespace(
+        conversation_id="session-1",
+        visitor_name="Jane",
+        visitor_email="jane@example.com",
+        visitor_phone="555-111-2222",
+        requested_service="Repair",
+        preferred_date=None,
+        preferred_time=None,
+        notes="Need help",
+        source_url="https://example.com",
+        booking_url="https://cal.com/acme",
+    )
+    db = _Db(results=[scheduling_config])
+
+    status = await svc.send_schedule_emails(db, appointment=appointment, client=client, agent=agent)
+
+    assert status == {"visitorConfirmation": True, "businessNotification": True}
+    assert sent[0]["to"] == "jane@example.com"
+    assert sent[0]["from_email"] == "Acme Appointments <appointments@acme.test>"
+    assert sent[0]["reply_to_email"] == "frontdesk@acme.test"
+    assert sent[1]["to"] == "dispatch@acme.test"
+    assert sent[1]["reply_to_email"] == "jane@example.com"
+
+
 def test_assistant_only_asks_for_missing_fields():
     state = svc.merge_schedule_state({}, "I want to book an appointment. My email is jane@example.com")
 

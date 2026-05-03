@@ -310,6 +310,11 @@ async def send_schedule_emails(
         or (agent.handoff_email if agent else "")
         or client.email
     )
+    from_email = str(scheduling_settings.get("resendFromEmail") or "").strip() or None
+    tenant_reply_to_email = (
+        str(scheduling_settings.get("resendReplyToEmail") or "").strip()
+        or notify_to
+    )
     details = {
         "business_name": business_name,
         "visitor_name": appointment.visitor_name,
@@ -327,6 +332,8 @@ async def send_schedule_emails(
         tenant_id=client.id,
         conversation_id=appointment.conversation_id,
         to=appointment.visitor_email,
+        from_email=from_email,
+        reply_to_email=tenant_reply_to_email,
         **details,
     )
     owner_ok = await email_service.sendAppointmentRequestEmail(
@@ -334,6 +341,8 @@ async def send_schedule_emails(
         tenant_id=client.id,
         conversation_id=appointment.conversation_id,
         to=notify_to,
+        from_email=from_email,
+        reply_to_email=appointment.visitor_email,
         **details,
     )
     return {"visitorConfirmation": visitor_ok, "businessNotification": owner_ok}

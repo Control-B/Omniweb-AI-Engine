@@ -14,6 +14,7 @@ Supported emails:
   - Weekly reports
 """
 import asyncio
+import re
 from html import escape
 from typing import Optional
 from uuid import UUID
@@ -40,12 +41,36 @@ def _email_backend() -> str:
 
 # ── Core send function ──────────────────────────────────────────────────────
 
+_EMAIL_RE = re.compile(r"^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$")
+
+
+def _sanitize_header(value: str | None, *, allow_display_name: bool = False) -> str | None:
+    """Prevent header injection while allowing Resend's ``Name <email>`` syntax."""
+    if not value:
+        return None
+    cleaned = re.sub(r"[\r\n]+", " ", value).strip()
+    if not cleaned:
+        return None
+    if allow_display_name:
+        match = re.match(r"^(.+?)<([^<>]+)>$", cleaned)
+        if match:
+            name = match.group(1).strip().strip('"')[:80]
+            email = match.group(2).strip()
+            if _EMAIL_RE.match(email):
+                return f"{name} <{email}>" if name else email
+        if _EMAIL_RE.match(cleaned):
+            return cleaned
+        return None
+    return cleaned if _EMAIL_RE.match(cleaned) else None
+
 async def send_email(
     *,
     to: str,
     subject: str,
     html_body: str,
     text_body: Optional[str] = None,
+    from_email: str | None = None,
+    reply_to_email: str | None = None,
 ) -> bool:
     """Send a transactional email via the configured backend."""
     backend = _email_backend()
@@ -59,9 +84,23 @@ async def send_email(
 
     try:
         if backend == "resend":
-            return await _send_resend(to=to, subject=subject, html_body=html_body, text_body=text_body)
+            return await _send_resend(
+                to=to,
+                subject=subject,
+                html_body=html_body,
+                text_body=text_body,
+                from_email=from_email,
+                reply_to_email=reply_to_email,
+            )
         else:
-            return await _send_smtp(to=to, subject=subject, html_body=html_body, text_body=text_body)
+            return await _send_smtp(
+                to=to,
+                subject=subject,
+                html_body=html_body,
+                text_body=text_body,
+                from_email=from_email,
+                reply_to_email=reply_to_email,
+            )
     except Exception as e:
         logger.error(f"Failed to send email to {to}: {e}")
         return False
@@ -69,20 +108,37 @@ async def send_email(
 
 # ── Resend backend ───────────────────────────────────────────────────────────
 
-async def _send_resend(*, to: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
+async def _send_resend(
+    *,
+    to: str,
+    subject: str,
+    html_body: str,
+    text_body: Optional[str] = None,
+    from_email: str | None = None,
+    reply_to_email: str | None = None,
+) -> bool:
     """Send via Resend API (https://resend.com/docs)."""
     import httpx
 
     payload: dict = {
-        "from": settings.RESEND_FROM_EMAIL or settings.SMTP_FROM or "Omniweb AI <noreply@omniweb.ai>",
+        "from": (
+            _sanitize_header(from_email, allow_display_name=True)
+            or _sanitize_header(settings.RESEND_FROM_EMAIL, allow_display_name=True)
+            or _sanitize_header(settings.SMTP_FROM, allow_display_name=True)
+            or "Omniweb AI <noreply@omniweb.ai>"
+        ),
         "to": [to],
         "subject": subject,
         "html": html_body,
     }
     if text_body:
         payload["text"] = text_body
-    if settings.RESEND_REPLY_TO_EMAIL:
-        payload["reply_to"] = [settings.RESEND_REPLY_TO_EMAIL]
+    resolved_reply_to = (
+        _sanitize_header(reply_to_email)
+        or _sanitize_header(settings.RESEND_REPLY_TO_EMAIL)
+    )
+    if resolved_reply_to:
+        payload["reply_to"] = [resolved_reply_to]
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
@@ -105,7 +161,15 @@ async def _send_resend(*, to: str, subject: str, html_body: str, text_body: Opti
 
 # ── SMTP backend ─────────────────────────────────────────────────────────────
 
-async def _send_smtp(*, to: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
+async def _send_smtp(
+    *,
+    to: str,
+    subject: str,
+    html_body: str,
+    text_body: Optional[str] = None,
+    from_email: str | None = None,
+    reply_to_email: str | None = None,
+) -> bool:
     """Send via SMTP."""
     import smtplib
     from email.mime.multipart import MIMEMultipart
@@ -113,8 +177,15 @@ async def _send_smtp(*, to: str, subject: str, html_body: str, text_body: Option
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = settings.SMTP_FROM or f"noreply@{settings.SMTP_HOST}"
+    msg["From"] = (
+        _sanitize_header(from_email, allow_display_name=True)
+        or _sanitize_header(settings.SMTP_FROM, allow_display_name=True)
+        or f"noreply@{settings.SMTP_HOST}"
+    )
     msg["To"] = to
+    resolved_reply_to = _sanitize_header(reply_to_email) or _sanitize_header(settings.RESEND_REPLY_TO_EMAIL)
+    if resolved_reply_to:
+        msg["Reply-To"] = resolved_reply_to
 
     if text_body:
         msg.attach(MIMEText(text_body, "plain"))
@@ -363,6 +434,8 @@ async def sendAppointmentRequestEmail(
     tenant_id: UUID,
     conversation_id: str | None,
     to: str,
+    from_email: str | None = None,
+    reply_to_email: str | None = None,
     **data,
 ) -> bool:
     subject = f"Appointment request from {data.get('visitor_name') or 'a website visitor'}"
@@ -376,6 +449,8 @@ async def sendAppointmentRequestEmail(
         subject=subject,
         html_body=_appointment_details_html(payload),
         text_body=_appointment_details_text(payload),
+        from_email=from_email,
+        reply_to_email=reply_to_email,
     )
     await _log_email(db, tenant_id=tenant_id, conversation_id=conversation_id, recipient=to, subject=subject, email_type="appointment_request", ok=ok, metadata={"booking_url": data.get("booking_url")})
     return ok
@@ -387,6 +462,8 @@ async def sendVisitorConfirmationEmail(
     tenant_id: UUID,
     conversation_id: str | None,
     to: str,
+    from_email: str | None = None,
+    reply_to_email: str | None = None,
     **data,
 ) -> bool:
     business = data.get("business_name") or "the team"
@@ -401,6 +478,8 @@ async def sendVisitorConfirmationEmail(
         subject=subject,
         html_body=_appointment_details_html(payload),
         text_body=_appointment_details_text(payload),
+        from_email=from_email,
+        reply_to_email=reply_to_email,
     )
     await _log_email(db, tenant_id=tenant_id, conversation_id=conversation_id, recipient=to, subject=subject, email_type="visitor_confirmation", ok=ok, metadata={"booking_url": data.get("booking_url")})
     return ok
@@ -412,6 +491,8 @@ async def sendLeadNotificationEmail(
     tenant_id: UUID,
     conversation_id: str | None,
     to: str,
+    from_email: str | None = None,
+    reply_to_email: str | None = None,
     **data,
 ) -> bool:
     subject = f"New lead from {data.get('visitor_name') or 'website visitor'}"
@@ -425,6 +506,8 @@ async def sendLeadNotificationEmail(
         subject=subject,
         html_body=_appointment_details_html(payload),
         text_body=_appointment_details_text(payload),
+        from_email=from_email,
+        reply_to_email=reply_to_email,
     )
     await _log_email(db, tenant_id=tenant_id, conversation_id=conversation_id, recipient=to, subject=subject, email_type="lead_notification", ok=ok, metadata={"source_url": data.get("source_url")})
     return ok
@@ -438,6 +521,8 @@ async def sendWidgetInstallEmail(
     to: str,
     business_name: str,
     widget_url: str,
+    from_email: str | None = None,
+    reply_to_email: str | None = None,
 ) -> bool:
     subject = f"{business_name or 'Your'} Omniweb widget is installed"
     html = f"""
@@ -448,7 +533,14 @@ async def sendWidgetInstallEmail(
     </div>
     """
     text = f"Your Omniweb AI widget is installed: {widget_url}"
-    ok = await send_email(to=to, subject=subject, html_body=html, text_body=text)
+    ok = await send_email(
+        to=to,
+        subject=subject,
+        html_body=html,
+        text_body=text,
+        from_email=from_email,
+        reply_to_email=reply_to_email,
+    )
     await _log_email(db, tenant_id=tenant_id, conversation_id=conversation_id, recipient=to, subject=subject, email_type="widget_install", ok=ok, metadata={"widget_url": widget_url})
     return ok
 

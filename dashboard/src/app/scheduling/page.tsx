@@ -23,6 +23,12 @@ const bookingModes = [
   { value: "ai auto-book", label: "AI auto-book" },
 ];
 
+const schedulingBehaviors = [
+  { value: "booking_link_only", label: "Booking link only" },
+  { value: "collect_request_then_link", label: "Collect request, then link" },
+  { value: "collect_request_then_notify", label: "Collect request, then notify" },
+];
+
 export default function SchedulingPage() {
   const { user, loading } = useAuth();
   const [status, setStatus] = useState<SchedulingStatus | null>(null);
@@ -34,6 +40,12 @@ export default function SchedulingPage() {
   const [defaultEventTypeId, setDefaultEventTypeId] = useState("");
   const [eventTypeIds, setEventTypeIds] = useState("");
   const [bookingMode, setBookingMode] = useState("ai-assisted");
+  const [bookingUrl, setBookingUrl] = useState("");
+  const [notificationEmail, setNotificationEmail] = useState("");
+  const [resendFromEmail, setResendFromEmail] = useState("");
+  const [resendReplyToEmail, setResendReplyToEmail] = useState("");
+  const [appointmentInstructions, setAppointmentInstructions] = useState("");
+  const [schedulingBehavior, setSchedulingBehavior] = useState("collect_request_then_link");
 
   useEffect(() => {
     if (!loading && !user) window.location.href = AUTH_HANDOFF_PATH;
@@ -49,6 +61,12 @@ export default function SchedulingPage() {
       setDefaultEventTypeId(data.config.defaultEventTypeId || "");
       setEventTypeIds((data.config.eventTypeIds || []).join(", "));
       setBookingMode(data.config.bookingMode || "ai-assisted");
+      setBookingUrl(data.config.settings?.bookingUrl || "");
+      setNotificationEmail(data.config.settings?.notificationEmail || "");
+      setResendFromEmail(data.config.settings?.resendFromEmail || "");
+      setResendReplyToEmail(data.config.settings?.resendReplyToEmail || "");
+      setAppointmentInstructions(data.config.settings?.appointmentInstructions || "");
+      setSchedulingBehavior(data.config.settings?.schedulingBehavior || "collect_request_then_link");
 
       const eventTypeId = data.config.defaultEventTypeId || data.eventTypes[0]?.id;
       if (eventTypeId && data.health.ok) {
@@ -75,9 +93,15 @@ export default function SchedulingPage() {
       const data = await updateSchedulingConfig({
         calcom_user_id: calcomUserId,
         default_event_type_id: defaultEventTypeId,
+        booking_url: bookingUrl,
+        notification_email: notificationEmail,
+        resend_from_email: resendFromEmail,
+        resend_reply_to_email: resendReplyToEmail,
+        appointment_instructions: appointmentInstructions,
+        scheduling_behavior: schedulingBehavior as "booking_link_only" | "collect_request_then_link" | "collect_request_then_notify",
         event_type_ids: eventTypeIds.split(",").map((item) => item.trim()).filter(Boolean),
         booking_mode: bookingMode as "manual" | "ai-assisted" | "ai auto-book",
-        status: defaultEventTypeId ? "connected" : "disabled",
+        status: defaultEventTypeId || bookingUrl ? "connected" : "disabled",
       });
       setStatus(data);
       await load();
@@ -156,19 +180,22 @@ export default function SchedulingPage() {
 
           <Card className="bg-slate-900/70">
             <CardHeader>
-              <CardTitle>Booking Mode</CardTitle>
-              <CardDescription>How Omniweb AI books appointments</CardDescription>
+              <CardTitle>Assistant Behavior</CardTitle>
+              <CardDescription>How Omniweb AI handles scheduling leads</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <select
                 className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
-                value={bookingMode}
-                onChange={(event) => setBookingMode(event.target.value)}
+                value={schedulingBehavior}
+                onChange={(event) => setSchedulingBehavior(event.target.value)}
               >
-                {bookingModes.map((mode) => (
+                {schedulingBehaviors.map((mode) => (
                   <option key={mode.value} value={mode.value}>{mode.label}</option>
                 ))}
               </select>
+              <p className="text-xs text-slate-500">
+                These settings are tenant-specific. API keys stay on the backend only.
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -191,6 +218,18 @@ export default function SchedulingPage() {
               <div className="space-y-1.5">
                 <Label>Allowed event type IDs</Label>
                 <Input value={eventTypeIds} onChange={(event) => setEventTypeIds(event.target.value)} placeholder="123, 456" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Internal booking mode</Label>
+                <select
+                  className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
+                  value={bookingMode}
+                  onChange={(event) => setBookingMode(event.target.value)}
+                >
+                  {bookingModes.map((mode) => (
+                    <option key={mode.value} value={mode.value}>{mode.label}</option>
+                  ))}
+                </select>
               </div>
               <Button onClick={() => void saveConfig()} disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -220,6 +259,83 @@ export default function SchedulingPage() {
               ) : (
                 <p className="text-sm text-slate-400">No preview slots available yet. Connect a tenant event type and refresh.</p>
               )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="bg-slate-900/70">
+            <CardHeader>
+              <CardTitle>Booking Link</CardTitle>
+              <CardDescription>Tenant-specific Cal.com page shown to website visitors.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Cal.com booking URL</Label>
+                <Input
+                  value={bookingUrl}
+                  onChange={(event) => setBookingUrl(event.target.value)}
+                  placeholder="https://cal.com/your-business/consultation"
+                />
+                <p className="text-xs text-slate-500">
+                  If blank, Omniweb uses the platform fallback booking URL or event type.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Appointment instructions</Label>
+                <textarea
+                  value={appointmentInstructions}
+                  onChange={(event) => setAppointmentInstructions(event.target.value)}
+                  placeholder="Example: Ask what service they need and whether this is urgent."
+                  className="min-h-24 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+              <Button onClick={() => void saveConfig()} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Save Booking Settings
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-900/70">
+            <CardHeader>
+              <CardTitle>Email Settings</CardTitle>
+              <CardDescription>Per-tenant notification and email identity settings.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Team notification email</Label>
+                <Input
+                  value={notificationEmail}
+                  onChange={(event) => setNotificationEmail(event.target.value)}
+                  placeholder="team@business.com"
+                  type="email"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Sender email</Label>
+                <Input
+                  value={resendFromEmail}
+                  onChange={(event) => setResendFromEmail(event.target.value)}
+                  placeholder="Business Name <appointments@business.com>"
+                />
+                <p className="text-xs text-slate-500">
+                  Must be a verified Resend sender/domain. Leave blank to use the platform default.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Reply-to email</Label>
+                <Input
+                  value={resendReplyToEmail}
+                  onChange={(event) => setResendReplyToEmail(event.target.value)}
+                  placeholder="replies@business.com"
+                  type="email"
+                />
+              </div>
+              <Button onClick={() => void saveConfig()} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Save Email Settings
+              </Button>
             </CardContent>
           </Card>
         </div>

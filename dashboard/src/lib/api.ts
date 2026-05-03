@@ -588,6 +588,14 @@ export interface SchedulingStatus {
     eventTypeIds: string[];
     bookingMode: "manual" | "ai-assisted" | "ai auto-book" | string;
     status: string;
+    settings?: {
+      bookingUrl?: string;
+      notificationEmail?: string;
+      resendFromEmail?: string;
+      resendReplyToEmail?: string;
+      appointmentInstructions?: string;
+      schedulingBehavior?: "booking_link_only" | "collect_request_then_link" | "collect_request_then_notify" | string;
+    };
   };
   internalUrlConfigured: boolean;
   eventTypes: SchedulingEventType[];
@@ -601,6 +609,12 @@ export async function getSchedulingStatus() {
 export async function updateSchedulingConfig(body: {
   calcom_user_id?: string;
   default_event_type_id?: string;
+  booking_url?: string;
+  notification_email?: string;
+  resend_from_email?: string;
+  resend_reply_to_email?: string;
+  appointment_instructions?: string;
+  scheduling_behavior?: "booking_link_only" | "collect_request_then_link" | "collect_request_then_notify";
   event_type_ids?: string[];
   booking_mode?: "manual" | "ai-assisted" | "ai auto-book";
   status?: "connected" | "disabled" | "error";

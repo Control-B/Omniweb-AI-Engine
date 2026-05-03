@@ -155,7 +155,7 @@ class AgentConfig(Base):
     )
 
     # Voice (ElevenLabs voice ID)
-    voice_id: Mapped[str] = mapped_column(String(100), default="EXAVITQu4vr4xnSDxMaL", nullable=False)
+    voice_id: Mapped[str] = mapped_column(String(100), default="nf4MCGNSdM0hxM95ZBQR", nullable=False)
     voice_stability: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
     voice_similarity_boost: Mapped[float] = mapped_column(Float, default=0.75, nullable=False)
 
@@ -958,7 +958,7 @@ class AgentTemplate(Base):
     agent_name: Mapped[str] = mapped_column(String(100), default="AI Assistant", nullable=False)
     agent_greeting: Mapped[str] = mapped_column(Text, default="Thank you for visiting today, I am your AI assistant... how can I assist you?", nullable=False)
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    voice_id: Mapped[str] = mapped_column(String(100), default="EXAVITQu4vr4xnSDxMaL", nullable=False)
+    voice_id: Mapped[str] = mapped_column(String(100), default="nf4MCGNSdM0hxM95ZBQR", nullable=False)
     voice_stability: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
     voice_similarity_boost: Mapped[float] = mapped_column(Float, default=0.75, nullable=False)
     llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o", nullable=False)

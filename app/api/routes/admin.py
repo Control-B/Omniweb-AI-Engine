@@ -229,7 +229,7 @@ class TemplateCreate(BaseModel):
     agent_name: str = "AI Assistant"
     agent_greeting: str = "Thank you for visiting today, I am your AI assistant... how can I assist you?"
     system_prompt: str = ""
-    voice_id: str = "EXAVITQu4vr4xnSDxMaL"
+    voice_id: str = "nf4MCGNSdM0hxM95ZBQR"
     voice_stability: float = 0.5
     voice_similarity_boost: float = 0.75
     llm_model: str = "gpt-4o"

@@ -2,6 +2,9 @@ from types import SimpleNamespace
 
 from app.services import deepgram_service
 
+SARAH_VOICE_ID = "nf4MCGNSdM0hxM95ZBQR"
+LEGACY_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
+
 
 def _agent_config(**overrides):
     values = {
@@ -76,3 +79,26 @@ def test_voice_agent_settings_omits_multi_listen_language(monkeypatch):
 
     assert settings["agent"]["language"] == "multi"
     assert "language" not in settings["agent"]["listen"]["provider"]
+
+
+def test_voice_agent_settings_replaces_legacy_elevenlabs_default(monkeypatch):
+    monkeypatch.setattr(
+        deepgram_service,
+        "settings",
+        SimpleNamespace(
+            DEEPGRAM_AGENT_MODEL="gpt-4o-mini",
+            DEEPGRAM_STT_MODEL="nova-3",
+            DEEPGRAM_TTS_VOICE="aura-asteria-en",
+            ELEVENLABS_API_KEY="test-key",
+            ELEVENLABS_DEFAULT_VOICE_ID=LEGACY_VOICE_ID,
+        ),
+    )
+
+    settings = deepgram_service.build_voice_agent_settings(
+        _agent_config(voice_id=LEGACY_VOICE_ID),
+        language="en",
+    )
+
+    speak = settings["agent"]["speak"]
+    assert isinstance(speak, list)
+    assert f"/text-to-speech/{SARAH_VOICE_ID}/" in speak[0]["endpoint"]["url"]

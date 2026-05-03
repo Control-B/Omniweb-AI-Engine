@@ -20,6 +20,8 @@ settings = get_settings()
 BASE_URL = "https://api.elevenlabs.io/v1"
 CONVAI_URL = f"{BASE_URL}/convai"
 TTS_URL = f"{BASE_URL}/text-to-speech"
+SARAH_ELEVENLABS_VOICE_ID = "nf4MCGNSdM0hxM95ZBQR"
+LEGACY_DEFAULT_ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
 
 SUPPORTED_LANGUAGE_OPTIONS: list[dict[str, Any]] = [
     {"code": "ar", "label": "Arabic", "rtl": True},
@@ -54,7 +56,8 @@ def _voice_id_for_language(language: str | None) -> str | None:
 
 
 def resolve_voice_id(*, language: str | None = None, voice_id: str | None = None) -> str:
-    return voice_id or _voice_id_for_language(language) or settings.ELEVENLABS_DEFAULT_VOICE_ID
+    resolved = voice_id or _voice_id_for_language(language) or settings.ELEVENLABS_DEFAULT_VOICE_ID
+    return SARAH_ELEVENLABS_VOICE_ID if resolved == LEGACY_DEFAULT_ELEVENLABS_VOICE_ID else resolved
 
 
 def get_language_options() -> list[dict[str, Any]]:

@@ -17,6 +17,8 @@ settings = get_settings()
 
 DEEPGRAM_GRANT_URL = "https://api.deepgram.com/v1/auth/grant"
 DEEPGRAM_AGENT_WS_URL = "wss://agent.deepgram.com/v1/agent/converse"
+SARAH_ELEVENLABS_VOICE_ID = "nf4MCGNSdM0hxM95ZBQR"
+LEGACY_DEFAULT_ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
 SUPPORTED_VOICE_LANGUAGE_CODES = {
     "en", "es", "fr", "de", "it", "pt", "nl", "sv", "ro",
     "ru", "uk", "pl",
@@ -168,9 +170,12 @@ def _deepgram_tts_for_language(language_tag: str, config: AgentConfig) -> str:
 def _elevenlabs_voice_for_config(config: AgentConfig) -> str:
     """Return ElevenLabs voice id, falling back to default when config uses Aura."""
     voice_id = (config.voice_id or "").strip()
-    if voice_id and "aura" not in voice_id.lower():
+    if voice_id and voice_id != LEGACY_DEFAULT_ELEVENLABS_VOICE_ID and "aura" not in voice_id.lower():
         return voice_id
-    return settings.ELEVENLABS_DEFAULT_VOICE_ID
+    default_voice_id = (settings.ELEVENLABS_DEFAULT_VOICE_ID or "").strip()
+    if default_voice_id and default_voice_id != LEGACY_DEFAULT_ELEVENLABS_VOICE_ID:
+        return default_voice_id
+    return SARAH_ELEVENLABS_VOICE_ID
 
 
 def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> str:

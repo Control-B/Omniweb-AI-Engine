@@ -7,7 +7,6 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 DEFAULT_ENGINE_BASE_URL = "https://omniweb-engine-rs6fr.ondigitalocean.app"
 DEFAULT_PLATFORM_URL = "https://omniweb.ai"
 
@@ -60,7 +59,7 @@ class Settings(BaseSettings):
 
     # ── ElevenLabs (Voice + Text + KB engine) ────────────────
     ELEVENLABS_API_KEY: str = ""
-    ELEVENLABS_DEFAULT_VOICE_ID: str = "EXAVITQu4vr4xnSDxMaL"  # Rachel
+    ELEVENLABS_DEFAULT_VOICE_ID: str = "nf4MCGNSdM0hxM95ZBQR"  # Sarah
     ELEVENLABS_DEFAULT_LANGUAGE: str = "en"
     ELEVENLABS_VOICE_ID_AR: str | None = None
     ELEVENLABS_VOICE_ID_DE: str | None = None

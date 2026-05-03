@@ -275,7 +275,7 @@ async def signup(
         agent_name=template.agent_name if template else "AI Assistant",
         agent_greeting=template.agent_greeting if template else "Thank you for visiting today, I am your AI assistant... how can I assist you?",
         system_prompt=template.system_prompt if template else "You are a helpful AI assistant.",
-        voice_id=template.voice_id if template else "EXAVITQu4vr4xnSDxMaL",
+        voice_id=template.voice_id if template else "nf4MCGNSdM0hxM95ZBQR",
         voice_stability=template.voice_stability if template else 0.5,
         voice_similarity_boost=template.voice_similarity_boost if template else 0.75,
         llm_model=template.llm_model if template else "gpt-4o",
@@ -674,7 +674,7 @@ async def demo_token(
             agent_name="Demo AI Assistant",
             agent_greeting="Thank you for visiting today, I am your AI assistant... how can I assist you?",
             system_prompt="You are a helpful AI assistant for a demo business.",
-            voice_id="EXAVITQu4vr4xnSDxMaL",
+            voice_id="nf4MCGNSdM0hxM95ZBQR",
             business_name="Demo Business",
             business_type="demo",
         )

@@ -54,7 +54,7 @@ services:
         value: 177219d04f212c1c5e6919248935a63b68318de54d939b86b9502e83e163da43
       - key: ELEVENLABS_DEFAULT_VOICE_ID
         scope: RUN_AND_BUILD_TIME
-        value: EXAVITQu4vr4xnSDxMaL
+        value: nf4MCGNSdM0hxM95ZBQR
       - key: ELEVENLABS_WEBHOOK_SECRET
         scope: RUN_AND_BUILD_TIME
         value: ""

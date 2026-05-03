@@ -53,28 +53,6 @@ type BootstrapPayload = {
   settings: Record<string, unknown>;
 };
 
-const DEFAULT_WELCOME_MESSAGE =
-  "Thank you for visiting today, I am your AI assistant... how can I assist you?";
-
-const STALE_GENERIC_PATTERNS = [
-  "problem you're trying to solve",
-  "problem you are trying to solve",
-  "understand your needs",
-  "recommend the right solution",
-  "move forward faster by text or voice",
-  "talk to me",
-];
-
-function normalizeAssistantCopy(text: string): string {
-  const value = String(text || "").trim();
-  if (!value) return DEFAULT_WELCOME_MESSAGE;
-  const normalized = value.toLowerCase().replace(/[’]/g, "'").replace(/\s+/g, " ");
-  if (STALE_GENERIC_PATTERNS.some((pattern) => normalized.includes(pattern))) {
-    return DEFAULT_WELCOME_MESSAGE;
-  }
-  return value;
-}
-
 export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [langs, setLangs] = useState<LangOption[]>([]);
@@ -87,6 +65,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [textDraft, setTextDraft] = useState("");
   const sessionRef = useRef<DeepgramVoiceAgentSession | null>(null);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
   // Read ?voice= and ?mode= from the URL (set by the test console iframe src).
   const [voiceOverride, setVoiceOverride] = useState<string | null>(null);
 
@@ -147,6 +126,12 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
     };
   }, [stopSession]);
 
+  useEffect(() => {
+    const node = transcriptRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [lines.length, errorMsg]);
+
   const bootstrap = useCallback(async (): Promise<BootstrapPayload> => {
     const body: { client_id?: string; widget_key?: string; language: string; voice_override?: string } = {
       language: selectedLang?.code || "en",
@@ -195,12 +180,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
         const payload = await bootstrap();
         const session = new DeepgramVoiceAgentSession({
           onTranscript: (line) => {
-            setLines((prev) => [
-              ...prev,
-              line.role === "assistant"
-                ? { ...line, content: normalizeAssistantCopy(line.content) }
-                : line,
-            ]);
+            setLines((prev) => [...prev, line]);
           },
           onError: (m) => setErrorMsg(m),
           onClose: () => {
@@ -256,7 +236,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
   }, [textDraft, startSession]);
 
   return (
-    <div className="min-h-dvh w-full bg-slate-950">
+    <div className="min-h-dvh w-full bg-slate-950 [font-size:14px] [-webkit-text-size-adjust:100%] [text-size-adjust:100%]">
       {useLanding ? (
         <p className="fixed top-0 left-0 right-0 z-[10000] text-center text-[10px] text-slate-500 py-1.5 px-2 border-b border-white/5 bg-slate-900/80">
           Demo: using engine <code className="text-cyan-600/80">LANDING_PAGE_CLIENT_ID</code> (no
@@ -282,8 +262,11 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
       </button>
 
       {panelOpen && (
-        <div className="fixed bottom-24 right-6 z-[9998] w-[min(100vw-2rem,22rem)] max-h-[min(85vh,32rem)] flex flex-col rounded-2xl border border-white/10 bg-[#0b1220] shadow-2xl text-slate-100 overflow-hidden">
-          <header className="flex items-start gap-3 px-4 pt-4 pb-3 border-b border-white/5">
+        <div
+          className="fixed inset-x-3 bottom-3 top-3 z-[9998] flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220] text-[14px] text-slate-100 shadow-2xl sm:inset-auto sm:bottom-24 sm:right-6 sm:top-auto sm:h-auto sm:max-h-[min(85dvh,32rem)] sm:w-[22rem]"
+          style={{ WebkitTextSizeAdjust: "100%", textSizeAdjust: "100%" }}
+        >
+          <header className="flex shrink-0 items-start gap-3 border-b border-white/5 px-4 pb-3 pt-4">
             <div
               className="h-10 w-10 shrink-0 rounded-full"
               style={{
@@ -293,8 +276,8 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
               }}
             />
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm tracking-tight">Omniweb AI</p>
-              <p className="text-xs text-slate-400 truncate">{subtitle}</p>
+              <p className="text-[14px] font-semibold leading-5 tracking-tight">Omniweb AI</p>
+              <p className="truncate text-[12px] leading-4 text-slate-400">{subtitle}</p>
             </div>
             <button
               type="button"
@@ -309,25 +292,27 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
             </button>
           </header>
 
-          {errorMsg ? (
-            <div className="mx-3 mt-3 rounded-lg bg-red-950/80 border border-red-500/30 px-3 py-2 text-xs text-red-200 flex flex-wrap items-center gap-2">
-              <span className="flex-1 min-w-0 break-words">{errorMsg}</span>
-              <button
-                type="button"
-                className="shrink-0 text-red-300 underline hover:text-red-100"
-                onClick={() => {
-                  setErrorMsg("");
-                  void (mode === "voice" ? onVoiceClick() : onTextMode());
-                }}
-              >
-                Retry
-              </button>
-            </div>
-          ) : null}
-
-          <div className="flex-1 min-h-[10rem] max-h-[14rem] overflow-y-auto px-4 py-3 space-y-2 text-sm">
+          <div
+            ref={transcriptRef}
+            className="min-h-0 flex-1 touch-pan-y space-y-2 overflow-y-auto overscroll-contain px-4 py-3 text-[14px] leading-5 [-webkit-overflow-scrolling:touch]"
+          >
+            {errorMsg ? (
+              <div className="rounded-lg border border-red-500/30 bg-red-950/80 px-3 py-2 text-[12px] leading-5 text-red-200">
+                <span className="block break-words">{errorMsg}</span>
+                <button
+                  type="button"
+                  className="mt-1 text-red-300 underline hover:text-red-100"
+                  onClick={() => {
+                    setErrorMsg("");
+                    void (mode === "voice" ? onVoiceClick() : onTextMode());
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : null}
             {lines.length === 0 && !errorMsg && (
-              <p className="text-slate-500 text-xs leading-relaxed">
+              <p className="text-[12px] leading-relaxed text-slate-500">
                 Start voice or type below. Your conversation appears here in real time.
               </p>
             )}
@@ -340,31 +325,31 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
                     : "bg-cyan-950/40 mr-4 text-cyan-50 border border-cyan-500/15"
                 }`}
               >
-                <p className="text-[10px] uppercase tracking-wide opacity-60 mb-0.5">
+                <p className="mb-0.5 text-[10px] uppercase tracking-wide opacity-60">
                   {ln.role === "user" ? "You" : "Assistant"}
                 </p>
-                <p className="whitespace-pre-wrap break-words">{ln.content}</p>
+                <p className="whitespace-pre-wrap break-words text-[14px] leading-5">{ln.content}</p>
               </div>
             ))}
           </div>
 
-          <div className="px-4 pb-2">
+          <div className="shrink-0 px-4 pb-2">
             <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Language</p>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setLangOpen((o) => !o)}
                 disabled={sessionOn}
-                className="w-full flex items-center justify-between gap-2 rounded-xl bg-slate-900/80 border border-white/10 px-3 py-2 text-sm text-left hover:bg-slate-900 disabled:opacity-50"
+                className="flex w-full items-center justify-between gap-2 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-left text-[14px] hover:bg-slate-900 disabled:opacity-50"
               >
                 <span className="flex items-center gap-2 truncate">
-                  <span className="text-lg">{selectedLang ? flagEmoji(selectedLang) : "🌐"}</span>
+                  <span className="text-[18px] leading-none">{selectedLang ? flagEmoji(selectedLang) : "🌐"}</span>
                   <span className="truncate">{selectedLang?.label || "English"}</span>
                 </span>
                 <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
               </button>
               {langOpen && langs.length > 0 && (
-                <ul className="absolute z-10 bottom-full mb-1 w-full max-h-48 overflow-auto rounded-xl border border-white/10 bg-[#0f172a] shadow-xl py-1 text-sm">
+                <ul className="absolute bottom-full z-10 mb-1 max-h-48 w-full overflow-auto rounded-xl border border-white/10 bg-[#0f172a] py-1 text-[14px] shadow-xl">
                   {langs.map((l) => (
                     <li key={l.code}>
                       <button
@@ -385,12 +370,12 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
             </div>
           </div>
 
-          <div className="flex gap-2 px-4 pb-3">
+          <div className="flex shrink-0 gap-2 px-4 pb-3">
             <button
               type="button"
               onClick={() => void onVoiceClick()}
               disabled={connecting}
-              className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-medium transition-all ${
                 mode === "voice" && sessionOn
                   ? "bg-cyan-500 text-slate-950 shadow-[0_0_24px_rgba(34,211,238,0.35)]"
                   : "bg-cyan-600/90 text-white hover:bg-cyan-500"
@@ -403,7 +388,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
               type="button"
               onClick={() => void onTextMode()}
               disabled={connecting}
-              className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium border border-white/10 transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-[14px] font-medium transition-all ${
                 mode === "text"
                   ? "bg-slate-800 text-white"
                   : "bg-slate-900/60 text-slate-300 hover:bg-slate-800"
@@ -414,7 +399,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
             </button>
           </div>
 
-          <div className="flex items-end gap-2 px-4 pb-4 border-t border-white/5 pt-3">
+          <div className="flex shrink-0 items-end gap-2 border-t border-white/5 px-4 pb-4 pt-3">
             <textarea
               rows={2}
               value={textDraft}
@@ -426,7 +411,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
                 }
               }}
               placeholder="Start voice or type a message…"
-              className="flex-1 resize-none rounded-xl bg-slate-900/80 border border-white/10 px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+              className="max-h-24 min-h-11 flex-1 resize-none rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-[14px] leading-5 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
             />
             <button
               type="button"
@@ -440,7 +425,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
           </div>
 
           {sessionOn && mode === "voice" && (
-            <div className="px-4 pb-3 flex justify-center">
+            <div className="flex shrink-0 justify-center px-4 pb-3">
               <button
                 type="button"
                 onClick={() => void stopSession()}

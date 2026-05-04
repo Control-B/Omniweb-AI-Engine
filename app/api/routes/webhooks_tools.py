@@ -64,7 +64,10 @@ def _get_default_client_id() -> uuid.UUID:
     return uuid.uuid5(uuid.NAMESPACE_DNS, "omniweb.ai")
 
 
-async def _resolve_tenant(agent_id: str | None) -> tuple[uuid.UUID, str, list[str]]:
+async def _resolve_tenant(
+    agent_id: str | None,
+    client_id: str | None = None,
+) -> tuple[uuid.UUID, str, list[str]]:
     """Resolve client_id, industry_slug, and custom_guardrails from a Retell ``agent_id``.
 
     Falls back to the landing-page client if the agent_id is not found.
@@ -72,14 +75,31 @@ async def _resolve_tenant(agent_id: str | None) -> tuple[uuid.UUID, str, list[st
     Returns:
         (client_id, industry_slug, custom_guardrails)
     """
-    if not agent_id:
-        return _get_default_client_id(), "general", []
-
     from app.core.database import async_session_factory
     from sqlalchemy import select
 
     try:
         async with async_session_factory() as db:
+            if client_id:
+                try:
+                    tenant_id = uuid.UUID(str(client_id))
+                except ValueError:
+                    tenant_id = None
+                if tenant_id:
+                    result = await db.execute(
+                        select(AgentConfig).where(AgentConfig.client_id == tenant_id)
+                    )
+                    config = result.scalar_one_or_none()
+                    if config:
+                        return (
+                            config.client_id,
+                            config.industry or "general",
+                            config.custom_guardrails or [],
+                        )
+
+            if not agent_id:
+                return _get_default_client_id(), "general", []
+
             result = await db.execute(
                 select(AgentConfig).where(AgentConfig.retell_agent_id == agent_id)
             )
@@ -192,13 +212,14 @@ async def capture_lead(
     request: Request,
     x_tool_secret: Optional[str] = Header(None),
     x_agent_id: Optional[str] = Header(None),
+    x_client_id: Optional[str] = Header(None),
 ):
     """Save a qualified lead from the AI conversation."""
     _verify_secret(x_tool_secret)
     t0 = time.time()
 
     # Resolve tenant from agent context
-    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id, x_client_id)
 
     from app.core.database import async_session_factory
 
@@ -293,6 +314,7 @@ async def book_appointment(
     body: BookAppointmentRequest,
     x_tool_secret: Optional[str] = Header(None),
     x_agent_id: Optional[str] = Header(None),
+    x_client_id: Optional[str] = Header(None),
 ):
     """Book a consultation appointment.
 
@@ -302,7 +324,7 @@ async def book_appointment(
     _verify_secret(x_tool_secret)
     t0 = time.time()
 
-    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id, x_client_id)
 
     from app.core.database import async_session_factory
 
@@ -398,12 +420,13 @@ async def send_confirmation(
     body: SendConfirmationRequest,
     x_tool_secret: Optional[str] = Header(None),
     x_agent_id: Optional[str] = Header(None),
+    x_client_id: Optional[str] = Header(None),
 ):
     """Send an SMS confirmation to the lead."""
     _verify_secret(x_tool_secret)
     t0 = time.time()
 
-    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id, x_client_id)
 
     templates = {
         "booking": f"Hi {body.name}! 🎉 Your appointment is confirmed. We'll reach out shortly to finalize the time. Questions? Reply to this message.",
@@ -464,6 +487,7 @@ async def check_availability(
     body: CheckAvailabilityRequest,
     x_tool_secret: Optional[str] = Header(None),
     x_agent_id: Optional[str] = Header(None),
+    x_client_id: Optional[str] = Header(None),
 ):
     """Return available consultation time slots.
 
@@ -473,7 +497,7 @@ async def check_availability(
     _verify_secret(x_tool_secret)
     t0 = time.time()
 
-    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id, x_client_id)
 
     from app.core.database import async_session_factory
 
@@ -528,6 +552,7 @@ async def get_pricing(
     body: GetPricingRequest,
     x_tool_secret: Optional[str] = Header(None),
     x_agent_id: Optional[str] = Header(None),
+    x_client_id: Optional[str] = Header(None),
 ):
     """Return pricing information.
 
@@ -539,7 +564,7 @@ async def get_pricing(
     _verify_secret(x_tool_secret)
     t0 = time.time()
 
-    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id, x_client_id)
 
     # Default pricing (Omniweb's own — overridden by tenant KB in practice)
     response_text = (
@@ -575,12 +600,13 @@ async def send_services_email(
     body: SendServicesEmailRequest,
     x_tool_secret: Optional[str] = Header(None),
     x_agent_id: Optional[str] = Header(None),
+    x_client_id: Optional[str] = Header(None),
 ):
     """Send a visitor-requested services overview email via Resend/SMTP."""
     _verify_secret(x_tool_secret)
     t0 = time.time()
 
-    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id, x_client_id)
 
     from app.core.database import async_session_factory
     from app.services.email_service import send_services_overview_email

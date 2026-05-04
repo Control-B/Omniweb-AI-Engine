@@ -262,7 +262,11 @@ def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> st
     return "en"[:8]
 
 
-def _deepgram_function_definitions() -> list[dict[str, Any]]:
+def _deepgram_function_definitions(
+    *,
+    client_id: str | None = None,
+    agent_id: str | None = None,
+) -> list[dict[str, Any]]:
     """Return Deepgram Voice Agent server-side function definitions."""
     retell_tools = get_tool_definitions(
         [
@@ -284,10 +288,15 @@ def _deepgram_function_definitions() -> list[dict[str, Any]]:
             "parameters": request_body,
         }
         if schema.get("url"):
+            headers = dict(schema.get("headers") or {})
+            if client_id:
+                headers["X-Client-Id"] = client_id
+            if agent_id:
+                headers["X-Agent-Id"] = agent_id
             function_def["endpoint"] = {
                 "url": schema.get("url"),
                 "method": str(schema.get("method") or "POST").lower(),
-                "headers": schema.get("headers") or {},
+                "headers": headers,
             }
         if function_def.get("name"):
             functions.append(function_def)
@@ -384,7 +393,10 @@ def build_voice_agent_settings(
     if listen_language != "multi":
         listen_provider["language"] = listen_language
 
-    functions = _deepgram_function_definitions()
+    functions = _deepgram_function_definitions(
+        client_id=str(config.client_id),
+        agent_id=config.retell_agent_id,
+    )
 
     # Shape must match Deepgram Voice Agent v1 Settings.
     # Provider-specific listen options belong inside agent.listen.provider.

@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig
 from app.services.omniweb_brain_service import compose_channel_prompt
+from app.services.tool_registry import get_tool_definitions
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -261,6 +262,38 @@ def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> st
     return "en"[:8]
 
 
+def _deepgram_function_definitions() -> list[dict[str, Any]]:
+    """Return Deepgram Voice Agent server-side function definitions."""
+    retell_tools = get_tool_definitions(
+        [
+            "capture_lead",
+            "send_services_email",
+            "get_pricing",
+            "check_availability",
+            "book_appointment",
+            "send_confirmation",
+        ]
+    )
+    functions: list[dict[str, Any]] = []
+    for tool in retell_tools:
+        schema = tool.get("api_schema") or {}
+        request_body = schema.get("request_body") or {}
+        function_def: dict[str, Any] = {
+            "name": tool.get("name"),
+            "description": tool.get("description") or "",
+            "parameters": request_body,
+        }
+        if schema.get("url"):
+            function_def["endpoint"] = {
+                "url": schema.get("url"),
+                "method": str(schema.get("method") or "POST").lower(),
+                "headers": schema.get("headers") or {},
+            }
+        if function_def.get("name"):
+            functions.append(function_def)
+    return functions
+
+
 def build_voice_agent_settings(
     config: AgentConfig,
     language: str | None = None,
@@ -351,6 +384,8 @@ def build_voice_agent_settings(
     if listen_language != "multi":
         listen_provider["language"] = listen_language
 
+    functions = _deepgram_function_definitions()
+
     # Shape must match Deepgram Voice Agent v1 Settings.
     # Provider-specific listen options belong inside agent.listen.provider.
     return {
@@ -371,6 +406,7 @@ def build_voice_agent_settings(
                     "temperature": 0.65,
                 },
                 "prompt": composed,
+                "functions": functions,
             },
             "speak": speak,
             "greeting": config.agent_greeting or "Hi there. How can I help you today?",

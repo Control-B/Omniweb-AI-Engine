@@ -169,6 +169,30 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
             },
         },
     },
+
+    "send_services_email": {
+        "type": "webhook",
+        "name": "send_services_email",
+        "description": (
+            "Send an email to the visitor with a concise overview of the business services. "
+            "Use this only after the visitor explicitly asks to receive information by email "
+            "and has provided their email address."
+        ),
+        "api_schema": {
+            "url": "{base_url}/api/tools/send-services-email",
+            "method": "POST",
+            "headers": {"X-Tool-Secret": "{tool_secret}"},
+            "request_body": {
+                "type": "object",
+                "properties": {
+                    "email": {"type": "string", "description": "The visitor's email address"},
+                    "name": {"type": "string", "description": "The visitor's name, if known"},
+                    "topic": {"type": "string", "description": "The services or topic they asked about"},
+                },
+                "required": ["email"],
+            },
+        },
+    },
 }
 
 
@@ -188,7 +212,11 @@ def get_tool_definitions(
     Substitutes {base_url} and {tool_secret} placeholders in URLs and headers.
     """
     resolved_base = base_url or _base_url()
-    resolved_secret = tool_secret or settings.TOOL_WEBHOOK_SECRET
+    resolved_secret = (
+        tool_secret
+        or getattr(settings, "TOOL_WEBHOOK_SECRET", "")
+        or settings.ELEVENLABS_TOOL_SECRET
+    )
 
     tools: list[dict[str, Any]] = []
     for name in tool_names:

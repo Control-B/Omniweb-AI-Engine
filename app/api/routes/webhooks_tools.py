@@ -37,12 +37,24 @@ LANDING_PAGE_CLIENT_ID = settings.LANDING_PAGE_CLIENT_ID if hasattr(settings, "L
 
 def _verify_secret(secret: str | None):
     """Validate the shared tool secret."""
-    expected = settings.TOOL_WEBHOOK_SECRET
+    expected = getattr(settings, "TOOL_WEBHOOK_SECRET", "") or settings.ELEVENLABS_TOOL_SECRET
     if not expected or expected == "change-me":
         logger.warning("TOOL_WEBHOOK_SECRET is not configured — tool calls are open")
         return
     if secret != expected:
         raise HTTPException(403, "Invalid tool secret")
+
+
+def _coerce_services(raw) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    if isinstance(raw, dict):
+        return [str(key).strip() for key in raw if str(key).strip()]
+    if isinstance(raw, str) and raw.strip():
+        return [raw.strip()]
+    return []
 
 
 def _get_default_client_id() -> uuid.UUID:
@@ -543,5 +555,72 @@ async def get_pricing(
     await _log_tool_call(
         "get_pricing_info", body.model_dump(), result,
         client_id=client_id, duration_ms=int((time.time() - t0) * 1000),
+    )
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tool 6: send_services_email — send requested service information by email
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class SendServicesEmailRequest(BaseModel):
+    email: str = Field(..., description="Visitor email address")
+    name: Optional[str] = Field(None, description="Visitor name, if known")
+    topic: Optional[str] = Field(None, description="Service/topic the visitor asked about")
+
+
+@router.post("/send-services-email")
+async def send_services_email(
+    body: SendServicesEmailRequest,
+    x_tool_secret: Optional[str] = Header(None),
+    x_agent_id: Optional[str] = Header(None),
+):
+    """Send a visitor-requested services overview email via Resend/SMTP."""
+    _verify_secret(x_tool_secret)
+    t0 = time.time()
+
+    client_id, industry_slug, custom_guardrails = await _resolve_tenant(x_agent_id)
+
+    from app.core.database import async_session_factory
+    from app.services.email_service import send_services_overview_email
+
+    async with async_session_factory() as db:
+        result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == client_id))
+        config = result.scalar_one_or_none()
+
+    business_name = config.business_name if config else "Omniweb AI"
+    agent_name = config.agent_name if config else "Omniweb AI"
+    services = _coerce_services(config.services if config else None)
+
+    sent = await send_services_overview_email(
+        to=body.email,
+        recipient_name=body.name,
+        business_name=business_name or "Omniweb AI",
+        agent_name=agent_name or "Omniweb AI",
+        services=services,
+        requested_topic=body.topic,
+    )
+
+    if sent:
+        response_text = f"Email sent to {body.email} with information about {business_name or 'our services'}."
+    else:
+        response_text = "I couldn't send the email right now. Please confirm the email address or ask the team to follow up manually."
+
+    response_text = _enforce_guardrails(
+        response_text,
+        tool_name="send_services_email",
+        industry_slug=industry_slug,
+        custom_guardrails=custom_guardrails,
+    )
+    result = {"result": response_text, "sent": sent, "email": body.email}
+    await _log_tool_call(
+        "send_services_email",
+        body.model_dump(),
+        result,
+        client_id=client_id,
+        success=sent,
+        error_message=None if sent else "email_provider_returned_false",
+        duration_ms=int((time.time() - t0) * 1000),
     )
     return result

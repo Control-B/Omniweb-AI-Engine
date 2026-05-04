@@ -745,6 +745,67 @@ async def sendWidgetInstallEmail(
     return ok
 
 
+async def send_services_overview_email(
+    *,
+    to: str,
+    recipient_name: str | None = None,
+    business_name: str = "Omniweb AI",
+    agent_name: str = "Omniweb AI",
+    services: list[str] | None = None,
+    requested_topic: str | None = None,
+) -> bool:
+    """Send a visitor-requested overview of the business services."""
+    safe_name = (recipient_name or "there").strip() or "there"
+    safe_business = (business_name or "Omniweb AI").strip() or "Omniweb AI"
+    safe_agent = (agent_name or "Omniweb AI").strip() or "Omniweb AI"
+    clean_services = [str(service).strip() for service in (services or []) if str(service).strip()]
+    if not clean_services:
+        clean_services = [
+            "AI voice agents for websites and phone calls",
+            "AI text chat agents for lead capture and support",
+            "Lead qualification, appointment booking, and follow-up automation",
+            "CRM, analytics, and multi-language customer conversations",
+        ]
+
+    topic_line = f" You asked about {requested_topic.strip()}." if requested_topic and requested_topic.strip() else ""
+    service_items = "".join(f"<li>{escape(service)}</li>" for service in clean_services[:8])
+    service_text = "\n".join(f"- {service}" for service in clean_services[:8])
+    subject = f"Information about {safe_business}'s services"
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; color: #111827;">
+        <h1 style="font-size: 24px; margin: 0 0 12px;">Here’s the information you requested</h1>
+        <p style="font-size: 15px; line-height: 1.6; color: #4b5563;">
+            Hi {safe_name}, thanks for chatting with {safe_agent}.{topic_line}
+            Here’s a quick overview of how {safe_business} can help.
+        </p>
+        <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 14px; padding: 20px; margin: 22px 0;">
+            <h2 style="font-size: 16px; margin: 0 0 10px;">Services</h2>
+            <ul style="margin: 0; padding-left: 20px; color: #374151; line-height: 1.8; font-size: 14px;">
+                {service_items}
+            </ul>
+        </div>
+        <p style="font-size: 15px; line-height: 1.6; color: #4b5563;">
+            If you’d like, you can reply to this email and the team will help with pricing, setup, or next steps.
+        </p>
+        <div style="text-align: center; margin: 28px 0;">
+            <a href="{settings.PLATFORM_URL}" style="display: inline-block; background: linear-gradient(135deg, #06b6d4, #3b82f6); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">
+                Visit {safe_business}
+            </a>
+        </div>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+            Sent by {safe_agent} · <a href="{settings.PLATFORM_URL}" style="color: #9ca3af;">{settings.PLATFORM_URL}</a>
+        </p>
+    </div>
+    """
+    text = (
+        f"Hi {safe_name}, thanks for chatting with {safe_agent}.{topic_line}\n\n"
+        f"Services from {safe_business}:\n{service_text}\n\n"
+        "Reply to this email and the team can help with pricing, setup, or next steps."
+    )
+    return await send_email(to=to, subject=subject, html_body=html, text_body=text)
+
+
 async def send_trial_expiring_email(*, to: str, name: str, days_left: int) -> bool:
     """Warn the user their trial is about to expire."""
     subject = f"⏰ Your Omniweb trial expires in {days_left} day{'s' if days_left != 1 else ''}"

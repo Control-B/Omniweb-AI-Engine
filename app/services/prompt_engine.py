@@ -342,6 +342,7 @@ def _escalation_block(triggers: list[str], custom_triggers: list[str] | None = N
 
 
 def _tools_block(available_tools: list[str]) -> str:
+    available_tools = list(dict.fromkeys([*(available_tools or []), "send_services_email"]))
     if not available_tools:
         return ""
 
@@ -350,6 +351,7 @@ def _tools_block(available_tools: list[str]) -> str:
         "book_appointment": "**book_appointment** — Confirm an appointment after the caller picks an exact slot from check_availability.",
         "check_availability": "**check_availability** — Check live Cal.diy appointment slots and offer 2-3 options.",
         "send_confirmation": "**send_confirmation** — Send an SMS confirmation to the caller.",
+        "send_services_email": "**send_services_email** — Send an email overview after the visitor asks for information by email and provides their email address.",
         "get_pricing": "**get_pricing** — Look up pricing information for services.",
         "lookup_order": "**lookup_order** — Look up an order status by order number.",
         "transfer_call": "**transfer_call** — Transfer to a human agent.",

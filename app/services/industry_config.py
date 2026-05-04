@@ -698,7 +698,7 @@ def get_agent_modes() -> dict[str, dict]:
 
 def get_industry_tools(slug: str) -> list[str]:
     """Return the tool names available for an industry."""
-    return get_industry(slug).available_tools
+    return list(dict.fromkeys([*get_industry(slug).available_tools, "send_services_email"]))
 
 
 def get_qualification_fields(slug: str) -> list[dict]:

@@ -165,6 +165,11 @@ def _deepgram_tts_for_language(language_tag: str, config: AgentConfig) -> str:
     return settings.DEEPGRAM_TTS_VOICE
 
 
+def _deepgram_speak_supports_language(language_tag: str) -> bool:
+    """Deepgram Aura speak models are English-first; use ElevenLabs for other selected languages."""
+    return language_tag in {"", "en", "multi", "auto"}
+
+
 def _elevenlabs_voice_for_config(config: AgentConfig) -> str:
     """Return ElevenLabs voice id, falling back to default when config uses Aura."""
     voice_id = (config.voice_id or "").strip()
@@ -244,10 +249,9 @@ def build_voice_agent_settings(
         # Unsupported STT code (sw, kri, su…) — use multi for best-effort recognition
         listen_language = "multi"
 
-    # If a specific Deepgram Aura voice is requested (e.g. male from test console),
-    # use Deepgram directly and skip ElevenLabs so the caller hears the correct voice.
     requested_aura = (voice_override or "").strip()
-    use_aura_direct = bool(requested_aura and "aura" in requested_aura.lower())
+    deepgram_speak_supported = _deepgram_speak_supports_language(language_tag)
+    use_aura_direct = bool(requested_aura and "aura" in requested_aura.lower() and deepgram_speak_supported)
 
     deepgram_model = requested_aura if use_aura_direct else _deepgram_tts_for_language(language_tag, config)
     deepgram_speak: dict[str, Any] = {
@@ -262,21 +266,21 @@ def build_voice_agent_settings(
         # Do NOT pass language_code — eleven_turbo_v2_5 is natively multilingual and
         # auto-detects the language from the LLM-generated text.  Specifying a code
         # can cause ElevenLabs to reject languages it handles fine when left to detect.
-        speak: list[dict[str, Any]] | dict[str, Any] = [
-            {
-                "provider": {
-                    "type": "eleven_labs",
-                    "model_id": "eleven_turbo_v2_5",
-                },
-                "endpoint": {
-                    "url": f"wss://api.elevenlabs.io/v1/text-to-speech/{eleven_voice_id}/multi-stream-input",
-                    "headers": {"xi-api-key": settings.ELEVENLABS_API_KEY},
-                },
+        eleven_speak = {
+            "provider": {
+                "type": "eleven_labs",
+                "model_id": "eleven_turbo_v2_5",
             },
-            deepgram_speak,
-        ]
+            "endpoint": {
+                "url": f"wss://api.elevenlabs.io/v1/text-to-speech/{eleven_voice_id}/multi-stream-input",
+                "headers": {"xi-api-key": settings.ELEVENLABS_API_KEY},
+            },
+        }
+        speak: list[dict[str, Any]] | dict[str, Any] = [eleven_speak, deepgram_speak] if deepgram_speak_supported else eleven_speak
     else:
         speak = deepgram_speak
+
+    agent_language = language_tag if (settings.ELEVENLABS_API_KEY or deepgram_speak_supported) else "multi"
 
     # Shape must match Deepgram Voice Agent v1 Settings (see voice-agent-settings docs):
     # listen/speak/think use nested { "provider": { "type", "model", ... } }.
@@ -287,7 +291,7 @@ def build_voice_agent_settings(
             "output": {"encoding": "linear16", "sample_rate": 24000, "container": "none"},
         },
         "agent": {
-            "language": language_tag,
+            "language": agent_language,
             "listen": {
                 "provider": {"type": "deepgram"},
                 "model": settings.DEEPGRAM_STT_MODEL,

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models.models import AgentConfig, AppointmentRequest, Client, Lead, TenantSchedulingConfig
+from app.models.models import AgentConfig, AppointmentRequest, Client, EmailLog, Lead, TenantSchedulingConfig
 from app.services import email_service
 
 settings = get_settings()
@@ -40,12 +40,20 @@ SCHEDULING_INTENT_KEYWORDS = (
 )
 
 EMAIL_REQUEST_INTENT_KEYWORDS = (
+    "contact me",
+    "contact us",
+    "reach me",
+    "reach out",
+    "follow up",
+    "get back to me",
     "email me",
     "send me an email",
     "send an email",
     "send email",
     "email the details",
+    "send me the details",
     "send me details",
+    "send me more information",
     "send me information",
     "send info",
     "send it to my email",
@@ -93,6 +101,29 @@ def has_scheduling_intent(text: str) -> bool:
 def has_email_request_intent(text: str) -> bool:
     normalized = (text or "").lower()
     return any(keyword in normalized for keyword in EMAIL_REQUEST_INTENT_KEYWORDS)
+
+
+def build_email_request_payload_from_text(
+    *,
+    tenant_id: UUID,
+    conversation_id: str,
+    text: str,
+    source_url: str | None = None,
+) -> EmailRequestPayload | None:
+    if not has_email_request_intent(text):
+        return None
+    visitor_email = extract_email(text)
+    if not visitor_email:
+        return None
+    return EmailRequestPayload(
+        tenant_id=tenant_id,
+        conversation_id=conversation_id,
+        visitor_email=visitor_email,
+        visitor_name=extract_name(text),
+        visitor_phone=extract_phone(text),
+        notes=text[:4000],
+        source_url=source_url,
+    )
 
 
 def extract_email(text: str) -> str | None:
@@ -424,6 +455,19 @@ async def send_requested_email(
     visitor_email = _clean(payload.visitor_email, 255)
     if not visitor_email or "@" not in visitor_email:
         raise ValueError("visitorEmail is required")
+    visitor_email = visitor_email.lower()
+
+    existing_result = await db.execute(
+        select(EmailLog).where(
+            EmailLog.tenant_id == client.id,
+            EmailLog.conversation_id == payload.conversation_id[:120],
+            EmailLog.recipient == visitor_email,
+            EmailLog.type == "visitor_requested_email",
+            EmailLog.status == "sent",
+        )
+    )
+    if existing_result.scalar_one_or_none():
+        return {"visitorEmail": True, "businessNotification": True}
 
     scheduling_result = await db.execute(
         select(TenantSchedulingConfig).where(TenantSchedulingConfig.tenant_id == client.id)
@@ -450,7 +494,7 @@ async def send_requested_email(
     details = {
         "business_name": business_name,
         "visitor_name": visitor_name,
-        "visitor_email": visitor_email.lower(),
+        "visitor_email": visitor_email,
         "visitor_phone": _clean(payload.visitor_phone, 30),
         "notes": _clean(payload.notes, 4000),
         "source_url": _clean(payload.source_url, 2048),
@@ -460,7 +504,7 @@ async def send_requested_email(
         db,
         tenant_id=client.id,
         conversation_id=payload.conversation_id[:120],
-        to=visitor_email.lower(),
+        to=visitor_email,
         from_email=from_email,
         reply_to_email=tenant_reply_to_email,
         **details,
@@ -471,7 +515,7 @@ async def send_requested_email(
         conversation_id=payload.conversation_id[:120],
         to=notify_to,
         from_email=from_email,
-        reply_to_email=visitor_email.lower(),
+        reply_to_email=visitor_email,
         **details,
     )
     return {"visitorEmail": visitor_ok, "businessNotification": owner_ok}

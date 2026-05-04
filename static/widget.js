@@ -1148,6 +1148,29 @@
       return request("/api/chat/voice-agent/bootstrap", body);
     }
 
+    function completeVoiceSession(session) {
+      var meta = session && session.sessionComplete;
+      if (!meta || meta.sent || !meta.clientId || !meta.transcript || !meta.transcript.length) {
+        return Promise.resolve();
+      }
+      meta.sent = true;
+      return request("/api/chat/voice-agent/session-complete", {
+        client_id: meta.clientId,
+        language: meta.language,
+        mode: "voice",
+        started_at: meta.startedAt,
+        ended_at: new Date().toISOString(),
+        transcript: meta.transcript,
+      })
+        .then(function (result) {
+          if (result && result.email_status) {
+            track("email_request_sent", { provider: "deepgram", email_status: result.email_status });
+          }
+          return result;
+        })
+        .catch(function () {});
+    }
+
     function startSession(withMic) {
       if (connecting) return Promise.resolve();
       connecting = true;
@@ -1155,18 +1178,35 @@
       return stopSession()
         .then(bootstrapVoice)
         .then(function (payload) {
+          var lp = languagePayload();
+          var voiceTranscript = [];
           var session = new VoiceSession({
             onTranscript: function (line) {
+              if (line && line.content) {
+                voiceTranscript.push({
+                  role: line.role,
+                  content: line.content,
+                  timestamp: new Date().toISOString(),
+                });
+              }
               applyTranscript(line.role, line.content);
             },
             onError: function (m) { showError(m); },
             onClose: function () {
+              completeVoiceSession(session);
               voiceSession = null;
               connecting = false;
               ui.endRow.style.display = "none";
               refreshSubtitle();
             },
           });
+          session.sessionComplete = {
+            clientId: payload.client_id,
+            language: lp.language,
+            startedAt: new Date().toISOString(),
+            transcript: voiceTranscript,
+            sent: false,
+          };
           return session
             .connect({
               websocketUrl: payload.websocket_url,
@@ -1197,7 +1237,11 @@
       var s = voiceSession;
       voiceSession = null;
       ui.endRow.style.display = "none";
-      if (s) return s.disconnect().catch(function () {});
+      if (s) {
+        return s.disconnect().catch(function () {}).then(function () {
+          return completeVoiceSession(s);
+        });
+      }
       return Promise.resolve();
     }
 

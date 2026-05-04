@@ -15,6 +15,10 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig, Call, Client, Transcript
 from app.services import deepgram_service
+from app.services.assistant_scheduling_service import (
+    build_email_request_payload_from_text,
+    send_requested_email,
+)
 from app.services.saas_workspace_service import (
     client_subscription_allows_widget,
     is_platform_domain,
@@ -208,6 +212,22 @@ async def voice_agent_session_complete(
         sentiment=None,
     )
     db.add(transcript)
+    email_status = None
+    email_payload = build_email_request_payload_from_text(
+        tenant_id=config.client_id,
+        conversation_id=str(call.id),
+        text="\n".join(str(turn.get("text") or "") for turn in caller_turns),
+    )
+    if email_payload:
+        try:
+            email_status = await send_requested_email(db, email_payload)
+        except Exception as exc:
+            logger.error(
+                "Voice agent email request failed",
+                client_id=str(config.client_id),
+                call_id=str(call.id),
+                error=str(exc),
+            )
     await db.commit()
 
     return {
@@ -217,4 +237,5 @@ async def voice_agent_session_complete(
         "summary": summary,
         "turn_count": len(turns),
         "channel": channel,
+        "email_status": email_status,
     }

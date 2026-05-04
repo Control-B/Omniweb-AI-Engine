@@ -257,7 +257,7 @@ async def test_requested_email_sends_visitor_and_team_notifications(monkeypatch)
             "resendReplyToEmail": "support@acme.test",
         }
     )
-    db = _Db(client=_client(tenant_id), results=[_agent(tenant_id), scheduling_config])
+    db = _Db(client=_client(tenant_id), results=[_agent(tenant_id), None, scheduling_config])
 
     status = await svc.send_requested_email(
         db,
@@ -281,12 +281,56 @@ async def test_requested_email_sends_visitor_and_team_notifications(monkeypatch)
     assert any(isinstance(obj, EmailLog) and obj.type == "lead_notification" for obj in db.added)
 
 
+@pytest.mark.asyncio
+async def test_requested_email_duplicate_is_not_resent(monkeypatch):
+    async def fail_send_email(**_kwargs):
+        raise AssertionError("duplicate email should not be sent")
+
+    monkeypatch.setattr(email_service, "send_email", fail_send_email)
+    tenant_id = uuid4()
+    existing = SimpleNamespace(status="sent")
+    db = _Db(client=_client(tenant_id), results=[_agent(tenant_id), existing])
+
+    status = await svc.send_requested_email(
+        db,
+        svc.EmailRequestPayload(
+            tenant_id=tenant_id,
+            conversation_id="session-email",
+            visitor_email="visitor@example.com",
+            notes="Please send me information.",
+        ),
+    )
+
+    assert status == {"visitorEmail": True, "businessNotification": True}
+
+
 def test_email_request_intent_collects_only_email():
     state = svc.merge_email_request_state({}, "Please send me an email with more info")
 
     assert svc.has_email_request_intent("Please send me an email with more info") is True
     assert svc.missing_email_request_fields(state) == ["email"]
     assert "email" in svc.missing_email_fields_prompt().lower()
+
+
+def test_build_email_request_payload_from_text_requires_intent_and_email():
+    tenant_id = uuid4()
+    payload = svc.build_email_request_payload_from_text(
+        tenant_id=tenant_id,
+        conversation_id="voice-session",
+        text="Please send me the details. My name is Jane Doe and my email is jane@example.com.",
+        source_url="https://example.com",
+    )
+
+    assert payload is not None
+    assert payload.tenant_id == tenant_id
+    assert payload.visitor_email == "jane@example.com"
+    assert payload.visitor_name == "Jane Doe"
+    assert payload.source_url == "https://example.com"
+    assert svc.build_email_request_payload_from_text(
+        tenant_id=tenant_id,
+        conversation_id="voice-session",
+        text="My email is jane@example.com.",
+    ) is None
 
 
 @pytest.mark.asyncio

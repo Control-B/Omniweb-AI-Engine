@@ -6,7 +6,13 @@ import pytest
 from fastapi import HTTPException
 
 from app.api.routes import deepgram
-from app.api.routes.deepgram import VoiceAgentBootstrapRequest, run_voice_agent_bootstrap
+from app.api.routes.deepgram import (
+    SessionTranscriptLine,
+    VoiceAgentBootstrapRequest,
+    VoiceAgentSessionCompleteRequest,
+    run_voice_agent_bootstrap,
+    voice_agent_session_complete,
+)
 
 
 class _Result:
@@ -44,6 +50,28 @@ class _TenantDb(_Db):
 class _Request:
     def __init__(self, **headers):
         self.headers = headers
+
+
+class _SessionDb:
+    def __init__(self, agent):
+        self.results = [agent]
+        self.added = []
+        self.flushed = False
+        self.committed = False
+
+    async def execute(self, _statement):
+        if not self.results:
+            raise AssertionError("unexpected execute call")
+        return _Result(self.results.pop(0))
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def flush(self):
+        self.flushed = True
+
+    async def commit(self):
+        self.committed = True
 
 
 @pytest.mark.asyncio
@@ -186,3 +214,40 @@ async def test_voice_bootstrap_allows_platform_domain_for_stale_billing(monkeypa
 
     assert response["ok"] is True
     assert response["client_id"] == str(tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_voice_session_complete_sends_requested_email_from_transcript(monkeypatch):
+    tenant_id = uuid4()
+    agent = SimpleNamespace(client_id=tenant_id)
+    db = _SessionDb(agent)
+    sent = []
+
+    async def summarize_transcript(_turns):
+        return "Visitor requested email follow-up."
+
+    async def fake_send_requested_email(_db, payload):
+        sent.append(payload)
+        return {"visitorEmail": True, "businessNotification": True}
+
+    monkeypatch.setattr(deepgram.deepgram_service, "summarize_transcript", summarize_transcript)
+    monkeypatch.setattr(deepgram, "send_requested_email", fake_send_requested_email)
+
+    response = await voice_agent_session_complete(
+        VoiceAgentSessionCompleteRequest(
+            client_id=str(tenant_id),
+            transcript=[
+                SessionTranscriptLine(role="user", content="Please send me more information."),
+                SessionTranscriptLine(role="assistant", content="Sure, what is your email?"),
+                SessionTranscriptLine(role="user", content="My email is jane@example.com."),
+            ],
+        ),
+        db,
+    )
+
+    assert response["ok"] is True
+    assert response["email_status"] == {"visitorEmail": True, "businessNotification": True}
+    assert len(sent) == 1
+    assert sent[0].tenant_id == tenant_id
+    assert sent[0].visitor_email == "jane@example.com"
+    assert db.committed is True

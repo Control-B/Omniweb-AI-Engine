@@ -13,12 +13,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
 from app.api.deps import get_session
-from app.api.routes.deepgram import VoiceAgentBootstrapRequest, run_voice_agent_bootstrap
+from app.api.routes.deepgram import (
+    VoiceAgentBootstrapRequest,
+    VoiceAgentSessionCompleteRequest,
+    run_voice_agent_bootstrap,
+    voice_agent_session_complete,
+)
 from app.core.auth import get_current_client
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import AgentConfig
 from app.services import elevenlabs_service
+from app.services.assistant_scheduling_service import (
+    build_email_request_payload_from_text,
+    send_requested_email,
+)
 from app.services.omniweb_brain_service import BrainRequest, OmniwebBrainService
 from app.services.saas_workspace_service import resolve_client_by_public_identifier
 
@@ -38,6 +47,15 @@ async def voice_agent_bootstrap_public(
 ) -> dict:
     """Mint Deepgram JWT + Voice Agent settings for the embed widget (alias of deepgram route)."""
     return await run_voice_agent_bootstrap(req, db, request)
+
+
+@router.post("/voice-agent/session-complete")
+async def voice_agent_session_complete_public(
+    req: VoiceAgentSessionCompleteRequest,
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Persist and post-process completed voice sessions from the embed widget."""
+    return await voice_agent_session_complete(req, db)
 
 
 class WelcomeAudioRequest(BaseModel):
@@ -113,11 +131,48 @@ async def chat_respond(
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
 
+    user_messages = [
+        message.content.strip()
+        for message in body.messages
+        if message.role.lower() == "user" and message.content.strip()
+    ]
+    metadata = body.metadata or {}
+    conversation_id = str(
+        metadata.get("session_id")
+        or metadata.get("sessionId")
+        or metadata.get("conversation_id")
+        or metadata.get("conversationId")
+        or f"chat-{client.id}"
+    )
+    email_status = None
+    email_payload = build_email_request_payload_from_text(
+        tenant_id=client.id,
+        conversation_id=conversation_id,
+        text="\n".join(user_messages),
+        source_url=metadata.get("page_url") or metadata.get("sourceUrl") or metadata.get("source_url"),
+    )
+    if email_payload:
+        try:
+            email_status = await send_requested_email(db, email_payload)
+            await db.commit()
+            response.actions.append(
+                {
+                    "type": "send_email_notification",
+                    "payload": {
+                        "emailStatus": email_status,
+                        "recipient": email_payload.visitor_email,
+                    },
+                }
+            )
+        except Exception as exc:
+            logger.error("Text chat email request failed", client_id=str(client.id), error=str(exc))
+
     return {
         "response": response.response_text,
         "actions": response.actions,
         "escalation": response.escalation,
         "lead_fields": response.lead_fields,
+        "email_status": email_status,
     }
 
 

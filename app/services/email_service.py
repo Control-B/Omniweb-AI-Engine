@@ -500,6 +500,21 @@ async def _log_email(
     error_message: str | None = None,
     metadata: dict | None = None,
 ) -> None:
+    """Persist a transactional send attempt for audit/diagnostics.
+
+    The provider/status reflect the *actual* runtime path so a misconfigured
+    container is visible in the EmailLog (status=skipped, provider=noop)
+    instead of looking like a successful Resend send.
+    """
+    backend = _email_backend()
+    if backend == "none":
+        provider = "noop"
+        status = "skipped_no_backend"
+        if not error_message:
+            error_message = "No email backend configured (set RESEND_API_KEY or SMTP_HOST on the API service)."
+    else:
+        provider = backend  # "resend" | "smtp"
+        status = "sent" if ok else "failed"
     db.add(
         EmailLog(
             tenant_id=tenant_id,
@@ -507,8 +522,8 @@ async def _log_email(
             recipient=recipient,
             subject=subject[:255],
             type=email_type,
-            provider="resend",
-            status="sent" if ok else "failed",
+            provider=provider,
+            status=status,
             error_message=error_message,
             metadata_json=metadata or {},
         )

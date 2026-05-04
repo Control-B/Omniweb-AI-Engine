@@ -151,8 +151,25 @@ async def test_duplicate_scheduling_request_prevention():
     assert appointment is existing
 
 
+@pytest.fixture
+def _resend_backend_configured(monkeypatch):
+    """Pretend Resend is configured so EmailLog reflects a real send."""
+    monkeypatch.setattr(
+        email_service,
+        "settings",
+        SimpleNamespace(
+            RESEND_API_KEY="test-key",
+            RESEND_FROM_EMAIL="Acme <noreply@acme.test>",
+            RESEND_REPLY_TO_EMAIL="",
+            SMTP_HOST="",
+            SMTP_PORT="",
+            SMTP_FROM="",
+        ),
+    )
+
+
 @pytest.mark.asyncio
-async def test_resend_email_success_logs_sent(monkeypatch):
+async def test_resend_email_success_logs_sent(_resend_backend_configured, monkeypatch):
     async def fake_send_email(**_kwargs):
         return True
 
@@ -175,7 +192,7 @@ async def test_resend_email_success_logs_sent(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resend_email_failure_logs_failed(monkeypatch):
+async def test_resend_email_failure_logs_failed(_resend_backend_configured, monkeypatch):
     async def fake_send_email(**_kwargs):
         return False
 
@@ -241,7 +258,7 @@ async def test_schedule_emails_use_tenant_sender_and_notification_settings(monke
 
 
 @pytest.mark.asyncio
-async def test_requested_email_sends_visitor_and_team_notifications(monkeypatch):
+async def test_requested_email_sends_visitor_and_team_notifications(_resend_backend_configured, monkeypatch):
     sent: list[dict] = []
 
     async def fake_send_email(**kwargs):
@@ -279,6 +296,43 @@ async def test_requested_email_sends_visitor_and_team_notifications(monkeypatch)
     assert sent[1]["reply_to_email"] == "visitor@example.com"
     assert any(isinstance(obj, EmailLog) and obj.type == "visitor_requested_email" for obj in db.added)
     assert any(isinstance(obj, EmailLog) and obj.type == "lead_notification" for obj in db.added)
+
+
+@pytest.mark.asyncio
+async def test_email_log_marks_skipped_when_no_backend_configured(monkeypatch):
+    """Without RESEND_API_KEY the EmailLog must record the noop, not 'sent'."""
+    monkeypatch.setattr(
+        email_service,
+        "settings",
+        SimpleNamespace(
+            RESEND_API_KEY="",
+            RESEND_FROM_EMAIL="",
+            SMTP_HOST="",
+            SMTP_PORT="",
+            SMTP_FROM="",
+            RESEND_REPLY_TO_EMAIL="",
+        ),
+    )
+    db = _Db()
+
+    ok = await email_service.sendVisitorConfirmationEmail(
+        db,
+        tenant_id=uuid4(),
+        conversation_id="session-noop",
+        to="jane@example.com",
+        business_name="Acme",
+        visitor_name="Jane",
+        visitor_email="jane@example.com",
+        booking_url="https://cal.com/acme",
+    )
+
+    assert ok is True  # send_email returns True so the workflow continues
+    log_entries = [obj for obj in db.added if isinstance(obj, EmailLog)]
+    assert log_entries, "expected an EmailLog row"
+    log = log_entries[0]
+    assert log.provider == "noop"
+    assert log.status == "skipped_no_backend"
+    assert log.error_message and "RESEND_API_KEY" in log.error_message
 
 
 @pytest.mark.asyncio

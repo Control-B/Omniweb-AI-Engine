@@ -191,6 +191,55 @@ async def get_chat_languages() -> dict:
     }
 
 
+@router.get("/diagnostics/email-log/{client_id}")
+async def email_log_diagnostics(
+    client_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """Return the most recent EmailLog rows for a tenant.
+
+    Use this to confirm the assistant actually attempted to send an email
+    after a conversation. ``status`` will be ``sent`` (Resend accepted the
+    payload) or ``failed`` (Resend rejected — see ``error_message``). If no
+    rows appear after a conversation in which you asked the agent to email
+    you, the assistant never reached the send step (the API logs will say
+    ``VOICE_EMAIL_NOT_SENT`` with the reason).
+    """
+    from app.models.models import EmailLog
+
+    client = await resolve_client_by_public_identifier(db, client_id)
+    if not client:
+        raise HTTPException(404, "No client found for client_id or widget key")
+
+    rows = (
+        await db.execute(
+            select(EmailLog)
+            .where(EmailLog.tenant_id == client.id)
+            .order_by(EmailLog.created_at.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+    return {
+        "client_id": str(client.id),
+        "count": len(rows),
+        "logs": [
+            {
+                "id": str(row.id),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "recipient": row.recipient,
+                "subject": row.subject,
+                "type": row.type,
+                "provider": row.provider,
+                "status": row.status,
+                "conversation_id": row.conversation_id,
+                "error_message": row.error_message,
+            }
+            for row in rows
+        ],
+    }
+
+
 @router.get("/diagnostics/email-backend")
 async def email_backend_diagnostics() -> dict:
     """Public-safe email backend status — confirms whether the API container can send.

@@ -184,6 +184,19 @@ class CalcomSchedulingService:
 
     async def health_check(self, tenant_id: UUID) -> dict[str, Any]:
         config = await self.get_or_create_config(tenant_id)
+        if not self.base_url:
+            config.last_health_status = "not_configured"
+            config.last_health_at = utcnow()
+            config.last_error = "Cal.diy internal URL is not configured. Set CALCOM_INTERNAL_URL to your private Cal.com DIY API URL."
+            if config.status != "disabled":
+                config.status = "error"
+            await self.db.flush()
+            return {
+                "ok": False,
+                "status": "not_configured",
+                "message": config.last_error,
+            }
+
         try:
             async with httpx.AsyncClient(timeout=8) as client:
                 response = await client.get(f"{self.base_url}/health", headers=self.headers)
@@ -372,6 +385,13 @@ class CalcomSchedulingService:
         return [_serialize_booking(booking) for booking in result.scalars().all()]
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        if not self.base_url:
+            raise SchedulingServiceError(
+                "AI Scheduling is not connected yet. Please configure the internal Cal.diy API URL first.",
+                code="CALDIY_NOT_CONFIGURED",
+                status_code=503,
+            )
+
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 response = await client.request(

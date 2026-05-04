@@ -102,7 +102,7 @@ class Settings(BaseSettings):
     DEEPGRAM_TTS_VOICE: str = "aura-asteria-en"
 
     # ── Cal.diy / self-hosted Cal.com (internal scheduling engine) ──
-    CALCOM_INTERNAL_URL: str = "http://calcom:3000/api/v2"
+    CALCOM_INTERNAL_URL: str = ""
     CALCOM_BASE_URL: str = "https://cal.com"
     CALCOM_DEFAULT_EVENT_TYPE_ID: str = ""
     CALCOM_EVENT_TYPE_ID: str = ""

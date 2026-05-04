@@ -40,11 +40,42 @@ function publicLandingClientId(): string | undefined {
 
 const LANG_FLAGS: Record<string, string> = {
   en: "🇺🇸", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪", it: "🇮🇹",
-  pt: "🇧🇷", ja: "🇯🇵", ko: "🇰🇷", zh: "🇨🇳", hi: "🇮🇳", multi: "🌐",
+  pt: "🇧🇷", ja: "🇯🇵", ko: "🇰🇷", zh: "🇨🇳", hi: "🇮🇳", multi: "🌐", auto: "🌐",
 };
 
+const AUTO_LANGUAGE_CODES = new Set(["auto", "multi", "all", "detect"]);
+
+function normalizeLanguageCode(code: string | undefined): string {
+  const normalized = (code || "multi").trim().toLowerCase().replace("_", "-").split("-", 1)[0];
+  return AUTO_LANGUAGE_CODES.has(normalized) ? "multi" : normalized;
+}
+
+function normalizeLanguageOption(option: LangOption): LangOption | null {
+  const code = normalizeLanguageCode(option.code);
+  if (!code) return null;
+  if (code === "multi") {
+    return { ...option, code, label: "Auto (detect speaker language)", flag: option.flag || "🌐" };
+  }
+  return { ...option, code, flag: option.flag || LANG_FLAGS[code] };
+}
+
+function dedupeLanguageOptions(options: LangOption[]): LangOption[] {
+  const seen = new Set<string>();
+  const deduped: LangOption[] = [];
+  for (const option of options) {
+    const normalized = normalizeLanguageOption(option);
+    if (!normalized || seen.has(normalized.code)) continue;
+    seen.add(normalized.code);
+    deduped.push(normalized);
+  }
+  if (!seen.has("multi")) {
+    deduped.unshift({ code: "multi", label: "Auto (detect speaker language)", flag: "🌐", default: true });
+  }
+  return deduped;
+}
+
 function flagEmoji(lang: LangOption): string {
-  return lang.flag || LANG_FLAGS[lang.code] || "🌐";
+  return lang.flag || LANG_FLAGS[normalizeLanguageCode(lang.code)] || "🌐";
 }
 
 type BootstrapPayload = {
@@ -113,11 +144,17 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
       try {
         const res = await fetch(`${engineBaseUrl()}/api/chat/languages`);
         if (!res.ok) return;
-        const data = (await res.json()) as { languages?: LangOption[] };
-        const list = data.languages || [];
+        const data = (await res.json()) as { default_language?: string; languages?: LangOption[] };
+        const list = dedupeLanguageOptions(data.languages || []);
+        const requestedDefault = normalizeLanguageCode(data.default_language);
         if (cancelled) return;
         setLangs(list);
-        const def = list.find((l) => l.code === "en") || list[0] || null;
+        const def =
+          list.find((l) => normalizeLanguageCode(l.code) === requestedDefault) ||
+          list.find((l) => l.code === "multi") ||
+          list.find((l) => l.code === "en") ||
+          list[0] ||
+          null;
         setSelectedLang(def);
       } catch {
         /* ignore */
@@ -149,7 +186,7 @@ export function VoiceWidgetClient({ agentId }: { agentId?: string }) {
 
   const bootstrap = useCallback(async (): Promise<BootstrapPayload> => {
     const body: { client_id?: string; language: string; voice_override?: string } = {
-      language: selectedLang?.code || "en",
+      language: normalizeLanguageCode(selectedLang?.code),
     };
     if (voiceOverride) body.voice_override = voiceOverride;
     const landingClientId = publicLandingClientId();

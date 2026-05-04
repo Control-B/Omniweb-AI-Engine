@@ -175,12 +175,17 @@ def _elevenlabs_voice_for_config(config: AgentConfig) -> str:
 
 def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> str:
     supported = [str(item).lower().strip() for item in (config.supported_languages or ["en"])]
+    auto_signals = {"multi", "auto", "all"}
     if requested:
-        normalized = requested.lower().strip()
-        if normalized == "multi":
+        normalized = requested.lower().strip().replace("_", "-").split("-", 1)[0]
+        if normalized in auto_signals:
             return "multi"
+        if normalized in SUPPORTED_VOICE_LANGUAGE_CODES:
+            return normalized[:8] if len(normalized) > 2 else normalized
         if normalized in supported or any(lang.startswith(normalized) for lang in supported):
             return normalized[:8] if len(normalized) > 2 else normalized
+    if any(lang in auto_signals for lang in supported):
+        return "multi"
     if len(supported) > 1:
         return "multi"
     if supported:
@@ -188,13 +193,40 @@ def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> st
     return "en"[:8]
 
 
+def _voice_greeting_for_language(config: AgentConfig, language_tag: str) -> str:
+    agent_name = (config.agent_name or "Omniweb AI").strip() or "Omniweb AI"
+    business_name = (config.business_name or config.agent_name or "our team").strip() or "our team"
+    if language_tag not in {"", "en", "multi", "auto"}:
+        template = VOICE_GREETING_TEMPLATES.get(language_tag)
+        if template:
+            return template.format(agent_name=agent_name, business_name=business_name)
+    return config.agent_greeting or "Hi there. How can I help you today?"
+
+
+def _language_lock_instructions(language_tag: str) -> str:
+    language_name = LANGUAGE_NAMES.get(language_tag, language_tag)
+    if language_tag and language_tag not in {"multi", "auto", "en"}:
+        return (
+            f"\n\n## Selected widget language override\n"
+            f"The visitor selected {language_name} in the widget before this session started. "
+            f"Every assistant message, including the first spoken greeting and all follow-up replies, must be in {language_name}. "
+            "Do not greet or answer in English unless the visitor explicitly asks to switch to English."
+        )
+    if language_tag == "multi":
+        return (
+            "\n\n## Auto language behavior\n"
+            "If the visitor has not spoken yet, keep the greeting short and neutral. After the visitor speaks, respond in the visitor's language."
+        )
+    return ""
+
+
 def build_voice_agent_settings(
     config: AgentConfig,
     language: str | None = None,
     voice_override: str | None = None,
 ) -> dict[str, Any]:
-    composed = compose_channel_prompt(config, "web_voice")
     language_tag = _agent_language_tag(config, language)
+    composed = compose_channel_prompt(config, "web_voice") + _language_lock_instructions(language_tag)
     think_model = (config.llm_model or "").strip() or settings.DEEPGRAM_AGENT_MODEL
     # Languages explicitly supported by Deepgram nova-3 STT with a named code.
     # Languages NOT listed here (Swahili, Krio, Sundanese) fall back to "multi" so
@@ -267,6 +299,7 @@ def build_voice_agent_settings(
                 "prompt": composed,
             },
             "speak": speak,
+            "greeting": _voice_greeting_for_language(config, language_tag),
         },
     }
 

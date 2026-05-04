@@ -262,9 +262,67 @@ def build_email_request_payload_from_turns(
     )
 
 
+# Voice transcripts say things like "jane at example dot com" or
+# "jane underscore doe at g mail dot com". Map those tokens to the
+# corresponding character so the regex below can match an email address.
+# Each pattern eats any surrounding whitespace so the resulting email is
+# contiguous with no embedded spaces.
+_SPOKEN_EMAIL_TOKEN_REPLACEMENTS = (
+    (r"\s*\bat sign\b\s*", "@"),
+    (r"\s*\bat the rate\b\s*", "@"),
+    (r"\s+at\s+", "@"),
+    (r"\s*\bdot\b\s*", "."),
+    (r"\s*\bperiod\b\s*", "."),
+    (r"\s*\bunder ?score\b\s*", "_"),
+    (r"\s*\bdash\b\s*", "-"),
+    (r"\s*\bhyphen\b\s*", "-"),
+    (r"\s*\bplus\b\s*", "+"),
+    (r"\bg ?mail\b", "gmail"),
+    (r"\bhot ?mail\b", "hotmail"),
+    (r"\bya ?hoo\b", "yahoo"),
+    (r"\bout ?look\b", "outlook"),
+    (r"\bi ?cloud\b", "icloud"),
+    (r"\bproton ?mail\b", "protonmail"),
+)
+
+
+def _normalize_spoken_email(text: str) -> str:
+    """Convert spoken email phrases (e.g. ``jane at example dot com``) to ``jane@example.com``.
+
+    Voice transcripts (Deepgram, Whisper, ElevenLabs STT) usually output
+    spelled-out separators because ``@`` and ``.`` are not pronounced. This
+    helper normalises the most common patterns *in addition* to the literal
+    text, so we still catch already-formatted emails.
+    """
+    if not text:
+        return ""
+    normalized = text
+    for pattern, replacement in _SPOKEN_EMAIL_TOKEN_REPLACEMENTS:
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+    # Collapse spaces around "@" and "." that the visitor may have spoken with
+    # a pause: "jane @ example . com" → "jane@example.com".
+    normalized = re.sub(r"\s*@\s*", "@", normalized)
+    normalized = re.sub(r"\s*\.\s*", ".", normalized)
+    # Some voice transcripts emit "jane at example dot com" → after replacement
+    # we get "jane@example.com" but we may also have lingering single-letter
+    # spellings like "j a n e @ example.com". Glue any single-character runs
+    # immediately before the "@" together (best-effort, won't touch normal text).
+    def _glue_single_letters(match: re.Match) -> str:
+        return match.group(0).replace(" ", "")
+    normalized = re.sub(r"(?:\b[A-Za-z0-9]\s){2,}[A-Za-z0-9]@", _glue_single_letters, normalized)
+    return normalized
+
+
 def extract_email(text: str) -> str | None:
-    match = re.search(r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w.-]+\.[A-Za-z]{2,}", text or "")
-    return match.group(0).strip(".,;:()[]") if match else None
+    candidates = [text or ""]
+    spoken = _normalize_spoken_email(text or "")
+    if spoken and spoken != text:
+        candidates.append(spoken)
+    for candidate in candidates:
+        match = re.search(r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w.-]+\.[A-Za-z]{2,}", candidate)
+        if match:
+            return match.group(0).strip(".,;:()[]").lower()
+    return None
 
 
 def extract_phone(text: str) -> str | None:

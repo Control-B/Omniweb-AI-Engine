@@ -213,20 +213,28 @@ async def voice_agent_session_complete(
     )
     db.add(transcript)
     email_status = None
+    email_payload_turns = [
+        {
+            "role": "user" if turn.get("speaker") == "caller" else "assistant",
+            "content": str(turn.get("text") or ""),
+        }
+        for turn in turns
+    ]
     email_payload = build_email_request_payload_from_turns(
         tenant_id=config.client_id,
         conversation_id=str(call.id),
-        turns=[
-            {
-                "role": "user" if turn.get("speaker") == "caller" else "assistant",
-                "content": str(turn.get("text") or ""),
-            }
-            for turn in turns
-        ],
+        turns=email_payload_turns,
     )
     if email_payload:
         try:
             email_status = await send_requested_email(db, email_payload)
+            logger.info(
+                "Voice agent email request sent",
+                client_id=str(config.client_id),
+                call_id=str(call.id),
+                recipient=email_payload.visitor_email,
+                status=email_status,
+            )
         except Exception as exc:
             logger.error(
                 "Voice agent email request failed",
@@ -234,6 +242,27 @@ async def voice_agent_session_complete(
                 call_id=str(call.id),
                 error=str(exc),
             )
+    else:
+        # Loud diagnostic so operators can grep the API logs and see exactly
+        # why a voice call did not produce an email (almost always: no email
+        # address was actually transcribed in the conversation).
+        from app.services.assistant_scheduling_service import (
+            extract_email,
+            has_assistant_email_prompt,
+            has_email_request_intent,
+        )
+        user_blob = "\n".join(t["content"] for t in email_payload_turns if t["role"] == "user")
+        assistant_blob = "\n".join(t["content"] for t in email_payload_turns if t["role"] == "assistant")
+        logger.warning(
+            "VOICE_EMAIL_NOT_SENT no email request payload could be built from transcript",
+            client_id=str(config.client_id),
+            call_id=str(call.id),
+            visitor_email_extracted=extract_email(user_blob),
+            visitor_intent=has_email_request_intent(user_blob),
+            assistant_intent=has_assistant_email_prompt(assistant_blob),
+            user_turn_count=sum(1 for t in email_payload_turns if t["role"] == "user"),
+            assistant_turn_count=sum(1 for t in email_payload_turns if t["role"] == "assistant"),
+        )
     await db.commit()
 
     return {

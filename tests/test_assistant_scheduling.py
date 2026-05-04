@@ -384,6 +384,42 @@ def test_build_email_request_payload_from_turns_skips_when_no_intent():
     assert payload is None
 
 
+def test_extract_email_handles_spoken_voice_transcripts():
+    """Voice transcripts spell out @ and . — make sure we still find the email."""
+    cases = {
+        "my email is jane at example dot com": "jane@example.com",
+        "send it to jane underscore doe at gmail dot com please": "jane_doe@gmail.com",
+        "it's jane dot doe at example dot co dot uk": "jane.doe@example.co.uk",
+        "JANE @ EXAMPLE . COM": "jane@example.com",
+        "send to jane@example.com tomorrow": "jane@example.com",
+    }
+    for spoken, expected in cases.items():
+        assert svc.extract_email(spoken) == expected, f"failed for {spoken!r}"
+
+
+def test_extract_email_returns_none_when_no_email_present():
+    assert svc.extract_email("please send me information about your services") is None
+    assert svc.extract_email("") is None
+    assert svc.extract_email(None) is None  # type: ignore[arg-type]
+
+
+def test_build_email_request_payload_from_turns_handles_voice_spelling():
+    tenant_id = uuid4()
+    payload = svc.build_email_request_payload_from_turns(
+        tenant_id=tenant_id,
+        conversation_id="voice-1",
+        turns=[
+            {"role": "user", "content": "Can you send me an email about your services?"},
+            {"role": "assistant", "content": "Sure — what's the best email to send that to?"},
+            {"role": "user", "content": "It's jane at example dot com"},
+            {"role": "assistant", "content": "Got it, sending to jane at example dot com now."},
+        ],
+    )
+
+    assert payload is not None
+    assert payload.visitor_email == "jane@example.com"
+
+
 def test_parse_widget_transcript_recovers_turns():
     transcript = (
         "Visitor: Hi, can you contact me?\n"

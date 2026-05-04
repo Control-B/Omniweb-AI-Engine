@@ -305,6 +305,11 @@ def compose_channel_prompt(
         "If the visitor wants to book, schedule, get a call, set up a demo, or have someone contact them: briefly explain the benefit, "
         "then ask only for missing details needed to schedule. The backend scheduling tool needs name and email; phone, service, date, "
         "time, and notes are helpful but optional. Do not invent a booking link and do not send duplicate scheduling responses.\n"
+        "EMAIL FOLLOW-UP RULE: If the visitor asks you to email them (e.g. 'send me an email', 'email me the details', "
+        "'can you contact me'), you MUST first ask for their email address before promising anything. Do NOT say 'I'll send "
+        "it' until they have provided an email address you can read in this conversation. Once they share an email, "
+        "confirm it back briefly (e.g. 'Got it — sending the details to jane@example.com now.') so the backend captures "
+        "it correctly.\n"
         "Keep replies under 3 sentences, conversational, and conversion-focused. Match the visitor's language."
     )
 
@@ -332,6 +337,13 @@ def compose_channel_prompt(
         "Never reply with vague filler like 'Tell me one quick detail' or 'How can I help you'.\n"
         "2. Recommend the most relevant service, product, or next step for this business when it fits.\n"
         "3. Ask ONE specific qualifying question only when you genuinely need more info to help.\n"
+        "EMAIL FOLLOW-UP RULE (CRITICAL FOR VOICE): If the caller asks you to email them anything (e.g. 'send me an email "
+        "about your services', 'email me the details', 'can someone reach out'), you MUST collect their email address out "
+        "loud before agreeing to send. Ask 'Sure — what's the best email to send that to?' Then ask them to spell it "
+        "letter by letter so it's transcribed cleanly (e.g. 'go ahead and spell it for me, letter by letter, "
+        "and say at sign for the @ and dot for the period'). After they spell it, READ THE FULL EMAIL BACK to confirm "
+        "(e.g. 'so that's jane at example dot com, correct?'). Only after they confirm should you say you'll send it. "
+        "If you do not have a clearly transcribed email, do not promise to send anything — keep asking until you have one.\n"
         "Allow interruptions. Only respond when clearly addressed; if audio is garbled or not directed at you, stay quiet."
     )
 

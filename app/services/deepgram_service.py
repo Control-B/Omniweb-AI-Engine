@@ -249,12 +249,15 @@ def _voice_gender_from_override(voice_override: str | None) -> str | None:
 
 def _agent_language_tag(config: AgentConfig, requested: str | None = None) -> str:
     supported = [str(item).lower().strip() for item in (config.supported_languages or ["en"])]
+    auto_signals = {"multi", "auto", "all"}
     if requested:
         normalized = requested.lower().strip()
-        if normalized == "multi":
+        if normalized in auto_signals:
             return "multi"
         if normalized in supported or any(lang.startswith(normalized) for lang in supported):
             return normalized[:8] if len(normalized) > 2 else normalized
+    if any(lang in auto_signals for lang in supported):
+        return "multi"
     if len(supported) > 1:
         return "multi"
     if supported:

@@ -66,7 +66,6 @@ export default function VoiceWidgetPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client_id: agentId,
-          language: "en",
         }),
       });
       const bootstrapBody = (await bootstrapRes.json().catch(() => null)) as DeepgramBootstrapResponse | { detail?: string } | null;

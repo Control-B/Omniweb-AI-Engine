@@ -17,6 +17,7 @@ import {
   Code2,
   AlertTriangle,
   Clock,
+  Globe2,
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -282,6 +283,42 @@ function TextArea({
   );
 }
 
+const LANGUAGE_OPTIONS = [
+  { code: "en", label: "English", flag: "🇺🇸" },
+  { code: "es", label: "Spanish", flag: "🇪🇸" },
+  { code: "fr", label: "French", flag: "🇫🇷" },
+  { code: "de", label: "German", flag: "🇩🇪" },
+  { code: "it", label: "Italian", flag: "🇮🇹" },
+  { code: "pt", label: "Portuguese", flag: "🇧🇷" },
+  { code: "nl", label: "Dutch", flag: "🇳🇱" },
+  { code: "sv", label: "Swedish", flag: "🇸🇪" },
+  { code: "ro", label: "Romanian", flag: "🇷🇴" },
+  { code: "ru", label: "Russian", flag: "🇷🇺" },
+  { code: "uk", label: "Ukrainian", flag: "🇺🇦" },
+  { code: "pl", label: "Polish", flag: "🇵🇱" },
+  { code: "ar", label: "Arabic", flag: "🇸🇦" },
+  { code: "tr", label: "Turkish", flag: "🇹🇷" },
+  { code: "hi", label: "Hindi", flag: "🇮🇳" },
+  { code: "bn", label: "Bengali", flag: "🇧🇩" },
+  { code: "zh", label: "Chinese", flag: "🇨🇳" },
+  { code: "ja", label: "Japanese", flag: "🇯🇵" },
+  { code: "ko", label: "Korean", flag: "🇰🇷" },
+  { code: "id", label: "Indonesian", flag: "🇮🇩" },
+  { code: "vi", label: "Vietnamese", flag: "🇻🇳" },
+  { code: "tl", label: "Filipino", flag: "🇵🇭" },
+  { code: "sw", label: "Swahili", flag: "🇰🇪" },
+];
+
+const LANGUAGE_CODES = new Set(LANGUAGE_OPTIONS.map((language) => language.code));
+
+function normalizeSupportedLanguages(value: unknown): string[] {
+  if (!Array.isArray(value)) return ["multi"];
+  const normalized = value
+    .map((code) => String(code).trim().toLowerCase())
+    .filter((code) => code === "multi" || code === "auto" || LANGUAGE_CODES.has(code));
+  return normalized.length ? Array.from(new Set(normalized)) : ["multi"];
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 interface ConfigState {
@@ -297,6 +334,7 @@ interface ConfigState {
   custom_context: string;
   after_hours_message: string;
   services: string; // comma-separated in UI
+  supported_languages: string[];
 }
 
 const DEFAULTS: ConfigState = {
@@ -313,6 +351,7 @@ const DEFAULTS: ConfigState = {
   after_hours_message:
     "We're currently closed but will call you back first thing in the morning.",
   services: "",
+  supported_languages: ["multi"],
 };
 
 export default function AgentConfigPage() {
@@ -378,6 +417,7 @@ export default function AgentConfigPage() {
           custom_context: cfg.custom_context ?? "",
           after_hours_message: cfg.after_hours_message ?? DEFAULTS.after_hours_message,
           services: Array.isArray(cfg.services) ? cfg.services.join(", ") : "",
+          supported_languages: normalizeSupportedLanguages(cfg.supported_languages),
         });
 
         if (ws?.trial) {
@@ -419,6 +459,9 @@ export default function AgentConfigPage() {
         custom_context: config.custom_context || undefined,
         after_hours_message: config.after_hours_message || undefined,
         services: services.length ? services : undefined,
+        supported_languages: config.supported_languages.length
+          ? config.supported_languages
+          : ["multi"],
       });
       setSaveSuccess(true);
       if (saveSuccessTimer.current) clearTimeout(saveSuccessTimer.current);
@@ -485,6 +528,26 @@ export default function AgentConfigPage() {
 
   const set = (key: keyof ConfigState) => (val: string) =>
     setConfig((prev) => ({ ...prev, [key]: val }));
+
+  const languageAutoEnabled = config.supported_languages.some((code) =>
+    ["multi", "auto"].includes(code)
+  );
+
+  const toggleAutoLanguages = () => {
+    setConfig((prev) => ({ ...prev, supported_languages: ["multi"] }));
+  };
+
+  const toggleLanguage = (code: string) => {
+    setConfig((prev) => {
+      const selected = prev.supported_languages.filter(
+        (language) => language !== "multi" && language !== "auto"
+      );
+      const next = selected.includes(code)
+        ? selected.filter((language) => language !== code)
+        : [...selected, code];
+      return { ...prev, supported_languages: next.length ? next : ["multi"] };
+    });
+  };
 
   if (authLoading || (!user && !authLoading)) {
     return (
@@ -577,6 +640,63 @@ export default function AgentConfigPage() {
                     placeholder="America/New_York"
                   />
                 </Field>
+              </div>
+            </section>
+
+            {/* Language card */}
+            <section className="rounded-2xl border border-white/10 bg-slate-900/40 p-6 space-y-5">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-2 text-cyan-300">
+                  <Globe2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-white">Agent Language</h2>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Choose one language to make the agent start and speak in that language.
+                    Choose multiple languages to let visitors pick, or use auto-detect.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={toggleAutoLanguages}
+                className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
+                  languageAutoEnabled
+                    ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-100"
+                    : "border-white/10 bg-slate-950/80 text-slate-300 hover:border-white/25"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <span>🌐</span>
+                  <span>Auto-detect visitor language</span>
+                </span>
+                {languageAutoEnabled && <CheckCircle className="h-4 w-4 text-cyan-300" />}
+              </button>
+
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {LANGUAGE_OPTIONS.map((language) => {
+                  const selected =
+                    !languageAutoEnabled && config.supported_languages.includes(language.code);
+                  return (
+                    <button
+                      key={language.code}
+                      type="button"
+                      onClick={() => toggleLanguage(language.code)}
+                      className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${
+                        selected
+                          ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-100"
+                          : "border-white/10 bg-slate-950/80 text-slate-300 hover:border-white/25 hover:text-white"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>{language.flag}</span>
+                        <span>{language.label}</span>
+                      </span>
+                      {selected && <CheckCircle className="h-4 w-4 text-cyan-300" />}
+                    </button>
+                  );
+                })}
               </div>
             </section>
 

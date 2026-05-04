@@ -74,7 +74,7 @@ def _serialize_booking(booking: SchedulingBooking) -> dict[str, Any]:
 
 
 class CalcomSchedulingService:
-    """Tenant-aware wrapper around the private Cal.diy API."""
+    """Tenant-aware wrapper around the private Cal.com DIY service."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -187,7 +187,7 @@ class CalcomSchedulingService:
         if not self.base_url:
             config.last_health_status = "not_configured"
             config.last_health_at = utcnow()
-            config.last_error = "Cal.diy internal URL is not configured. Set CALCOM_INTERNAL_URL to your private Cal.com DIY API URL."
+            config.last_error = "Cal.diy internal service URL is not configured. Set CALCOM_INTERNAL_URL to your private self-hosted Cal.com base URL."
             if config.status != "disabled":
                 config.status = "error"
             await self.db.flush()
@@ -387,7 +387,7 @@ class CalcomSchedulingService:
     async def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         if not self.base_url:
             raise SchedulingServiceError(
-                "AI Scheduling is not connected yet. Please configure the internal Cal.diy API URL first.",
+                "AI Scheduling is not connected yet. Please configure the internal Cal.diy service URL first.",
                 code="CALDIY_NOT_CONFIGURED",
                 status_code=503,
             )

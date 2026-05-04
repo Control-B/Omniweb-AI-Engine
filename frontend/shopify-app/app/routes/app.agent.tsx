@@ -23,7 +23,7 @@ import { syncShopToEngine } from "../services/engine.server";
 import { ensureStorefrontAccessToken } from "../services/storefront-token.server";
 
 const LANGUAGE_CHOICES = [
-  { label: "🌐 Auto (detect language)", value: "multi" },
+  { label: "🌐 Auto (detect speaker language)", value: "multi" },
   { label: "🇺🇸 English", value: "en" },
   { label: "🇪🇸 Spanish", value: "es" },
   { label: "🇫🇷 French", value: "fr" },

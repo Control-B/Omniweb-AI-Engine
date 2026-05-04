@@ -25,7 +25,7 @@ from app.core.logging import get_logger
 from app.models.models import AgentConfig
 from app.services import elevenlabs_service
 from app.services.assistant_scheduling_service import (
-    build_email_request_payload_from_text,
+    build_email_request_payload_from_turns,
     send_requested_email,
 )
 from app.services.omniweb_brain_service import BrainRequest, OmniwebBrainService
@@ -131,11 +131,6 @@ async def chat_respond(
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
 
-    user_messages = [
-        message.content.strip()
-        for message in body.messages
-        if message.role.lower() == "user" and message.content.strip()
-    ]
     metadata = body.metadata or {}
     conversation_id = str(
         metadata.get("session_id")
@@ -144,11 +139,20 @@ async def chat_respond(
         or metadata.get("conversationId")
         or f"chat-{client.id}"
     )
+    turns = [
+        {"role": message.role.lower(), "content": message.content.strip()}
+        for message in body.messages
+        if message.content and message.content.strip()
+    ]
+    # Include the just-generated assistant reply so a single-shot send works
+    # when the visitor's prior turn had the email and intent.
+    if response.response_text:
+        turns.append({"role": "assistant", "content": response.response_text})
     email_status = None
-    email_payload = build_email_request_payload_from_text(
+    email_payload = build_email_request_payload_from_turns(
         tenant_id=client.id,
         conversation_id=conversation_id,
-        text="\n".join(user_messages),
+        turns=turns,
         source_url=metadata.get("page_url") or metadata.get("sourceUrl") or metadata.get("source_url"),
     )
     if email_payload:
@@ -184,6 +188,29 @@ async def get_chat_languages() -> dict:
             elevenlabs_service.settings.ELEVENLABS_DEFAULT_LANGUAGE
         ),
         "languages": elevenlabs_service.get_language_options(),
+    }
+
+
+@router.get("/diagnostics/email-backend")
+async def email_backend_diagnostics() -> dict:
+    """Public-safe email backend status — confirms whether the API container can send.
+
+    No secrets are returned. Use this to verify Resend is wired into the
+    deployed API service: ``curl https://<your-api>/api/chat/diagnostics/email-backend``.
+    """
+    from app.services import email_service
+
+    backend = email_service._email_backend()
+    platform_from = getattr(email_service.settings, "RESEND_FROM_EMAIL", "") or ""
+    identity = await email_service.resend_sender_identity_status(platform_from or None)
+    return {
+        "backend": backend,  # "resend" | "smtp" | "none"
+        "resend_api_key_present": bool(getattr(email_service.settings, "RESEND_API_KEY", "")),
+        "smtp_host_present": bool(getattr(email_service.settings, "SMTP_HOST", "")),
+        "platform_from_configured": bool(platform_from),
+        "platform_from_domain": identity.get("domain"),
+        "platform_from_status": identity.get("status"),
+        "platform_from_verified": identity.get("verified"),
     }
 
 

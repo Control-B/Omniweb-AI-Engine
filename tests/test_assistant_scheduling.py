@@ -333,6 +333,72 @@ def test_build_email_request_payload_from_text_requires_intent_and_email():
     ) is None
 
 
+def test_build_email_request_payload_from_turns_handles_assistant_prompt():
+    """If the assistant asks for the email and the visitor just types it, send."""
+    tenant_id = uuid4()
+    payload = svc.build_email_request_payload_from_turns(
+        tenant_id=tenant_id,
+        conversation_id="session-1",
+        turns=[
+            {"role": "user", "content": "Hi, I'd like a quote for plumbing."},
+            {"role": "assistant", "content": "Sure! What's your email so I can follow up with you?"},
+            {"role": "user", "content": "jane@example.com"},
+        ],
+        source_url="https://example.com/contact",
+    )
+
+    assert payload is not None
+    assert payload.visitor_email == "jane@example.com"
+    assert payload.source_url == "https://example.com/contact"
+
+
+def test_build_email_request_payload_from_turns_handles_visitor_intent():
+    """If the visitor asks to be contacted and supplies an email later, send."""
+    tenant_id = uuid4()
+    payload = svc.build_email_request_payload_from_turns(
+        tenant_id=tenant_id,
+        conversation_id="session-2",
+        turns=[
+            {"role": "user", "content": "Can someone reach out to me?"},
+            {"role": "assistant", "content": "Of course."},
+            {"role": "user", "content": "My email is jane@example.com"},
+        ],
+    )
+
+    assert payload is not None
+    assert payload.visitor_email == "jane@example.com"
+
+
+def test_build_email_request_payload_from_turns_skips_when_no_intent():
+    """A bare email with no contact intent should NOT trigger a send."""
+    tenant_id = uuid4()
+    payload = svc.build_email_request_payload_from_turns(
+        tenant_id=tenant_id,
+        conversation_id="session-3",
+        turns=[
+            {"role": "user", "content": "Just curious - jane@example.com is mine."},
+            {"role": "assistant", "content": "Cool, anything else I can help with?"},
+        ],
+    )
+
+    assert payload is None
+
+
+def test_parse_widget_transcript_recovers_turns():
+    transcript = (
+        "Visitor: Hi, can you contact me?\n"
+        "Assistant: Of course. What's your email?\n"
+        "Visitor: jane@example.com"
+    )
+    turns = svc.parse_widget_transcript(transcript)
+
+    assert turns == [
+        {"role": "user", "content": "Hi, can you contact me?"},
+        {"role": "assistant", "content": "Of course. What's your email?"},
+        {"role": "user", "content": "jane@example.com"},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_verified_resend_sender_uses_tenant_from_email(monkeypatch):
     async def fake_domain_status(domain):

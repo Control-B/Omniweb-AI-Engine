@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.api.deps import get_session
 from app.core.auth import get_current_client, is_internal_staff_role
@@ -15,6 +16,7 @@ from app.services.omniweb_brain_service import BrainRequest, OmniwebBrainService
 from app.services.assistant_scheduling_service import (
     EmailRequestPayload,
     SchedulePayload,
+    build_email_request_payload_from_turns,
     create_schedule_request,
     has_email_request_intent,
     has_scheduling_intent,
@@ -24,6 +26,7 @@ from app.services.assistant_scheduling_service import (
     missing_email_request_fields,
     missing_fields_prompt,
     missing_schedule_fields,
+    parse_widget_transcript,
     send_requested_email,
     send_schedule_emails,
 )
@@ -389,6 +392,7 @@ async def post_widget_chat(
                 reply = "I could not send the email right now. Please leave your email and someone will contact you."
         metadata["emailRequest"] = email_request_state
         engagement.metadata_json = metadata
+        flag_modified(engagement, "metadata_json")
         append_widget_transcript(engagement, "Assistant", reply)
         await db.commit()
         return JSONResponse(
@@ -467,6 +471,7 @@ async def post_widget_chat(
                 reply = "I could not open the booking page. Please leave your email and someone will contact you."
         metadata["scheduling"] = scheduling_state
         engagement.metadata_json = metadata
+        flag_modified(engagement, "metadata_json")
         append_widget_transcript(engagement, "Assistant", reply)
         await db.commit()
         return JSONResponse(
@@ -504,6 +509,64 @@ async def post_widget_chat(
         reply = mock_chat_reply(body.message)
 
     append_widget_transcript(engagement, "Assistant", reply)
+
+    # Conversation-aware email follow-up. The earlier email_request_active
+    # block only fires when the *current* message contains an explicit keyword.
+    # In real conversations the visitor often just types their bare email after
+    # the assistant offers to follow up, so we also scan the full transcript
+    # and trigger a Resend email transparently when both intent and an email
+    # address are present anywhere in the dialog.
+    actions: list[dict[str, Any]] = list(getattr(brain_response, "actions", []) if "brain_response" in locals() else [])
+    if not (email_request_state and email_request_state.get("emailStatus")):
+        turns = parse_widget_transcript(getattr(engagement, "transcript", None))
+        latent_payload = build_email_request_payload_from_turns(
+            tenant_id=client.id,
+            conversation_id=body.sessionId,
+            turns=turns,
+            source_url=body.pageUrl,
+        )
+        if latent_payload:
+            try:
+                email_status = await send_requested_email(db, latent_payload)
+                email_request_state = dict(email_request_state or {})
+                email_request_state.update(
+                    {
+                        "active": False,
+                        "visitorEmail": latent_payload.visitor_email,
+                        "visitorName": latent_payload.visitor_name,
+                        "emailStatus": email_status,
+                    }
+                )
+                metadata["emailRequest"] = email_request_state
+                engagement.metadata_json = metadata
+                flag_modified(engagement, "metadata_json")
+                actions.append(
+                    {
+                        "type": "send_email_notification",
+                        "payload": {
+                            "emailStatus": email_status,
+                            "recipient": latent_payload.visitor_email,
+                            "trigger": "transcript",
+                        },
+                    }
+                )
+                append_widget_event(
+                    engagement,
+                    event_type="lead_captured",
+                    domain=normalized_domain,
+                    page_url=body.pageUrl,
+                    metadata={"source": "email_request_transcript"},
+                )
+            except Exception:
+                # The brain reply is still useful — surface a soft error in the
+                # action payload so the widget can re-prompt if needed.
+                actions.append(
+                    {
+                        "type": "send_email_notification",
+                        "payload": {"error": "send_failed"},
+                    }
+                )
+
     await db.commit()
 
     return JSONResponse(
@@ -514,7 +577,7 @@ async def post_widget_chat(
                     "role": "assistant",
                     "content": reply,
                 },
-                "actions": getattr(brain_response, "actions", []) if "brain_response" in locals() else [],
+                "actions": actions,
             }
         )
     )

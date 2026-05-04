@@ -103,6 +103,43 @@ def has_email_request_intent(text: str) -> bool:
     return any(keyword in normalized for keyword in EMAIL_REQUEST_INTENT_KEYWORDS)
 
 
+# Phrases the assistant typically uses to invite a visitor to share their email
+# (or that suggest the assistant is collecting an email on the visitor's behalf).
+# Combined with a visitor-provided email address this is treated as consent to
+# send the visitor a follow-up confirmation through Resend.
+ASSISTANT_EMAIL_PROMPT_KEYWORDS = (
+    "your email",
+    "your e-mail",
+    "what email",
+    "what's your email",
+    "what is your email",
+    "share your email",
+    "share an email",
+    "leave your email",
+    "leave an email",
+    "drop your email",
+    "best email",
+    "email address",
+    "send it to",
+    "email the details",
+    "follow up with you",
+    "follow-up with you",
+    "get back to you",
+    "have someone reach out",
+    "have someone contact",
+    "ill send",
+    "i'll send",
+    "i can send",
+    "i can email",
+    "i will email",
+)
+
+
+def has_assistant_email_prompt(text: str) -> bool:
+    normalized = (text or "").lower()
+    return any(keyword in normalized for keyword in ASSISTANT_EMAIL_PROMPT_KEYWORDS)
+
+
 def build_email_request_payload_from_text(
     *,
     tenant_id: UUID,
@@ -122,6 +159,105 @@ def build_email_request_payload_from_text(
         visitor_name=extract_name(text),
         visitor_phone=extract_phone(text),
         notes=text[:4000],
+        source_url=source_url,
+    )
+
+
+def parse_widget_transcript(transcript: str | None) -> list[dict[str, str]]:
+    """Parse the widget engagement transcript text into a list of turns.
+
+    The transcript is appended via ``append_widget_transcript`` as
+    ``"Visitor: ..."`` / ``"Assistant: ..."`` lines. Continuation lines (no
+    leading speaker label) are folded into the previous turn.
+    """
+
+    turns: list[dict[str, str]] = []
+    if not transcript:
+        return turns
+    role_map = {
+        "visitor": "user",
+        "user": "user",
+        "caller": "user",
+        "assistant": "assistant",
+        "agent": "assistant",
+        "ai": "assistant",
+        "bot": "assistant",
+    }
+    for raw_line in transcript.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        prefix, sep, rest = line.partition(":")
+        role = role_map.get(prefix.strip().lower()) if sep else None
+        if role:
+            turns.append({"role": role, "content": rest.strip()})
+        elif turns:
+            turns[-1]["content"] = (turns[-1]["content"] + " " + line).strip()
+    return turns
+
+
+def build_email_request_payload_from_turns(
+    *,
+    tenant_id: UUID,
+    conversation_id: str,
+    turns: list[dict[str, Any]] | list[tuple[str, str]],
+    source_url: str | None = None,
+) -> EmailRequestPayload | None:
+    """Detect a visitor email-follow-up request across the full conversation.
+
+    A request is considered active when:
+      * the visitor has provided an email address in any of their turns, AND
+      * either the visitor asked to be contacted/emailed OR the assistant has
+        offered/asked for the email in any turn.
+
+    This is intentionally conversation-aware so that a visitor who only types
+    their bare email (after the assistant asks for it) still triggers a send.
+    """
+
+    user_turns: list[str] = []
+    assistant_turns: list[str] = []
+    for turn in turns or []:
+        if isinstance(turn, dict):
+            role = str(turn.get("role") or turn.get("speaker") or "").lower()
+            content = str(turn.get("content") or turn.get("text") or "").strip()
+        else:
+            try:
+                role = str(turn[0] or "").lower()
+                content = str(turn[1] or "").strip()
+            except Exception:
+                continue
+        if not content:
+            continue
+        if role in {"user", "caller", "visitor", "human"}:
+            user_turns.append(content)
+        elif role in {"assistant", "agent", "ai", "bot"}:
+            assistant_turns.append(content)
+
+    if not user_turns:
+        return None
+
+    user_blob = "\n".join(user_turns)
+    assistant_blob = "\n".join(assistant_turns)
+
+    visitor_email = extract_email(user_blob)
+    if not visitor_email:
+        return None
+
+    visitor_intent = has_email_request_intent(user_blob)
+    assistant_intent = has_assistant_email_prompt(assistant_blob)
+    if not (visitor_intent or assistant_intent):
+        # Be conservative: only proceed when there's a clear conversational
+        # signal that the visitor expects a follow-up by email.
+        return None
+
+    notes_blob = user_blob if visitor_intent else f"{assistant_blob}\n{user_blob}"
+    return EmailRequestPayload(
+        tenant_id=tenant_id,
+        conversation_id=conversation_id,
+        visitor_email=visitor_email,
+        visitor_name=extract_name(user_blob),
+        visitor_phone=extract_phone(user_blob),
+        notes=notes_blob[-4000:],
         source_url=source_url,
     )
 

@@ -207,9 +207,15 @@ async def send_email(
     backend = _email_backend()
 
     if backend == "none":
-        logger.info(
-            f"[EMAIL-DEV] Would send email to={to} subject=\"{subject}\" "
-            f"(no email provider configured — set RESEND_API_KEY or SMTP_HOST)"
+        # NOTE: returning ``True`` here keeps the workflow flowing in dev/test
+        # environments, but in production this means the customer asked for an
+        # email and we silently dropped it. Use ``warning`` so it stands out in
+        # log aggregators and embed a stable substring (``EMAIL_NOT_SENT_NO_BACKEND``)
+        # that operators can alert on.
+        logger.warning(
+            "EMAIL_NOT_SENT_NO_BACKEND to=%s subject=\"%s\" (set RESEND_API_KEY or SMTP_HOST on the API service)",
+            to,
+            subject,
         )
         return True
 

@@ -16,7 +16,7 @@ from app.core.logging import get_logger
 from app.models.models import AgentConfig, Call, Client, Transcript
 from app.services import deepgram_service
 from app.services.assistant_scheduling_service import (
-    build_email_request_payload_from_text,
+    build_email_request_payload_from_turns,
     send_requested_email,
 )
 from app.services.saas_workspace_service import (
@@ -213,10 +213,16 @@ async def voice_agent_session_complete(
     )
     db.add(transcript)
     email_status = None
-    email_payload = build_email_request_payload_from_text(
+    email_payload = build_email_request_payload_from_turns(
         tenant_id=config.client_id,
         conversation_id=str(call.id),
-        text="\n".join(str(turn.get("text") or "") for turn in caller_turns),
+        turns=[
+            {
+                "role": "user" if turn.get("speaker") == "caller" else "assistant",
+                "content": str(turn.get("text") or ""),
+            }
+            for turn in turns
+        ],
     )
     if email_payload:
         try:

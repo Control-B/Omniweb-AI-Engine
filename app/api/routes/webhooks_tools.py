@@ -344,51 +344,94 @@ async def book_appointment(
         f"Appointment requested via tool call: {body.name} ({body.email}){time_str} — ref: {booking_ref} [client={client_id}]"
     )
 
-    lead_id = uuid.uuid4()
+    lead_id: uuid.UUID | None = None
     async with async_session_factory() as db:
-        lead = Lead(
-            id=lead_id,
-            client_id=client_id,
-            caller_name=body.name,
-            caller_phone=body.phone or "not-provided",
-            caller_email=body.email,
-            intent=body.topic or "Consultation",
-            urgency="high",
-            summary=f"Appointment requested{time_str}. Topic: {body.topic or 'General consultation'}. Ref: {booking_ref}",
-            services_requested=[],
-            status="booking_pending",
-            lead_score=0.9,
-            follow_up_sent=False,
-        )
-        db.add(lead)
-
         service = CalcomSchedulingService(db)
-        try:
-            booking = await service.create_booking(
-                tenant_id=client_id,
-                name=body.name,
-                email=body.email,
-                phone=body.phone,
-                start_time=body.start_time or "",
-                event_type_id=body.event_type_id,
-                timezone_name=body.timezone or "America/New_York",
-                topic=body.topic,
-                metadata={"tool": "book_appointment", "booking_ref": booking_ref},
-                lead_id=lead_id,
+        if not service.base_url:
+            from app.services.assistant_scheduling_service import (
+                SchedulePayload,
+                create_schedule_request,
+                send_schedule_emails,
             )
-            lead.status = "booked"
-            lead.summary = (
-                f"Appointment booked{time_str}. Topic: {body.topic or 'General consultation'}. "
-                f"Ref: {booking_ref}"
+
+            try:
+                appointment, schedule_client, schedule_agent, duplicate = await create_schedule_request(
+                    db,
+                    SchedulePayload(
+                        tenant_id=client_id,
+                        conversation_id=booking_ref,
+                        visitor_name=body.name,
+                        visitor_email=body.email,
+                        visitor_phone=body.phone,
+                        requested_service=body.topic,
+                        preferred_date=body.preferred_date,
+                        preferred_time=body.preferred_time,
+                        notes=f"Appointment requested via AI agent{time_str}. Topic: {body.topic or 'General consultation'}. Ref: {booking_ref}",
+                    ),
+                )
+                email_status = {"visitorConfirmation": False, "businessNotification": False}
+                if not duplicate:
+                    email_status = await send_schedule_emails(
+                        db,
+                        appointment=appointment,
+                        client=schedule_client,
+                        agent=schedule_agent,
+                    )
+                await db.commit()
+                response_text = (
+                    f"I prepared the appointment request. Reference number: {booking_ref}. "
+                    f"Please choose the best available time here: {appointment.booking_url}"
+                )
+                if email_status.get("visitorConfirmation"):
+                    response_text += f". I also sent the booking link to {body.email}."
+            except Exception as exc:
+                await db.rollback()
+                logger.warning("Booking-link fallback failed", client_id=str(client_id), error=str(exc))
+                response_text = "I couldn't prepare the booking link right now. Please ask the team to follow up manually."
+        else:
+            lead_id = uuid.uuid4()
+            lead = Lead(
+                id=lead_id,
+                client_id=client_id,
+                caller_name=body.name,
+                caller_phone=body.phone or "not-provided",
+                caller_email=body.email,
+                intent=body.topic or "Consultation",
+                urgency="high",
+                summary=f"Appointment requested{time_str}. Topic: {body.topic or 'General consultation'}. Ref: {booking_ref}",
+                services_requested=[],
+                status="booking_pending",
+                lead_score=0.9,
+                follow_up_sent=False,
             )
-            await db.commit()
-            response_text = (
-                f"Appointment booked! Reference number: {booking_ref}. "
-                f"{booking['message']}"
-            )
-        except SchedulingServiceError as exc:
-            await db.commit()
-            response_text = exc.message
+            db.add(lead)
+
+            try:
+                booking = await service.create_booking(
+                    tenant_id=client_id,
+                    name=body.name,
+                    email=body.email,
+                    phone=body.phone,
+                    start_time=body.start_time or "",
+                    event_type_id=body.event_type_id,
+                    timezone_name=body.timezone or "America/New_York",
+                    topic=body.topic,
+                    metadata={"tool": "book_appointment", "booking_ref": booking_ref},
+                    lead_id=lead_id,
+                )
+                lead.status = "booked"
+                lead.summary = (
+                    f"Appointment booked{time_str}. Topic: {body.topic or 'General consultation'}. "
+                    f"Ref: {booking_ref}"
+                )
+                await db.commit()
+                response_text = (
+                    f"Appointment booked! Reference number: {booking_ref}. "
+                    f"{booking['message']}"
+                )
+            except SchedulingServiceError as exc:
+                await db.commit()
+                response_text = exc.message
 
     response_text = _enforce_guardrails(
         response_text, tool_name="book_appointment",
@@ -507,25 +550,49 @@ async def check_availability(
 
     async with async_session_factory() as db:
         service = CalcomSchedulingService(db)
-        try:
-            slots = await service.get_available_slots(
-                client_id,
-                event_type_id=body.event_type_id,
-                date_range={"start": start, "end": end},
-                timezone_name=body.timezone or "America/New_York",
-            )
-        except SchedulingServiceError as exc:
-            slots = []
-            response_text = exc.message
-        else:
-            if not slots:
-                response_text = "I do not see any open appointment slots for that window. Would another day work?"
-            else:
-                available = [slot["start"] for slot in slots[:3] if slot.get("start")]
+        if not service.base_url:
+            from app.services.assistant_scheduling_service import resolve_booking_url
+
+            client = await db.get(Client, client_id)
+            agent_result = await db.execute(select(AgentConfig).where(AgentConfig.client_id == client_id))
+            agent = agent_result.scalar_one_or_none()
+            try:
+                booking_url = await resolve_booking_url(db, client, agent) if client else ""
+            except Exception as exc:
+                logger.warning("Booking-link availability fallback failed", client_id=str(client_id), error=str(exc))
+                booking_url = ""
+
+            if booking_url:
                 response_text = (
-                    f"Here are the next available slots: {', '.join(available)}. "
-                    "Which one should I book? I will use the exact selected time to confirm it."
+                    "Live calendar slots are not connected in this setup, but the tenant booking page is ready. "
+                    f"Use this booking link for available times: {booking_url}. "
+                    "If the visitor wants help, collect their name and email, then call book_appointment to send the link and notify the team."
                 )
+            else:
+                response_text = (
+                    "Live calendar slots are not connected yet. I can still collect the visitor's name, email, "
+                    "and preferred time so the team can follow up manually."
+                )
+        else:
+            try:
+                slots = await service.get_available_slots(
+                    client_id,
+                    event_type_id=body.event_type_id,
+                    date_range={"start": start, "end": end},
+                    timezone_name=body.timezone or "America/New_York",
+                )
+            except SchedulingServiceError as exc:
+                slots = []
+                response_text = exc.message
+            else:
+                if not slots:
+                    response_text = "I do not see any open appointment slots for that window. Would another day work?"
+                else:
+                    available = [slot["start"] for slot in slots[:3] if slot.get("start")]
+                    response_text = (
+                        f"Here are the next available slots: {', '.join(available)}. "
+                        "Which one should I book? I will use the exact selected time to confirm it."
+                    )
     response_text = _enforce_guardrails(
         response_text, tool_name="check_availability",
         industry_slug=industry_slug, custom_guardrails=custom_guardrails,

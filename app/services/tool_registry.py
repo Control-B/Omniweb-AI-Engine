@@ -77,8 +77,9 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
         "name": "book_appointment",
         "description": (
             "Schedule an appointment or consultation. Use this when the caller wants to "
-            "book a specific time. First use check_availability, then collect their name, "
-            "email, and confirmed ISO start_time before calling this tool."
+            "book, request, or receive a booking link. Collect their name and email first. "
+            "If check_availability returns exact slots, include the confirmed ISO start_time; "
+            "otherwise this creates an appointment request and sends the tenant booking link."
         ),
         "api_schema": {
             "url": "{base_url}/api/tools/book-appointment",
@@ -90,14 +91,14 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
                     "name": {"type": "string", "description": "Name of the person booking"},
                     "email": {"type": "string", "description": "Email for calendar invite"},
                     "phone": {"type": "string", "description": "Phone number"},
-                    "start_time": {"type": "string", "description": "Confirmed ISO start time from check_availability"},
+                    "start_time": {"type": "string", "description": "Confirmed ISO start time from check_availability, when live slots are available"},
                     "event_type_id": {"type": "string", "description": "Tenant event type ID, if provided by availability"},
                     "timezone": {"type": "string", "description": "Attendee timezone, e.g. America/New_York"},
                     "preferred_date": {"type": "string", "description": "Preferred date (e.g. 'next Tuesday', '2025-04-15')"},
                     "preferred_time": {"type": "string", "description": "Preferred time (e.g. '2pm', '10:00 AM')"},
                     "topic": {"type": "string", "description": "What they want to discuss"},
                 },
-                "required": ["name", "email", "start_time"],
+                "required": ["name", "email"],
             },
         },
     },
@@ -107,7 +108,8 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
         "name": "check_availability",
         "description": (
             "Check available time slots for appointments. Use this when the caller "
-            "asks about available times before booking."
+            "asks about available times before booking. If live slot lookup is not "
+            "connected, this returns booking-link guidance for the tenant."
         ),
         "api_schema": {
             "url": "{base_url}/api/tools/check-availability",

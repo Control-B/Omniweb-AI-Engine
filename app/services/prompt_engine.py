@@ -348,8 +348,8 @@ def _tools_block(available_tools: list[str]) -> str:
 
     tool_descriptions = {
         "capture_lead": "**capture_lead** — Save the caller's information and inquiry as a qualified lead.",
-        "book_appointment": "**book_appointment** — Confirm an appointment after the caller picks an exact slot from check_availability.",
-        "check_availability": "**check_availability** — Check live Cal.diy appointment slots and offer 2-3 options.",
+        "book_appointment": "**book_appointment** — Book an exact slot when live availability is connected, or create an appointment request and send the booking link after collecting name and email.",
+        "check_availability": "**check_availability** — Check live appointment slots when connected; otherwise return tenant booking-link guidance.",
         "send_confirmation": "**send_confirmation** — Send an SMS confirmation to the caller.",
         "send_services_email": "**send_services_email** — Send an email overview after the visitor asks for information by email and provides their email address.",
         "get_pricing": "**get_pricing** — Look up pricing information for services.",

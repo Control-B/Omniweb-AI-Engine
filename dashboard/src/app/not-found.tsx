@@ -1,15 +1,14 @@
 "use client";
 
-import { Zap, ArrowLeft, Home } from "lucide-react";
+import { ArrowLeft, Home } from "lucide-react";
 import Link from "next/link";
+import { OmniwebLogo } from "@/components/brand-logo";
 
 export default function NotFound() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="text-center space-y-6 max-w-md">
-        <div className="flex items-center justify-center w-16 h-16 mx-auto rounded-2xl bg-primary/10 text-primary">
-          <Zap className="w-8 h-8" />
-        </div>
+        <OmniwebLogo className="justify-center" />
 
         <div>
           <h1 className="text-6xl font-bold text-foreground">404</h1>

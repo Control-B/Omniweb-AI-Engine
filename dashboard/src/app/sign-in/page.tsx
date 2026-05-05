@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SignIn } from "@clerk/nextjs";
+import { OmniwebLogo } from "@/components/brand-logo";
 import { clearSubscriberSession } from "@/lib/api";
 import { INTERNAL_LOGIN_PATH } from "@/lib/auth-landing";
 
@@ -34,7 +35,7 @@ export default function SubscriberSignInPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-1">
-          <h1 className="text-xl font-bold text-foreground">Omniweb</h1>
+          <OmniwebLogo className="justify-center" />
           <p className="text-sm text-muted-foreground">
             Sign in to manage your AI agent — same account as omniweb.ai.
           </p>

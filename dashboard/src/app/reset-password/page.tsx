@@ -2,9 +2,10 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Loader2, Lock, Shield, Zap } from "lucide-react";
+import { Loader2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { OmniwebLogo } from "@/components/brand-logo";
 import { acceptInvite, resetPasswordWithToken } from "@/lib/api";
 
 function ResetPasswordForm() {
@@ -61,9 +62,7 @@ function ResetPasswordForm() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-3 text-center">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary text-primary-foreground">
-            {mode === "invite" ? <Shield className="w-6 h-6" /> : <Zap className="w-6 h-6" />}
-          </div>
+          <OmniwebLogo />
           <div>
             <h1 className="text-xl font-bold text-foreground">{title}</h1>
             <p className="text-sm text-muted-foreground mt-1">

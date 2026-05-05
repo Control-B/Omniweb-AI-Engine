@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Zap, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { OmniwebLogo } from "@/components/brand-logo";
 import Link from "next/link";
 import { clearAdminSession, login, requestPasswordReset } from "@/lib/api";
 import { SIGN_IN_PATH } from "@/lib/auth-landing";
@@ -59,11 +60,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-6">
         {/* Logo */}
         <div className="flex flex-col items-center gap-3">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary text-primary-foreground">
-            <Zap className="w-6 h-6" />
-          </div>
+          <OmniwebLogo />
           <div className="text-center">
-            <h1 className="text-xl font-bold text-foreground">Omniweb AI</h1>
             <p className="text-sm text-muted-foreground mt-1">
               {portal === "admin"
                 ? "Admin & team sign in"

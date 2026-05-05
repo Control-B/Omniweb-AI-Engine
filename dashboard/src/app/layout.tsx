@@ -11,10 +11,10 @@ export const metadata: Metadata = {
   description: "AI-powered phone agent management platform",
   icons: {
     icon: [
-      { url: "/icon.svg?v=20260411a", type: "image/svg+xml", sizes: "any" },
-      { url: "/icon.png?v=20260411a", type: "image/png", sizes: "48x48" },
+      { url: "/icon.svg?v=20260505a", type: "image/svg+xml", sizes: "any" },
+      { url: "/icon.png?v=20260505a", type: "image/png", sizes: "48x48" },
     ],
-    shortcut: "/favicon.ico?v=20260411a",
+    shortcut: "/favicon.ico?v=20260505a",
   },
 };
 

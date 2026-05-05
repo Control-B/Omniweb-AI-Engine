@@ -21,7 +21,7 @@ import {
  * Query: ``?panel=1`` opens the chat panel on load.
  */
 
-type LangOption = { code: string; label: string; retell: string; flag?: string };
+type LangOption = { code: string; label: string; retell?: string; flag?: string };
 type UiMode = "voice" | "text";
 
 function engineBaseUrl(): string {
@@ -45,13 +45,17 @@ const LANG_FLAGS: Record<string, string> = {
 
 const AUTO_LANGUAGE_CODES = new Set(["auto", "multi", "all", "detect"]);
 
+function isAutoLanguageLabel(label?: string): boolean {
+  return /^auto\b/i.test((label || "").trim());
+}
+
 function normalizeLanguageCode(code: string | undefined): string {
   const normalized = (code || "multi").trim().toLowerCase().replace("_", "-").split("-", 1)[0];
   return AUTO_LANGUAGE_CODES.has(normalized) ? "multi" : normalized;
 }
 
 function normalizeLanguageOption(option: LangOption): LangOption | null {
-  const code = normalizeLanguageCode(option.code);
+  const code = isAutoLanguageLabel(option.label) ? "multi" : normalizeLanguageCode(option.code);
   if (!code) return null;
   if (code === "multi") {
     return { ...option, code, label: "Auto (detect speaker language)", flag: option.flag || "🌐" };
@@ -69,7 +73,7 @@ function dedupeLanguageOptions(options: LangOption[]): LangOption[] {
     deduped.push(normalized);
   }
   if (!seen.has("multi")) {
-    deduped.unshift({ code: "multi", label: "Auto (detect speaker language)", flag: "🌐", default: true });
+    deduped.unshift({ code: "multi", label: "Auto (detect speaker language)", flag: "🌐" });
   }
   return deduped;
 }

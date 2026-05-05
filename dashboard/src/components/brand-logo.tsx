@@ -13,7 +13,7 @@ export function OmniwebLogo({ href = "/", className, textClassName }: OmniwebLog
       <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 text-sm font-semibold text-cyan-200 shadow-[0_10px_30px_rgba(34,211,238,0.12)]" aria-hidden="true">
         O
       </span>
-      <span className={cn("text-xl font-bold tracking-tight text-foreground", textClassName)}>omniweb</span>
+      <span className={cn("text-xl font-bold tracking-tight text-cyan-200", textClassName)}>omniweb</span>
     </Link>
   );
 }

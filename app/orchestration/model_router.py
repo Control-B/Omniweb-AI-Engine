@@ -65,11 +65,11 @@ class ModelRouter:
     def resolve_model_name(self, tier: ModelTier) -> str:
         """Resolve model name for a given tier based on configuration."""
         if tier == ModelTier.FAST_INTENT:
-            return settings.DEFAULT_INTENT_MODEL or "gemini-2.0-flash"
+            return settings.DEFAULT_INTENT_MODEL or "gemini-2.0-flash-lite"
         elif tier == ModelTier.PRIMARY_CONVERSATION:
             return settings.DEFAULT_CONVERSATION_MODEL or "gemini-2.0-flash"
         elif tier == ModelTier.HIGH_REASONING:
-            return settings.DEFAULT_REASONING_MODEL or "gemini-1.5-pro"
+            return settings.DEFAULT_REASONING_MODEL or "gemini-2.0-pro"
         elif tier == ModelTier.MULTIMODAL_SPEECH:
             return settings.GEMINI_LIVE_SPEECH_MODEL or "gemini-2.0-flash-exp"
         elif tier == ModelTier.EMBEDDING:

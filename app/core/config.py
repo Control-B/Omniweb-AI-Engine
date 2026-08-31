@@ -167,7 +167,8 @@ class Settings(BaseSettings):
     # ── Gemini / Vertex AI (Primary Intelligence) ────────────
     GEMINI_API_KEY: str = ""
     GEMINI_DEFAULT_MODEL: str = "gemini-2.0-flash"
-    GEMINI_REASONING_MODEL: str = "gemini-1.5-pro"
+    GEMINI_REASONING_MODEL: str = "gemini-2.0-pro"
+    GEMINI_WORKER_MODEL: str = "gemini-2.0-flash-lite"
     GEMINI_LIVE_SPEECH_MODEL: str = "gemini-2.0-flash-exp"
     VERTEX_PROJECT_ID: str = ""
     VERTEX_LOCATION: str = "us-central1"
@@ -179,9 +180,9 @@ class Settings(BaseSettings):
     LIVEKIT_SIP_TRUNK_ID: str = ""
 
     # ── Contact Center & Model Routing Profiles ──────────────
-    DEFAULT_INTENT_MODEL: str = "gemini-2.0-flash"
-    DEFAULT_CONVERSATION_MODEL: str = "gemini-2.0-flash"
-    DEFAULT_REASONING_MODEL: str = "gemini-1.5-pro"
+    DEFAULT_INTENT_MODEL: str = "gemini-2.0-flash-lite"    # Lightweight model for worker classification
+    DEFAULT_CONVERSATION_MODEL: str = "gemini-2.0-flash"   # Primary conversational voice model
+    DEFAULT_REASONING_MODEL: str = "gemini-2.0-pro"        # Flagship model for supervisor & deep agents
     DEFAULT_EMBEDDING_MODEL: str = "text-embedding-004"
     HITL_DEFAULT_APPROVAL_TIMEOUT_SECONDS: int = 300
     HIGH_RISK_CREDIT_THRESHOLD: float = 50.0

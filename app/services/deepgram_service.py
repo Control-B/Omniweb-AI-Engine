@@ -298,8 +298,8 @@ def build_voice_agent_settings(
                 "language": listen_language,
             },
             "think": {
-                "provider": {"type": "open_ai"},
-                "model": think_model,
+                "provider": {"type": "google"},
+                "model": (config.llm_model or "").strip() or settings.DEFAULT_CONVERSATION_MODEL or "gemini-2.0-flash",
                 "prompt": composed,
             },
             "speak": speak,

@@ -154,6 +154,38 @@ class Settings(BaseSettings):
     # ── Telephony limits ─────────────────────────────────────
     MAX_CALL_DURATION_SECONDS: int = 1800  # 30 min hard stop
 
+    # ── Agentic Contact Center Feature Flags ─────────────────
+    ENABLE_LANGGRAPH: bool = True
+    ENABLE_LIVEKIT: bool = True
+    ENABLE_ADK: bool = True
+    ENABLE_DEEP_AGENTS: bool = True
+    ENABLE_GEMINI_LIVE: bool = True
+    ENABLE_AGENT_MEMORY: bool = True
+    ENABLE_OUTBOUND: bool = False  # compliance gated
+    ENABLE_HUMAN_HANDOFF: bool = True
+
+    # ── Gemini / Vertex AI (Primary Intelligence) ────────────
+    GEMINI_API_KEY: str = ""
+    GEMINI_DEFAULT_MODEL: str = "gemini-2.0-flash"
+    GEMINI_REASONING_MODEL: str = "gemini-1.5-pro"
+    GEMINI_LIVE_SPEECH_MODEL: str = "gemini-2.0-flash-exp"
+    VERTEX_PROJECT_ID: str = ""
+    VERTEX_LOCATION: str = "us-central1"
+
+    # ── LiveKit (Real-time Interaction Plane) ────────────────
+    LIVEKIT_URL: str = ""
+    LIVEKIT_API_KEY: str = ""
+    LIVEKIT_API_SECRET: str = ""
+    LIVEKIT_SIP_TRUNK_ID: str = ""
+
+    # ── Contact Center & Model Routing Profiles ──────────────
+    DEFAULT_INTENT_MODEL: str = "gemini-2.0-flash"
+    DEFAULT_CONVERSATION_MODEL: str = "gemini-2.0-flash"
+    DEFAULT_REASONING_MODEL: str = "gemini-1.5-pro"
+    DEFAULT_EMBEDDING_MODEL: str = "text-embedding-004"
+    HITL_DEFAULT_APPROVAL_TIMEOUT_SECONDS: int = 300
+    HIGH_RISK_CREDIT_THRESHOLD: float = 50.0
+
     # ── Post-call processing ─────────────────────────────────
     POST_CALL_DELAY_SECONDS: int = 5       # delay before processing
     SMS_FOLLOWUP_DELAY_SECONDS: int = 30   # delay after call ends
@@ -161,6 +193,14 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production" or self.APP_ENV == "production"
+
+    @property
+    def gemini_configured(self) -> bool:
+        return bool(self.GEMINI_API_KEY or self.VERTEX_PROJECT_ID)
+
+    @property
+    def livekit_configured(self) -> bool:
+        return bool(self.LIVEKIT_URL and self.LIVEKIT_API_KEY and self.LIVEKIT_API_SECRET)
 
     @property
     def elevenlabs_configured(self) -> bool:
@@ -198,3 +238,4 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+

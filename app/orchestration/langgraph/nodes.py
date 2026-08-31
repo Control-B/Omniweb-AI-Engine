@@ -164,6 +164,11 @@ AGENT_PROFILES: dict[str, dict[str, Any]] = {
         "instructions": "Listen empathetically to cancellation reasons, reiterate account value, and offer approved retention credits before executing cancellation.",
         "tools": ["lookup_customer", "get_invoices", "request_refund", "search_knowledge"],
     },
+    "site_concierge": {
+        "role": "You are the Omniweb Site Concierge & Navigation Specialist.",
+        "instructions": "Help website visitors discover platform capabilities, understand our autonomous voice & chat agent services, explore pricing tiers ($49/$149/Enterprise), and navigate to exact pages on the site using the navigate_site tool.",
+        "tools": ["navigate_site", "search_knowledge", "lookup_customer", "check_availability", "create_lead"],
+    },
     "escalation": {
         "role": "You are the Human Escalation Coordinator.",
         "instructions": "Reassure the caller that a senior human specialist is being connected immediately. Summarize their inquiry accurately so they will not need to repeat themselves.",
@@ -187,7 +192,7 @@ async def specialist_agent_node(state: ContactCenterState) -> dict[str, Any]:
 
 Operating Guidelines:
 1. Speak concisely, professionally, and naturally.
-2. If the user asks for actions matching your available tools, specify the tool to invoke.
+2. When the visitor asks where to find something, questions about pricing, features, or solutions, call navigate_site and search_knowledge.
 3. Customer Profile: {json.dumps(state.get('customer_context', {}))}
 4. Extracted Entities: {json.dumps(state.get('entities', {}))}
 """
@@ -200,12 +205,16 @@ Previous Turns: {len(messages)}
     # Decide if a tool call is needed based on intent and entities
     tool_calls: list[dict[str, Any]] = []
     intent = state.get("intent")
+    user_lower = last_user_msg.lower()
+
+    if any(nav_word in user_lower for nav_word in ["where", "how much", "price", "pricing", "feature", "solution", "shopify", "demo", "doc", "api", "page", "take me", "navigate", "services"]):
+        tool_calls.append({"name": "navigate_site", "parameters": {"query": last_user_msg}})
 
     if intent == "billing_inquiry" and active_agent == "billing" and not state.get("tool_results", {}).get("get_invoices"):
         tool_calls.append({"name": "get_invoices", "parameters": {"limit": 2}})
     elif intent == "appointment_booking" and active_agent == "scheduling" and not state.get("tool_results", {}).get("check_availability"):
         tool_calls.append({"name": "check_availability", "parameters": {"date_str": "tomorrow"}})
-    elif intent == "general_inquiry" and not state.get("tool_results", {}).get("search_knowledge"):
+    elif not state.get("tool_results", {}).get("search_knowledge"):
         tool_calls.append({"name": "search_knowledge", "parameters": {"query": last_user_msg}})
 
     model_resp = await model_router.generate_text(

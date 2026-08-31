@@ -8,6 +8,7 @@ import app.tools.billing.tools
 import app.tools.calendar.tools
 import app.tools.ticketing.tools
 import app.tools.knowledge.tools
+import app.tools.navigation.tools
 
 __all__ = [
     "BaseTool",

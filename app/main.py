@@ -39,6 +39,7 @@ from app.api.routes import (
     industry,
     knowledge_base,
     leads,
+    livekit,
     numbers,
     retell,
     saas,
@@ -357,6 +358,7 @@ API_PREFIX = "/api"
 app.include_router(auth.router, prefix=API_PREFIX)
 
 # Public service endpoints / webhooks (no auth)
+app.include_router(livekit.router, prefix=API_PREFIX)
 app.include_router(deepgram.router, prefix=API_PREFIX)
 app.include_router(retell.router, prefix=API_PREFIX)
 app.include_router(webhooks_stripe.router, prefix=API_PREFIX)

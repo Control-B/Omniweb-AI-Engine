@@ -22,6 +22,7 @@ TOutput = TypeVar("TOutput", bound=BaseModel)
 
 
 class ToolRiskLevel(str, Enum):
+    READ_ONLY = "read_only"      # Zero mutation, safe browsing & query
     STANDARD = "standard"        # Safe read/write: lookup, booking, logging
     HIGH_RISK = "high_risk"      # Requires policy check or HITL approval (e.g. refunds, cancellations)
     CRITICAL = "critical"        # System mutations, credential rotation
@@ -33,6 +34,7 @@ class ToolCategory(str, Enum):
     CALENDAR = "calendar"
     TICKETING = "ticketing"
     KNOWLEDGE = "knowledge"
+    NAVIGATION = "navigation"
     COMMUNICATIONS = "communications"
     TELEPHONY = "telephony"
     RESEARCH = "research"
